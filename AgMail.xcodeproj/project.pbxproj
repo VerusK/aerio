@@ -1,0 +1,531 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000010 /* AgMailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000010 /* AgMailApp.swift */; };
+		AA0000000000000000000012 /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000012 /* Account.swift */; };
+		AA0000000000000000000013 /* Email.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000013 /* Email.swift */; };
+		AA0000000000000000000014 /* Folder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000014 /* Folder.swift */; };
+		AA0000000000000000000015 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000015 /* ModelTests.swift */; };
+		AA0000000000000000000016 /* AccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000016 /* AccountManager.swift */; };
+		AA0000000000000000000017 /* WebViewPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000017 /* WebViewPool.swift */; };
+		AA0000000000000000000018 /* AccountManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000018 /* AccountManagerTests.swift */; };
+		AA0000000000000000000019 /* WebViewPoolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000019 /* WebViewPoolTests.swift */; };
+		AA0000000000000000000030 /* GmailScraper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000030 /* GmailScraper.swift */; };
+		AA0000000000000000000031 /* gmail_parser.js in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000031 /* gmail_parser.js */; };
+		AA0000000000000000000032 /* GmailParserJSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000032 /* GmailParserJSTests.swift */; };
+		AA0000000000000000000033 /* GmailScraperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000033 /* GmailScraperTests.swift */; };
+		AA0000000000000000000040 /* GmailScraperManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000040 /* GmailScraperManager.swift */; };
+		AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000041 /* UnifiedMailbox.swift */; };
+		AA0000000000000000000042 /* GmailScraperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000042 /* GmailScraperManagerTests.swift */; };
+		AA0000000000000000000043 /* UnifiedMailboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000043 /* UnifiedMailboxTests.swift */; };
+		AA0000000000000000000050 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000050 /* MainView.swift */; };
+		AA0000000000000000000051 /* AccountSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000051 /* AccountSidebar.swift */; };
+		AA0000000000000000000052 /* FolderList.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000052 /* FolderList.swift */; };
+		AA0000000000000000000053 /* ViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000053 /* ViewTests.swift */; };
+		AA0000000000000000000060 /* MessageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000060 /* MessageList.swift */; };
+		AA0000000000000000000061 /* MessageWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000061 /* MessageWebView.swift */; };
+		AA0000000000000000000062 /* AccountSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000062 /* AccountSetupView.swift */; };
+		AA0000000000000000000063 /* MessageListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000063 /* MessageListTests.swift */; };
+		AA0000000000000000000070 /* gmail_actions.js in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000070 /* gmail_actions.js */; };
+		AA0000000000000000000071 /* ComposeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000071 /* ComposeService.swift */; };
+		AA0000000000000000000072 /* ComposeWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000072 /* ComposeWebView.swift */; };
+		AA0000000000000000000073 /* ComposeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* ComposeServiceTests.swift */; };
+		AA0000000000000000000074 /* GmailActionsJSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000074 /* GmailActionsJSTests.swift */; };
+		AA0000000000000000000080 /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000080 /* KeyboardShortcuts.swift */; };
+		AA0000000000000000000081 /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000081 /* DataStore.swift */; };
+		AA0000000000000000000082 /* KeyboardShortcutsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000082 /* KeyboardShortcutsTests.swift */; };
+		AA0000000000000000000083 /* DataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000083 /* DataStoreTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CC0000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EE0000000000000000000001;
+			remoteInfo = AgMail;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		BB0000000000000000000010 /* AgMailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgMailApp.swift; sourceTree = "<group>"; };
+		BB0000000000000000000012 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
+		BB0000000000000000000013 /* Email.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Email.swift; sourceTree = "<group>"; };
+		BB0000000000000000000014 /* Folder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Folder.swift; sourceTree = "<group>"; };
+		BB0000000000000000000015 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000020 /* AgMail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgMail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000021 /* AgMailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgMailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000016 /* AccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManager.swift; sourceTree = "<group>"; };
+		BB0000000000000000000017 /* WebViewPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewPool.swift; sourceTree = "<group>"; };
+		BB0000000000000000000018 /* AccountManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagerTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000019 /* WebViewPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewPoolTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000030 /* GmailScraper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailScraper.swift; sourceTree = "<group>"; };
+		BB0000000000000000000031 /* gmail_parser.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = gmail_parser.js; sourceTree = "<group>"; };
+		BB0000000000000000000032 /* GmailParserJSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailParserJSTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000033 /* GmailScraperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailScraperTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000040 /* GmailScraperManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailScraperManager.swift; sourceTree = "<group>"; };
+		BB0000000000000000000041 /* UnifiedMailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedMailbox.swift; sourceTree = "<group>"; };
+		BB0000000000000000000042 /* GmailScraperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailScraperManagerTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000043 /* UnifiedMailboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedMailboxTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000050 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000051 /* AccountSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSidebar.swift; sourceTree = "<group>"; };
+		BB0000000000000000000052 /* FolderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderList.swift; sourceTree = "<group>"; };
+		BB0000000000000000000053 /* ViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000060 /* MessageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageList.swift; sourceTree = "<group>"; };
+		BB0000000000000000000061 /* MessageWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWebView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000062 /* AccountSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSetupView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000063 /* MessageListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageListTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000070 /* gmail_actions.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = gmail_actions.js; sourceTree = "<group>"; };
+		BB0000000000000000000071 /* ComposeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeService.swift; sourceTree = "<group>"; };
+		BB0000000000000000000072 /* ComposeWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeWebView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000073 /* ComposeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeServiceTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000074 /* GmailActionsJSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailActionsJSTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000080 /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
+		BB0000000000000000000081 /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
+		BB0000000000000000000082 /* KeyboardShortcutsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutsTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000083 /* DataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStoreTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FF0000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF0000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		GG0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				GG0000000000000000000002 /* AgMail */,
+				GG0000000000000000000003 /* AgMailTests */,
+				GG0000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000002 /* AgMail */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000010 /* AgMailApp.swift */,
+				GG0000000000000000000005 /* Models */,
+				GG0000000000000000000006 /* Services */,
+				GG0000000000000000000007 /* Scripts */,
+				GG0000000000000000000008 /* Views */,
+				GG0000000000000000000009 /* Utilities */,
+				GG000000000000000000000A /* Persistence */,
+			);
+			path = AgMail;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000009 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000080 /* KeyboardShortcuts.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		GG000000000000000000000A /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000081 /* DataStore.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000008 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000050 /* MainView.swift */,
+				BB0000000000000000000051 /* AccountSidebar.swift */,
+				BB0000000000000000000052 /* FolderList.swift */,
+				BB0000000000000000000060 /* MessageList.swift */,
+				BB0000000000000000000061 /* MessageWebView.swift */,
+				BB0000000000000000000062 /* AccountSetupView.swift */,
+				BB0000000000000000000072 /* ComposeWebView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000006 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000016 /* AccountManager.swift */,
+				BB0000000000000000000017 /* WebViewPool.swift */,
+				BB0000000000000000000030 /* GmailScraper.swift */,
+				BB0000000000000000000040 /* GmailScraperManager.swift */,
+				BB0000000000000000000041 /* UnifiedMailbox.swift */,
+				BB0000000000000000000071 /* ComposeService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000007 /* Scripts */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000031 /* gmail_parser.js */,
+				BB0000000000000000000070 /* gmail_actions.js */,
+			);
+			path = Scripts;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000003 /* AgMailTests */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000015 /* ModelTests.swift */,
+				BB0000000000000000000018 /* AccountManagerTests.swift */,
+				BB0000000000000000000019 /* WebViewPoolTests.swift */,
+				BB0000000000000000000032 /* GmailParserJSTests.swift */,
+				BB0000000000000000000033 /* GmailScraperTests.swift */,
+				BB0000000000000000000042 /* GmailScraperManagerTests.swift */,
+				BB0000000000000000000043 /* UnifiedMailboxTests.swift */,
+				BB0000000000000000000053 /* ViewTests.swift */,
+				BB0000000000000000000063 /* MessageListTests.swift */,
+				BB0000000000000000000073 /* ComposeServiceTests.swift */,
+				BB0000000000000000000074 /* GmailActionsJSTests.swift */,
+				BB0000000000000000000082 /* KeyboardShortcutsTests.swift */,
+				BB0000000000000000000083 /* DataStoreTests.swift */,
+			);
+			path = AgMailTests;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000020 /* AgMail.app */,
+				BB0000000000000000000021 /* AgMailTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000005 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000012 /* Account.swift */,
+				BB0000000000000000000013 /* Email.swift */,
+				BB0000000000000000000014 /* Folder.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EE0000000000000000000001 /* AgMail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = LL0000000000000000000002 /* Build configuration list for PBXNativeTarget "AgMail" */;
+			buildPhases = (
+				FF0000000000000000000001 /* Sources */,
+				FF0000000000000000000002 /* Frameworks */,
+				FF0000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AgMail;
+			productName = AgMail;
+			productReference = BB0000000000000000000020 /* AgMail.app */;
+			productType = "com.apple.product-type.application";
+		};
+		EE0000000000000000000002 /* AgMailTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = LL0000000000000000000003 /* Build configuration list for PBXNativeTarget "AgMailTests" */;
+			buildPhases = (
+				FF0000000000000000000005 /* Sources */,
+				FF0000000000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				HH0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = AgMailTests;
+			productName = AgMailTests;
+			productReference = BB0000000000000000000021 /* AgMailTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DD0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					EE0000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					EE0000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = EE0000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = LL0000000000000000000001 /* Build configuration list for PBXProject "AgMail" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = GG0000000000000000000001;
+			productRefGroup = GG0000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EE0000000000000000000001 /* AgMail */,
+				EE0000000000000000000002 /* AgMailTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FF0000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000031 /* gmail_parser.js in Resources */,
+				AA0000000000000000000070 /* gmail_actions.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FF0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000010 /* AgMailApp.swift in Sources */,
+				AA0000000000000000000012 /* Account.swift in Sources */,
+				AA0000000000000000000013 /* Email.swift in Sources */,
+				AA0000000000000000000014 /* Folder.swift in Sources */,
+				AA0000000000000000000016 /* AccountManager.swift in Sources */,
+				AA0000000000000000000017 /* WebViewPool.swift in Sources */,
+				AA0000000000000000000030 /* GmailScraper.swift in Sources */,
+				AA0000000000000000000040 /* GmailScraperManager.swift in Sources */,
+				AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */,
+				AA0000000000000000000050 /* MainView.swift in Sources */,
+				AA0000000000000000000051 /* AccountSidebar.swift in Sources */,
+				AA0000000000000000000052 /* FolderList.swift in Sources */,
+				AA0000000000000000000060 /* MessageList.swift in Sources */,
+				AA0000000000000000000061 /* MessageWebView.swift in Sources */,
+				AA0000000000000000000062 /* AccountSetupView.swift in Sources */,
+				AA0000000000000000000071 /* ComposeService.swift in Sources */,
+				AA0000000000000000000072 /* ComposeWebView.swift in Sources */,
+				AA0000000000000000000080 /* KeyboardShortcuts.swift in Sources */,
+				AA0000000000000000000081 /* DataStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF0000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000015 /* ModelTests.swift in Sources */,
+				AA0000000000000000000018 /* AccountManagerTests.swift in Sources */,
+				AA0000000000000000000019 /* WebViewPoolTests.swift in Sources */,
+				AA0000000000000000000032 /* GmailParserJSTests.swift in Sources */,
+				AA0000000000000000000033 /* GmailScraperTests.swift in Sources */,
+				AA0000000000000000000042 /* GmailScraperManagerTests.swift in Sources */,
+				AA0000000000000000000043 /* UnifiedMailboxTests.swift in Sources */,
+				AA0000000000000000000053 /* ViewTests.swift in Sources */,
+				AA0000000000000000000063 /* MessageListTests.swift in Sources */,
+				AA0000000000000000000073 /* ComposeServiceTests.swift in Sources */,
+				AA0000000000000000000074 /* GmailActionsJSTests.swift in Sources */,
+				AA0000000000000000000082 /* KeyboardShortcutsTests.swift in Sources */,
+				AA0000000000000000000083 /* DataStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		HH0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = EE0000000000000000000001 /* AgMail */;
+			targetProxy = CC0000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		KK0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		KK0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		KK0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMainStoryboardFile = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agmail.AgMail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		KK0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMainStoryboardFile = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agmail.AgMail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		KK0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agmail.AgMailTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgMail.app/Contents/MacOS/AgMail";
+			};
+			name = Debug;
+		};
+		KK0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agmail.AgMailTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgMail.app/Contents/MacOS/AgMail";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		LL0000000000000000000001 /* Build configuration list for PBXProject "AgMail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KK0000000000000000000001 /* Debug */,
+				KK0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		LL0000000000000000000002 /* Build configuration list for PBXNativeTarget "AgMail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KK0000000000000000000003 /* Debug */,
+				KK0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		LL0000000000000000000003 /* Build configuration list for PBXNativeTarget "AgMailTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KK0000000000000000000005 /* Debug */,
+				KK0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = DD0000000000000000000001 /* Project object */;
+}
