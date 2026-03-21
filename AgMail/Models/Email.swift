@@ -10,6 +10,7 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
     var isRead: Bool
     let accountId: String
     let folder: Folder
+    let messageId: String?
 
     init(
         msgId: String,
@@ -19,7 +20,8 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
         snippet: String,
         isRead: Bool = false,
         accountId: String,
-        folder: Folder
+        folder: Folder,
+        messageId: String? = nil
     ) {
         self.id = "\(accountId)_\(folder.rawValue)_\(msgId)"
         self.msgId = msgId
@@ -30,6 +32,7 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
         self.isRead = isRead
         self.accountId = accountId
         self.folder = folder
+        self.messageId = messageId
     }
 
     static func sortedByDate(_ emails: [Email], ascending: Bool = false) -> [Email] {

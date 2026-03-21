@@ -1,92 +1,307 @@
 import SwiftUI
 import WebKit
+import os.log
 
-struct MessageWebView: NSViewRepresentable {
+private let logger = Logger(subsystem: "AgMail", category: "MessageDetail")
+
+struct MessageContentData {
+    let from: String
+    let to: String
+    let cc: String
+    let subject: String
+    let date: String
+    let bodyHTML: String
+    let attachments: [AttachmentInfo]
+
+    struct AttachmentInfo {
+        let name: String
+        let size: String
+    }
+}
+
+/// Recursively extract body HTML from a Gmail MIME payload.
+/// Prefers text/html; falls back to text/plain wrapped in <pre>.
+func extractBodyFromPayload(_ payload: GmailPayload) -> String {
+    // Depth-first search: find text/html first, then text/plain as fallback
+    if let html = findLeaf(payload, mimeType: "text/html") {
+        return html
+    }
+    if let plain = findLeaf(payload, mimeType: "text/plain") {
+        let escaped = plain
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        return "<pre style=\"white-space: pre-wrap; word-wrap: break-word; font-family: inherit;\">\(escaped)</pre>"
+    }
+    return ""
+}
+
+/// Depth-first search for a leaf node with the specified MIME type.
+private func findLeaf(_ payload: GmailPayload, mimeType target: String) -> String? {
+    if let parts = payload.parts, !parts.isEmpty {
+        for part in parts {
+            if let result = findLeaf(part, mimeType: target) {
+                return result
+            }
+        }
+        return nil
+    }
+
+    // Leaf node
+    let mime = payload.mimeType?.lowercased() ?? ""
+    guard mime == target else { return nil }
+    guard let bodyData = payload.body?.data, !bodyData.isEmpty else { return nil }
+    guard let decoded = base64URLDecode(bodyData) else { return nil }
+    return String(data: decoded, encoding: .utf8)
+}
+
+/// Extract attachment names from MIME parts.
+func extractAttachments(_ payload: GmailPayload) -> [MessageContentData.AttachmentInfo] {
+    var result: [MessageContentData.AttachmentInfo] = []
+    if let parts = payload.parts {
+        for part in parts {
+            if let filename = part.filename, !filename.isEmpty {
+                let size = part.body?.size ?? 0
+                let sizeStr = size > 0 ? formatSize(size) : ""
+                result.append(.init(name: filename, size: sizeStr))
+            }
+            result.append(contentsOf: extractAttachments(part))
+        }
+    }
+    return result
+}
+
+private func formatSize(_ bytes: Int) -> String {
+    if bytes < 1024 { return "\(bytes) B" }
+    if bytes < 1024 * 1024 { return "\(bytes / 1024) KB" }
+    return String(format: "%.1f MB", Double(bytes) / (1024 * 1024))
+}
+
+private func base64URLDecode(_ str: String) -> Data? {
+    Data.fromBase64URL(str)
+}
+
+/// Native message detail: SwiftUI headers + WKWebView for HTML body
+struct NativeMessageDetail: View {
+    let email: Email
+    let apiManager: GmailAPIManager
+    let folder: Folder
+
+    @State private var messageContent: MessageContentData?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @StateObject private var bodyWebViewStore = BodyWebViewStore()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            messageHeaders
+            Divider()
+            if isLoading {
+                ProgressView("Loading message…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let errorMessage {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.orange)
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Button("Retry") { loadContent() }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                BodyWebView(webView: bodyWebViewStore.webView)
+            }
+        }
+        .onAppear { loadContent() }
+        .onChange(of: email.id) { _, _ in loadContent() }
+    }
+
+    private var messageHeaders: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(messageContent?.subject ?? email.subject)
+                .font(.system(size: 16, weight: .semibold))
+                .textSelection(.enabled)
+
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    headerRow("From", value: messageContent?.from ?? email.from)
+                    if let to = messageContent?.to, !to.isEmpty {
+                        headerRow("To", value: to)
+                    }
+                    if let cc = messageContent?.cc, !cc.isEmpty {
+                        headerRow("Cc", value: cc)
+                    }
+                }
+                Spacer()
+                Text(messageContent?.date ?? email.date.shortRelative)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let attachments = messageContent?.attachments, !attachments.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    ForEach(attachments, id: \.name) { att in
+                        Text("\(att.name) \(att.size)")
+                            .font(.system(size: 11))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.gray.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+            }
+        }
+        .padding(12)
+    }
+
+    private func headerRow(_ label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 4) {
+            Text(label + ":")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 36, alignment: .trailing)
+            Text(value)
+                .font(.system(size: 12))
+                .textSelection(.enabled)
+                .lineLimit(2)
+        }
+    }
+
+    private func loadContent() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let message = try await apiManager.fetchMessageContent(msgId: email.msgId, accountId: email.accountId)
+                let headers = message.payload?.headers ?? []
+                let from = headers.first { $0.name.lowercased() == "from" }?.value ?? email.from
+                let to = headers.first { $0.name.lowercased() == "to" }?.value ?? ""
+                let cc = headers.first { $0.name.lowercased() == "cc" }?.value ?? ""
+                let subject = headers.first { $0.name.lowercased() == "subject" }?.value ?? email.subject
+                let dateStr = headers.first { $0.name.lowercased() == "date" }?.value ?? email.date.shortRelative
+
+                let bodyHTML: String
+                if let payload = message.payload {
+                    let extracted = extractBodyFromPayload(payload)
+                    bodyHTML = extracted.isEmpty ? "<p>No message body</p>" : extracted
+                } else {
+                    bodyHTML = "<p>No message body</p>"
+                }
+
+                let attachments = message.payload.map { extractAttachments($0) } ?? []
+
+                let content = MessageContentData(
+                    from: from, to: to, cc: cc, subject: subject,
+                    date: dateStr, bodyHTML: bodyHTML, attachments: attachments
+                )
+                messageContent = content
+
+                let html = wrapHTML(bodyHTML, subject: subject)
+                bodyWebViewStore.loadHTML(html)
+                isLoading = false
+            } catch {
+                logger.error("Failed to load message: \(error.localizedDescription)")
+                errorMessage = error.localizedDescription
+                isLoading = false
+            }
+        }
+    }
+
+    private func wrapHTML(_ body: String, subject: String) -> String {
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none';">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 14px;
+                line-height: 1.5;
+                color: #1d1d1f;
+                padding: 16px;
+                margin: 0;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+            @media (prefers-color-scheme: dark) {
+                body { color: #f5f5f7; background-color: #1e1e1e; }
+                a { color: #5ac8fa; }
+            }
+            img { max-width: 100%; height: auto; }
+            blockquote {
+                border-left: 3px solid #ccc;
+                margin: 8px 0;
+                padding-left: 12px;
+                color: #666;
+            }
+            pre, code {
+                background: #f4f4f4;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 13px;
+            }
+            @media (prefers-color-scheme: dark) {
+                pre, code { background: #2d2d2d; }
+                blockquote { border-left-color: #555; color: #aaa; }
+            }
+            table { max-width: 100%; }
+        </style>
+        </head>
+        <body>
+        \(body)
+        </body>
+        </html>
+        """
+    }
+}
+
+@MainActor
+final class BodyWebViewStore: ObservableObject {
     let webView: WKWebView
-    var msgId: String?
-    var folder: Folder = .inbox
+    private let navigationDelegate = BodyWebViewNavigationDelegate()
+
+    init() {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        self.webView = WKWebView(frame: .zero, configuration: config)
+        self.webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        self.webView.navigationDelegate = navigationDelegate
+    }
+
+    func loadHTML(_ html: String) {
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+}
+
+/// Intercepts navigation to open links in the default browser instead of inside the webview.
+final class BodyWebViewNavigationDelegate: NSObject, WKNavigationDelegate {
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        } else {
+            decisionHandler(.allow)
+        }
+    }
+}
+
+struct BodyWebView: NSViewRepresentable {
+    let webView: WKWebView
 
     func makeNSView(context: Context) -> WKWebView {
-        webView.navigationDelegate = context.coordinator
-        let urlString = webView.url?.absoluteString ?? ""
-        let isBasicHTML = urlString.contains("ui=html")
-            || urlString.contains("/mail/u/0/h")
-        let needsLoad = webView.url == nil || isBasicHTML
-        if needsLoad {
-            let gmailURL = URL(string: "https://mail.google.com/mail/u/0/")!
-            webView.load(URLRequest(url: gmailURL))
-        }
-        return webView
+        webView
     }
 
-    func updateNSView(_ nsView: WKWebView, context: Context) {
-        guard let msgId else { return }
-        context.coordinator.pendingFolder = folder
-        if context.coordinator.lastMsgId != msgId {
-            context.coordinator.lastMsgId = msgId
-            let urlStr = nsView.url?.absoluteString ?? ""
-            let isBasicHTML = urlStr.contains("ui=html") || urlStr.contains("/mail/u/0/h")
-            let onFullGmail = urlStr.contains("mail.google.com") && !isBasicHTML
-            if nsView.isLoading {
-                context.coordinator.pendingNavigation = true
-            } else if !onFullGmail {
-                context.coordinator.pendingNavigation = true
-                let gmailURL = URL(string: "https://mail.google.com/mail/u/0/")!
-                nsView.load(URLRequest(url: gmailURL))
-            } else {
-                navigateToMessage(nsView, msgId: msgId)
-            }
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var lastMsgId: String?
-        var pendingNavigation = false
-        var pendingFolder: Folder = .inbox
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            guard pendingNavigation, let msgId = lastMsgId else { return }
-            guard let url = webView.url?.absoluteString, url.contains("mail.google.com"),
-                  !url.contains("/mail/u/0/h"), !url.contains("ui=html") else {
-                return // Don't navigate on non-Gmail or Basic HTML pages
-            }
-            pendingNavigation = false
-            let sanitized = MessageWebView.sanitizeMsgId(msgId)
-            let fragment = MessageWebView.gmailHashFragment(for: pendingFolder)
-            let js = """
-            (function() {
-                window.location.hash = '#\(fragment)/' + '\(sanitized)';
-                return true;
-            })();
-            """
-            webView.evaluateJavaScript(js, completionHandler: nil)
-        }
-    }
-
-    static func gmailHashFragment(for folder: Folder) -> String {
-        folder.gmailParameter
-    }
-
-    static func sanitizeMsgId(_ msgId: String) -> String {
-        msgId.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
-    }
-
-    private func navigateToMessage(_ webView: WKWebView, msgId: String) {
-        let sanitized = Self.sanitizeMsgId(msgId)
-        let fragment = Self.gmailHashFragment(for: folder)
-        let js = """
-        (function() {
-            var url = window.location.href;
-            if (url.includes('mail.google.com')) {
-                window.location.hash = '#\(fragment)/' + '\(sanitized)';
-            }
-            return true;
-        })();
-        """
-        webView.evaluateJavaScript(js, completionHandler: nil)
-    }
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
 }

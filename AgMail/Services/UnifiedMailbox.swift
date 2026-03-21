@@ -8,16 +8,16 @@ final class UnifiedMailbox: ObservableObject {
     @Published var selectedFolder: Folder = .inbox
     @Published var selectedAccountId: String?
 
-    private let scraperManager: GmailScraperManager
+    private let apiManager: GmailAPIManager
     private var cancellables = Set<AnyCancellable>()
 
-    init(scraperManager: GmailScraperManager) {
-        self.scraperManager = scraperManager
-        observeScraperManager()
+    init(apiManager: GmailAPIManager) {
+        self.apiManager = apiManager
+        observeAPIManager()
     }
 
-    private func observeScraperManager() {
-        scraperManager.$emailsByAccount
+    private func observeAPIManager() {
+        apiManager.$emailsByAccount
             .combineLatest($selectedFolder, $selectedAccountId)
             .sink { [weak self] emailsByAccount, folder, accountId in
                 guard let self else { return }
@@ -25,7 +25,7 @@ final class UnifiedMailbox: ObservableObject {
             }
             .store(in: &cancellables)
 
-        scraperManager.$emailsByAccount
+        apiManager.$emailsByAccount
             .sink { [weak self] emailsByAccount in
                 guard let self else { return }
                 self.rebuildUnreadCounts(from: emailsByAccount)
@@ -56,9 +56,9 @@ final class UnifiedMailbox: ObservableObject {
     func unreadCount(for folder: Folder, accountId: String? = nil) -> Int {
         let source: [Email]
         if let accountId {
-            source = scraperManager.emailsByAccount[accountId] ?? []
+            source = apiManager.emailsByAccount[accountId] ?? []
         } else {
-            source = scraperManager.emailsByAccount.values.flatMap { $0 }
+            source = apiManager.emailsByAccount.values.flatMap { $0 }
         }
         return source.filter { $0.folder == folder && !$0.isRead }.count
     }
@@ -66,9 +66,9 @@ final class UnifiedMailbox: ObservableObject {
     func emails(for folder: Folder, accountId: String? = nil) -> [Email] {
         let source: [Email]
         if let accountId {
-            source = scraperManager.emailsByAccount[accountId] ?? []
+            source = apiManager.emailsByAccount[accountId] ?? []
         } else {
-            source = scraperManager.emailsByAccount.values.flatMap { $0 }
+            source = apiManager.emailsByAccount.values.flatMap { $0 }
         }
         return Email.sortedByDate(source.filter { $0.folder == folder })
     }

@@ -25,6 +25,39 @@ struct MessageList: View {
     }
 }
 
+extension Date {
+    private static let monthDayFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        return fmt
+    }()
+    private static let shortDateFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "M/d/yy"
+        return fmt
+    }()
+
+    var shortRelative: String {
+        let now = Date()
+        let interval = now.timeIntervalSince(self)
+        let cal = Calendar.current
+
+        if interval < 60 {
+            return "now"
+        } else if interval < 3600 {
+            return "\(Int(interval / 60))m"
+        } else if interval < 86400 && cal.isDateInToday(self) {
+            return "\(Int(interval / 3600))h"
+        } else if cal.isDateInYesterday(self) {
+            return "Yesterday"
+        } else if cal.component(.year, from: self) == cal.component(.year, from: now) {
+            return Self.monthDayFormatter.string(from: self)
+        } else {
+            return Self.shortDateFormatter.string(from: self)
+        }
+    }
+}
+
 struct MessageRow: View {
     let email: Email
     let account: Account?
@@ -45,7 +78,7 @@ struct MessageRow: View {
                         .font(.system(size: 13, weight: email.isRead ? .regular : .semibold))
                         .lineLimit(1)
                     Spacer()
-                    Text(email.date, style: .relative)
+                    Text(email.date.shortRelative)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }

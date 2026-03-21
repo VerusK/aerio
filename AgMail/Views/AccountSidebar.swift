@@ -3,8 +3,8 @@ import SwiftUI
 struct AccountSidebar: View {
     @ObservedObject var accountManager: AccountManager
     @ObservedObject var unifiedMailbox: UnifiedMailbox
-    @ObservedObject var webViewPool: WebViewPool
-    var scraperManager: GmailScraperManager?
+    let oauthManager: OAuthManager
+    var apiManager: GmailAPIManager?
     @Binding var selectedAccountId: String?
     @State private var showingAccountSetup = false
 
@@ -17,12 +17,26 @@ struct AccountSidebar: View {
             }
             Spacer()
             addAccountButton
+            settingsButton
         }
         .padding(.vertical, 8)
-        .frame(width: 64)
+        .frame(width: 56)
         .sheet(isPresented: $showingAccountSetup) {
-            AccountSetupView(accountManager: accountManager, webViewPool: webViewPool)
+            AccountSetupView(accountManager: accountManager, oauthManager: oauthManager)
         }
+    }
+
+    private var settingsButton: some View {
+        Button {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("settings-button")
     }
 
     private var addAccountButton: some View {
@@ -32,7 +46,7 @@ struct AccountSidebar: View {
             ZStack {
                 Circle()
                     .strokeBorder(Color.gray.opacity(0.5), lineWidth: 1.5)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 36, height: 36)
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -43,16 +57,27 @@ struct AccountSidebar: View {
     }
 
     private var allAccountsButton: some View {
-        Button {
+        let totalUnread = unifiedMailbox.unreadCount(for: .inbox)
+        return Button {
             selectedAccountId = nil
         } label: {
             ZStack {
                 Circle()
                     .fill(selectedAccountId == nil ? Color.accentColor : Color.gray.opacity(0.3))
-                    .frame(width: 48, height: 48)
+                    .frame(width: 36, height: 36)
                 Text("All")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(selectedAccountId == nil ? .white : .primary)
+                if totalUnread > 0 {
+                    Text(totalUnread > 99 ? "99+" : "\(totalUnread)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.red)
+                        .clipShape(Capsule())
+                        .offset(x: 12, y: -12)
+                }
             }
         }
         .buttonStyle(.plain)
@@ -66,7 +91,7 @@ struct AccountSidebar: View {
             ZStack {
                 Circle()
                     .fill(selectedAccountId == account.id ? account.color.swiftUIColor : account.color.swiftUIColor.opacity(0.3))
-                    .frame(width: 48, height: 48)
+                    .frame(width: 36, height: 36)
                 Text(account.avatarLetter)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(selectedAccountId == account.id ? .white : .primary)
@@ -88,7 +113,7 @@ struct AccountSidebar: View {
         if selectedAccountId == account.id {
             selectedAccountId = nil
         }
-        scraperManager?.removeScraper(for: account.id)
+        // removeClient is triggered automatically by GmailAPIManager's account observation
         accountManager.removeAccount(id: account.id)
     }
 
@@ -103,7 +128,7 @@ struct AccountSidebar: View {
                     .padding(.vertical, 1)
                     .background(Color.red)
                     .clipShape(Capsule())
-                    .offset(x: 16, y: -16)
+                    .offset(x: 12, y: -12)
             }
         }
     }

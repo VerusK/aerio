@@ -102,7 +102,8 @@ final class EmailCacheTests: XCTestCase {
             snippet: "Preview text",
             isRead: true,
             accountId: "acc1",
-            folder: Folder.inbox
+            folder: Folder.inbox,
+            messageId: "<updated@example.com>"
         )
         store.saveEmails([updated])
 
@@ -110,6 +111,7 @@ final class EmailCacheTests: XCTestCase {
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].subject, "Updated")
         XCTAssertTrue(loaded[0].isRead)
+        XCTAssertEqual(loaded[0].messageId, "<updated@example.com>")
     }
 
     // MARK: - Clear

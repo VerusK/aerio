@@ -4,12 +4,13 @@ import XCTest
 @MainActor
 final class MessageListTests: XCTestCase {
 
-    private func makeTestEnvironment() -> (AccountManager, GmailScraperManager, UnifiedMailbox) {
+    private func makeTestEnvironment() -> (AccountManager, GmailAPIManager, UnifiedMailbox) {
         let defaults = UserDefaults(suiteName: "MessageListTests-\(UUID().uuidString)")!
         let accountManager = AccountManager(defaults: defaults)
-        let scraperManager = GmailScraperManager(accountManager: accountManager)
-        let mailbox = UnifiedMailbox(scraperManager: scraperManager)
-        return (accountManager, scraperManager, mailbox)
+        let oauthManager = OAuthManager()
+        let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager)
+        let mailbox = UnifiedMailbox(apiManager: apiManager)
+        return (accountManager, apiManager, mailbox)
     }
 
     private func makeSampleEmails() -> (Account, Account, [Email]) {
@@ -30,13 +31,13 @@ final class MessageListTests: XCTestCase {
     // MARK: - Filtering tests
 
     func testFilteredEmailsShowsOnlySelectedFolder() {
-        let (accountManager, scraperManager, mailbox) = makeTestEnvironment()
+        let (accountManager, apiManager, mailbox) = makeTestEnvironment()
         let (acc1, acc2, emails) = makeSampleEmails()
         accountManager.addAccount(acc1)
         accountManager.addAccount(acc2)
 
-        scraperManager.emailsByAccount["acc1"] = emails.filter { $0.accountId == "acc1" }
-        scraperManager.emailsByAccount["acc2"] = emails.filter { $0.accountId == "acc2" }
+        apiManager.emailsByAccount["acc1"] = emails.filter { $0.accountId == "acc1" }
+        apiManager.emailsByAccount["acc2"] = emails.filter { $0.accountId == "acc2" }
 
         let inboxEmails = mailbox.emails(for: .inbox)
         XCTAssertEqual(inboxEmails.count, 3, "Should show 3 inbox emails from both accounts")
@@ -50,13 +51,13 @@ final class MessageListTests: XCTestCase {
     }
 
     func testFilteredEmailsByAccount() {
-        let (accountManager, scraperManager, mailbox) = makeTestEnvironment()
+        let (accountManager, apiManager, mailbox) = makeTestEnvironment()
         let (acc1, acc2, emails) = makeSampleEmails()
         accountManager.addAccount(acc1)
         accountManager.addAccount(acc2)
 
-        scraperManager.emailsByAccount["acc1"] = emails.filter { $0.accountId == "acc1" }
-        scraperManager.emailsByAccount["acc2"] = emails.filter { $0.accountId == "acc2" }
+        apiManager.emailsByAccount["acc1"] = emails.filter { $0.accountId == "acc1" }
+        apiManager.emailsByAccount["acc2"] = emails.filter { $0.accountId == "acc2" }
 
         let acc1Inbox = mailbox.emails(for: .inbox, accountId: "acc1")
         XCTAssertEqual(acc1Inbox.count, 2, "Account 1 should have 2 inbox emails")
@@ -67,25 +68,24 @@ final class MessageListTests: XCTestCase {
     }
 
     func testFilteredEmailsSortedByDateDescending() {
-        let (accountManager, scraperManager, mailbox) = makeTestEnvironment()
+        let (accountManager, apiManager, mailbox) = makeTestEnvironment()
         let (acc1, acc2, emails) = makeSampleEmails()
         accountManager.addAccount(acc1)
         accountManager.addAccount(acc2)
 
-        scraperManager.emailsByAccount["acc1"] = emails.filter { $0.accountId == "acc1" }
-        scraperManager.emailsByAccount["acc2"] = emails.filter { $0.accountId == "acc2" }
+        apiManager.emailsByAccount["acc1"] = emails.filter { $0.accountId == "acc1" }
+        apiManager.emailsByAccount["acc2"] = emails.filter { $0.accountId == "acc2" }
 
         let inboxEmails = mailbox.emails(for: .inbox)
         XCTAssertEqual(inboxEmails.count, 3)
-        // Most recent first
         XCTAssertEqual(inboxEmails[0].msgId, "m3", "Most recent email should be first")
         XCTAssertEqual(inboxEmails[1].msgId, "m1")
         XCTAssertEqual(inboxEmails[2].msgId, "m2", "Oldest email should be last")
     }
 
     func testEmptyFolderReturnsNoEmails() {
-        let (_, scraperManager, mailbox) = makeTestEnvironment()
-        scraperManager.emailsByAccount["acc1"] = [
+        let (_, apiManager, mailbox) = makeTestEnvironment()
+        apiManager.emailsByAccount["acc1"] = [
             Email(msgId: "m1", from: "x@x.com", subject: "s", date: Date(), snippet: "", isRead: false, accountId: "acc1", folder: .inbox),
         ]
 
@@ -94,15 +94,15 @@ final class MessageListTests: XCTestCase {
     }
 
     func testNilAccountIdShowsAllAccounts() {
-        let (accountManager, scraperManager, mailbox) = makeTestEnvironment()
+        let (accountManager, apiManager, mailbox) = makeTestEnvironment()
         let (acc1, acc2, _) = makeSampleEmails()
         accountManager.addAccount(acc1)
         accountManager.addAccount(acc2)
 
-        scraperManager.emailsByAccount["acc1"] = [
+        apiManager.emailsByAccount["acc1"] = [
             Email(msgId: "m1", from: "a@a.com", subject: "s1", date: Date(), snippet: "", isRead: false, accountId: "acc1", folder: .inbox),
         ]
-        scraperManager.emailsByAccount["acc2"] = [
+        apiManager.emailsByAccount["acc2"] = [
             Email(msgId: "m2", from: "b@b.com", subject: "s2", date: Date(), snippet: "", isRead: false, accountId: "acc2", folder: .inbox),
         ]
 

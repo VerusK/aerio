@@ -25,31 +25,30 @@ final class UnifiedMailboxTests: XCTestCase {
         )
     }
 
-    private func makeManager() -> (AccountManager, GmailScraperManager) {
+    private func makeManager() -> (AccountManager, GmailAPIManager) {
         let defaults = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
         let am = AccountManager(defaults: defaults)
-        let sm = GmailScraperManager(accountManager: am)
-        return (am, sm)
+        let oauth = OAuthManager()
+        let api = GmailAPIManager(accountManager: am, oauthManager: oauth)
+        return (am, api)
     }
 
     // MARK: - Merge from multiple accounts
 
     func testMergeEmailsFromMultipleAccounts() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
         let now = Date()
         let email1 = makeEmail(msgId: "m1", date: now.addingTimeInterval(-100), accountId: "acc1", folder: .inbox)
         let email2 = makeEmail(msgId: "m2", date: now.addingTimeInterval(-50), accountId: "acc2", folder: .inbox)
         let email3 = makeEmail(msgId: "m3", date: now, accountId: "acc1", folder: .inbox)
 
-        // Directly set emails on scraper manager for testing
-        sm.emailsByAccount["acc1"] = [email1, email3]
-        sm.emailsByAccount["acc2"] = [email2]
+        api.emailsByAccount["acc1"] = [email1, email3]
+        api.emailsByAccount["acc2"] = [email2]
 
         let merged = mailbox.emails(for: .inbox)
         XCTAssertEqual(merged.count, 3)
-        // Should be sorted by date descending (newest first)
         XCTAssertEqual(merged[0].msgId, "m3")
         XCTAssertEqual(merged[1].msgId, "m2")
         XCTAssertEqual(merged[2].msgId, "m1")
@@ -58,15 +57,15 @@ final class UnifiedMailboxTests: XCTestCase {
     // MARK: - Sorting
 
     func testEmailsSortedByDateDescending() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
         let now = Date()
         let oldest = makeEmail(msgId: "old", date: now.addingTimeInterval(-1000), folder: .inbox)
         let middle = makeEmail(msgId: "mid", date: now.addingTimeInterval(-500), folder: .inbox)
         let newest = makeEmail(msgId: "new", date: now, folder: .inbox)
 
-        sm.emailsByAccount["acc1"] = [middle, oldest, newest]
+        api.emailsByAccount["acc1"] = [middle, oldest, newest]
 
         let result = mailbox.emails(for: .inbox)
         XCTAssertEqual(result.map(\.msgId), ["new", "mid", "old"])
@@ -75,15 +74,15 @@ final class UnifiedMailboxTests: XCTestCase {
     // MARK: - Unread counts
 
     func testUnreadCountPerFolder() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
-        sm.emailsByAccount["acc1"] = [
+        api.emailsByAccount["acc1"] = [
             makeEmail(msgId: "m1", isRead: false, accountId: "acc1", folder: .inbox),
             makeEmail(msgId: "m2", isRead: true, accountId: "acc1", folder: .inbox),
             makeEmail(msgId: "m3", isRead: false, accountId: "acc1", folder: .trash),
         ]
-        sm.emailsByAccount["acc2"] = [
+        api.emailsByAccount["acc2"] = [
             makeEmail(msgId: "m4", isRead: false, accountId: "acc2", folder: .inbox),
             makeEmail(msgId: "m5", isRead: false, accountId: "acc2", folder: .spam),
         ]
@@ -96,14 +95,14 @@ final class UnifiedMailboxTests: XCTestCase {
     }
 
     func testUnreadCountPerFolderPerAccount() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
-        sm.emailsByAccount["acc1"] = [
+        api.emailsByAccount["acc1"] = [
             makeEmail(msgId: "m1", isRead: false, accountId: "acc1", folder: .inbox),
             makeEmail(msgId: "m2", isRead: false, accountId: "acc1", folder: .inbox),
         ]
-        sm.emailsByAccount["acc2"] = [
+        api.emailsByAccount["acc2"] = [
             makeEmail(msgId: "m3", isRead: false, accountId: "acc2", folder: .inbox),
         ]
 
@@ -114,13 +113,13 @@ final class UnifiedMailboxTests: XCTestCase {
     // MARK: - Filter by account
 
     func testEmailsFilteredByAccount() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
-        sm.emailsByAccount["acc1"] = [
+        api.emailsByAccount["acc1"] = [
             makeEmail(msgId: "m1", accountId: "acc1", folder: .inbox),
         ]
-        sm.emailsByAccount["acc2"] = [
+        api.emailsByAccount["acc2"] = [
             makeEmail(msgId: "m2", accountId: "acc2", folder: .inbox),
         ]
 
@@ -135,10 +134,10 @@ final class UnifiedMailboxTests: XCTestCase {
     // MARK: - Filter by folder
 
     func testEmailsFilteredByFolder() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
-        sm.emailsByAccount["acc1"] = [
+        api.emailsByAccount["acc1"] = [
             makeEmail(msgId: "m1", folder: .inbox),
             makeEmail(msgId: "m2", folder: .trash),
             makeEmail(msgId: "m3", folder: .spam),
@@ -153,8 +152,8 @@ final class UnifiedMailboxTests: XCTestCase {
     // MARK: - Empty state
 
     func testEmptyMailbox() {
-        let (_, sm) = makeManager()
-        let mailbox = UnifiedMailbox(scraperManager: sm)
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
 
         XCTAssertEqual(mailbox.emails(for: .inbox).count, 0)
         XCTAssertEqual(mailbox.unreadCount(for: .inbox), 0)

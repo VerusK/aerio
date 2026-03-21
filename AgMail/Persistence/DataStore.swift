@@ -15,6 +15,7 @@ final class CachedEmail {
     var isRead: Bool
     var accountId: String
     var folderRaw: String
+    var messageId: String?
 
     init(from email: Email) {
         self.id = email.id
@@ -26,6 +27,7 @@ final class CachedEmail {
         self.isRead = email.isRead
         self.accountId = email.accountId
         self.folderRaw = email.folder.rawValue
+        self.messageId = email.messageId
     }
 
     func toEmail() -> Email? {
@@ -38,7 +40,8 @@ final class CachedEmail {
             snippet: snippet,
             isRead: isRead,
             accountId: accountId,
-            folder: folder
+            folder: folder,
+            messageId: messageId
         )
     }
 }
@@ -85,6 +88,7 @@ final class EmailCache: ObservableObject {
                 existing.snippet = email.snippet
                 existing.isRead = email.isRead
                 existing.folderRaw = email.folder.rawValue
+                existing.messageId = email.messageId
             } else {
                 modelContext.insert(CachedEmail(from: email))
             }
