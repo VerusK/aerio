@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UserNotifications
 import os.log
 
 @main
@@ -138,10 +139,12 @@ final class AppState: ObservableObject {
 
     private func observeDockBadge() {
         badgeCancellable = apiManager.$unreadCountsByAccount
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] counts in
                 self?.updateDockBadge(counts: counts)
             }
         defaultsCancellable = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.updateDockBadge(counts: self.apiManager.unreadCountsByAccount)
@@ -151,10 +154,20 @@ final class AppState: ObservableObject {
     func updateDockBadge(counts: [String: Int]) {
         let enabled = defaults.bool(forKey: AppState.showDockBadgeKey)
         guard enabled else {
-            NSApp?.dockTile.badgeLabel = nil
+            setBadgeCount(0)
             return
         }
         let total = counts.values.reduce(0, +)
-        NSApp?.dockTile.badgeLabel = total > 0 ? "\(total)" : nil
+        setBadgeCount(total)
+    }
+
+    private func setBadgeCount(_ count: Int) {
+        Task {
+            do {
+                try await UNUserNotificationCenter.current().setBadgeCount(count)
+            } catch {
+                Self.logger.warning("Failed to set badge count: \(error.localizedDescription)")
+            }
+        }
     }
 }

@@ -41,7 +41,8 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - `UnifiedSidebar` replaces separate AccountSidebar + FolderList with a 3-panel layout: folder tree with per-account sub-items
 - `KeyEventInterceptor` (NSViewRepresentable) intercepts key events before system menu processing for layout-independent hotkeys (EN/RU)
 - Folder enum includes: inbox, sent, archive, trash, spam, drafts
-- Debug logging via `os.log` (subsystem: "AgMail", categories: GmailAPIClient, GmailAPIManager, etc.) — view in Console.app or `log stream --predicate 'process == "AgMail"' --debug`
+- Dock badge count via `UNUserNotificationCenter.setBadgeCount()` (not `NSApp.dockTile.badgeLabel` — silently ignored on macOS 16+)
+- Debug logging via `os.log` (subsystem: "AgMail", categories: GmailAPIClient, GmailAPIManager, etc.) — view in Console.app or `log stream --predicate 'process == "AgMail"' --debug`; note: `.debug`/`.info` levels invisible in Release builds, use `NSLog` for quick debugging
 - No external dependencies — only macOS SDK (AuthenticationServices, Security, CryptoKit, SwiftUI, SwiftData, UserNotifications)
 
 ## Data Storage
@@ -53,3 +54,10 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - **Dock badge toggle**: `UserDefaults` (key `showDockBadge`)
 - **Contacts cache**: `UserDefaults` (key `agmail_contacts_cache`)
 - **OAuth tokens**: macOS Keychain (per-account access/refresh tokens via KeychainHelper)
+
+## Memory & Knowledge Management
+
+- Memory files stored in `.claude/memory/` — see `MEMORY.md` there for index
+- When you discover something non-obvious (platform quirks, API gotchas, debugging tricks, architectural decisions), save it to memory immediately — don't wait for session end
+- Update CLAUDE.md when a discovery affects how the project should be built or debugged (e.g., "don't use API X, use API Y instead")
+- Memory is for cross-session context that can't be derived from code; CLAUDE.md is for durable project instructions
