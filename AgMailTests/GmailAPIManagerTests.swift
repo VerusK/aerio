@@ -340,12 +340,6 @@ final class GmailAPIManagerTests: XCTestCase {
 
     // MARK: - Navigate to Folder
 
-    func testNavigateAllToFolder() async {
-        // Just verify it doesn't crash and the folder is stored
-        await manager.navigateAllToFolder(.trash)
-        // Next fetch should use the new folder - we can verify indirectly
-    }
-
     // MARK: - Incremental Sync
 
     func testIncrementalSyncWithNoHistoryIdFallsBackToFullFetch() async {
@@ -461,10 +455,10 @@ final class GmailAPIManagerTests: XCTestCase {
         manager.historyIds[testAccountId] = "old_expired_id"
         manager.emailsByAccount[testAccountId] = []
 
-        var requestCount = 0
+        let requestCount = RequestCounter()
         MockURLProtocol.requestHandler = { request in
             let url = request.url!.absoluteString
-            requestCount += 1
+            requestCount.increment()
 
             // First call to /history returns 410
             if url.contains("/history") {
@@ -784,7 +778,7 @@ final class GmailAPIManagerTests: XCTestCase {
         let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
         manager.addClient(for: account)
 
-        var listCallCount = 0
+        let listCallCount = RequestCounter()
         MockURLProtocol.requestHandler = { request in
             let url = request.url!.absoluteString
 
@@ -795,9 +789,9 @@ final class GmailAPIManagerTests: XCTestCase {
 
             // List messages endpoint — return page 1 then page 2
             if url.contains("/messages") && !url.contains("/messages/") {
-                listCallCount += 1
+                let count = listCallCount.increment()
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-                if listCallCount == 1 {
+                if count == 1 {
                     // First page with nextPageToken
                     let json = """
                     {"messages": [{"id": "msg1", "threadId": "t1"}], "nextPageToken": "page2token", "resultSizeEstimate": 2, "historyId": "100"}
@@ -843,7 +837,7 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertEqual(emails.count, 1)
         XCTAssertTrue(emails.contains(where: { $0.msgId == "msg1" }))
         // Only one list call — first batch only
-        XCTAssertEqual(listCallCount, 1)
+        XCTAssertEqual(listCallCount.value, 1)
         // historyId should be set
         XCTAssertNotNil(manager.historyIds[testAccountId])
         // pageToken should be stored for infinite scroll
@@ -1127,6 +1121,100 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertTrue(manager.pageTokens.isEmpty, "navigateAllToFolder should clear all page tokens")
     }
 
+    // MARK: - Polling Timer
+
+    func testPollingTimerFiresFetchAndSync() async throws {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+
+        let listCallCount = RequestCounter()
+        let historyCallCount = RequestCounter()
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+
+            if url.contains("/labels/INBOX") {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, #"{"id":"INBOX","name":"INBOX","messagesUnread":0}"#.data(using: .utf8)!)
+            }
+
+            if url.contains("/history") {
+                historyCallCount.increment()
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, #"{"historyId":"200"}"#.data(using: .utf8)!)
+            }
+
+            // Individual message fetch (GET /messages/{id})
+            if url.contains("/messages/msg1") {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let msg = #"{"id":"msg1","threadId":"t1","historyId":"100","labelIds":["INBOX"],"payload":{"headers":[{"name":"From","value":"test@example.com"},{"name":"Subject","value":"Test"},{"name":"Date","value":"Mon, 1 Jan 2024 00:00:00 +0000"}]},"snippet":"test","internalDate":"1704067200000"}"#
+                return (response, msg.data(using: .utf8)!)
+            }
+
+            if url.contains("/messages") && !url.contains("/messages/") {
+                listCallCount.increment()
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, #"{"messages":[{"id":"msg1","threadId":"t1"}],"resultSizeEstimate":1,"historyId":"100"}"#.data(using: .utf8)!)
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, "{}".data(using: .utf8)!)
+        }
+
+        let historyExpectation = expectation(description: "History API called at least once")
+        historyCallCount.onFirstIncrement = { historyExpectation.fulfill() }
+
+        // Start polling with a very short interval
+        manager.startPollingAll(interval: 0.1)
+        XCTAssertTrue(manager.isPolling)
+
+        // Wait for the initial fetch + at least one timer-driven sync cycle
+        await fulfillment(of: [historyExpectation], timeout: 5)
+
+        manager.stopPollingAll()
+        XCTAssertFalse(manager.isPolling)
+
+        // The initial full fetch should have called listMessages
+        XCTAssertGreaterThanOrEqual(listCallCount.value, 1, "Initial fetch should have called listMessages")
+        // The timer-driven sync should have called the history endpoint at least once
+        XCTAssertGreaterThanOrEqual(historyCallCount.value, 1, "Timer-driven sync should have called history API")
+    }
+
+    // MARK: - Cache Integration
+
+    func testLoadCachedEmailsPopulatesAtStartup() {
+        // Create a cache with pre-loaded emails
+        let cache = EmailCache(inMemory: true)
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        accountManager.addAccount(account)
+
+        // Save some emails to cache
+        let email1 = Email(msgId: "cached1", from: "a@b.com", subject: "Cached 1", date: Date(), snippet: "snap1", isRead: false, accountId: testAccountId, folder: .inbox)
+        let email2 = Email(msgId: "cached2", from: "c@d.com", subject: "Cached 2", date: Date(), snippet: "snap2", isRead: true, accountId: testAccountId, folder: .inbox)
+        cache.saveEmails([email1, email2])
+
+        // Create a new manager with this cache — loadCachedEmails runs in init
+        let cachedManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, dataStore: cache, keychainStore: mockKeychain)
+
+        let emails = cachedManager.emailsByAccount[testAccountId] ?? []
+        XCTAssertEqual(emails.count, 2)
+        XCTAssertTrue(emails.contains(where: { $0.msgId == "cached1" }))
+        XCTAssertTrue(emails.contains(where: { $0.msgId == "cached2" }))
+        cachedManager.stopPollingAll()
+    }
+
+    func testLoadCachedEmailsSkipsEmptyAccounts() {
+        let cache = EmailCache(inMemory: true)
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        accountManager.addAccount(account)
+
+        // No emails saved for this account
+        let cachedManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, dataStore: cache, keychainStore: mockKeychain)
+
+        // Should not have any emails (empty cache doesn't create entry)
+        XCTAssertNil(cachedManager.emailsByAccount[testAccountId])
+        cachedManager.stopPollingAll()
+    }
+
     // MARK: - Archive/Spam/Delete Folder Sync
 
     func testArchiveEmailRemovesFromInboxAndAddsToArchive() async throws {
@@ -1262,10 +1350,8 @@ final class GmailAPIManagerTests: XCTestCase {
     }
 
     private func setupMockForFetchEmails() {
-        var callCount = 0
         MockURLProtocol.requestHandler = { request in
             let url = request.url!.absoluteString
-            callCount += 1
 
             if url.contains("/labels/INBOX") {
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!

@@ -46,9 +46,16 @@ final class MockURLProtocol: URLProtocol {
 final class RequestCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var _value = 0
+    var onFirstIncrement: (() -> Void)?
     var value: Int { lock.lock(); defer { lock.unlock() }; return _value }
     @discardableResult func increment() -> Int {
-        lock.lock(); defer { lock.unlock() }; _value += 1; return _value
+        lock.lock()
+        _value += 1
+        let current = _value
+        let callback = onFirstIncrement
+        lock.unlock()
+        if current == 1 { callback?() }
+        return current
     }
 }
 
@@ -183,21 +190,6 @@ final class GmailAPIClientTests: XCTestCase {
 
         let result = try await client.createDraft(raw: "dGVzdA")
         XCTAssertEqual(result.id, "draft1")
-    }
-
-    func testCreateDraftURLPath() async throws {
-        var capturedURL: URL?
-        MockURLProtocol.requestHandler = { request in
-            capturedURL = request.url
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            let json = """
-            {"id": "draft2", "message": {"id": "m2", "threadId": "t2"}}
-            """
-            return (response, json.data(using: .utf8)!)
-        }
-
-        _ = try await client.createDraft(raw: "raw_content")
-        XCTAssertTrue(capturedURL!.absoluteString.hasSuffix("/drafts"))
     }
 
     // MARK: - Error Handling
@@ -343,6 +335,279 @@ final class GmailAPIClientTests: XCTestCase {
         let label = try await client.getLabel(id: "INBOX")
         XCTAssertEqual(label.messagesUnread, 3)
         XCTAssertEqual(label.messagesTotal, 100)
+    }
+
+    // MARK: - 401 Token Refresh
+
+    func testUnauthorizedTriggersRefreshAndRetry() async throws {
+        // Register globally to intercept OAuthManager's URLSession.shared calls
+        URLProtocol.registerClass(MockURLProtocol.self)
+        defer { URLProtocol.unregisterClass(MockURLProtocol.self) }
+
+        let apiCounter = RequestCounter()
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+
+            // Token refresh endpoint (OAuthManager -> URLSession.shared)
+            if url.contains("oauth2.googleapis.com/token") {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let json = """
+                {"access_token": "refreshed_token", "expires_in": 3600, "token_type": "Bearer"}
+                """
+                return (response, json.data(using: .utf8)!)
+            }
+
+            // Gmail API calls
+            let count = apiCounter.increment()
+            if count == 1 {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+                return (response, Data())
+            }
+            // Retry after refresh should use new token
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer refreshed_token")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"messages": [{"id": "msg1", "threadId": "t1"}], "resultSizeEstimate": 1}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.listMessages()
+        XCTAssertEqual(result.messages?.count, 1)
+        XCTAssertEqual(apiCounter.value, 2)
+    }
+
+    func testUnauthorizedWithFailedRefreshPropagatesError() async {
+        // Register globally for OAuthManager's URLSession.shared
+        URLProtocol.registerClass(MockURLProtocol.self)
+        defer { URLProtocol.unregisterClass(MockURLProtocol.self) }
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+
+            if url.contains("oauth2.googleapis.com/token") {
+                // Refresh fails
+                let response = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!
+                return (response, "invalid_grant".data(using: .utf8)!)
+            }
+
+            // API call returns 401
+            let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.listMessages()
+            XCTFail("Should have thrown")
+        } catch {
+            // Should propagate refresh error, not loop infinitely
+            XCTAssertTrue(error is OAuthManager.OAuthError, "Expected OAuthError, got \(error)")
+        }
+    }
+
+    func testConcurrent401sCoalesceIntoSingleRefresh() async throws {
+        // Register globally for OAuthManager's URLSession.shared
+        URLProtocol.registerClass(MockURLProtocol.self)
+        defer { URLProtocol.unregisterClass(MockURLProtocol.self) }
+
+        let refreshCounter = RequestCounter()
+        let apiCounter = RequestCounter()
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+
+            if url.contains("oauth2.googleapis.com/token") {
+                refreshCounter.increment()
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                let json = """
+                {"access_token": "refreshed_token", "expires_in": 3600, "token_type": "Bearer"}
+                """
+                return (response, json.data(using: .utf8)!)
+            }
+
+            let count = apiCounter.increment()
+            if count <= 2 {
+                // First two calls (concurrent) return 401
+                let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+                return (response, Data())
+            }
+            // Retries succeed
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "msg1", "threadId": "t1", "labelIds": ["INBOX"]}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        // Fire two requests concurrently
+        async let r1: GmailMessage = client.getMessage(id: "m1")
+        async let r2: GmailMessage = client.getMessage(id: "m2")
+
+        let (msg1, msg2) = try await (r1, r2)
+        // Both requests should succeed after refresh
+        XCTAssertNotNil(msg1.id)
+        XCTAssertNotNil(msg2.id)
+        // Both 401s should coalesce — at most 1 refresh call
+        XCTAssertEqual(refreshCounter.value, 1, "Concurrent 401s should coalesce into single refresh")
+    }
+
+    // MARK: - Endpoint Tests
+
+    func testTrashMessageRequestShape() async throws {
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "msg1", "threadId": "t1", "labelIds": ["TRASH"]}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.trashMessage(id: "msg1")
+        XCTAssertEqual(capturedRequest?.httpMethod, "POST")
+        XCTAssertTrue(capturedRequest!.url!.absoluteString.contains("/messages/msg1/trash"))
+        XCTAssertEqual(result.labelIds, ["TRASH"])
+    }
+
+    func testGetAttachmentRequestAndResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertTrue(request.url!.absoluteString.contains("/messages/msg1/attachments/att1"))
+            XCTAssertEqual(request.httpMethod, "GET")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"attachmentId": "att1", "size": 1024, "data": "SGVsbG8gV29ybGQ"}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let attachment = try await client.getAttachment(messageId: "msg1", attachmentId: "att1")
+        XCTAssertEqual(attachment.attachmentId, "att1")
+        XCTAssertEqual(attachment.size, 1024)
+        XCTAssertEqual(attachment.data, "SGVsbG8gV29ybGQ")
+    }
+
+    func testListHistoryRequestAndResponse() async throws {
+        var capturedURL: String?
+        MockURLProtocol.requestHandler = { request in
+            capturedURL = request.url!.absoluteString
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {
+                "history": [
+                    {
+                        "id": "12345",
+                        "messagesAdded": [{"message": {"id": "new1", "threadId": "t1"}}]
+                    }
+                ],
+                "historyId": "12346"
+            }
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.listHistory(startHistoryId: "12340", labelId: "INBOX")
+        XCTAssertTrue(capturedURL!.contains("startHistoryId=12340"))
+        XCTAssertTrue(capturedURL!.contains("labelId=INBOX"))
+        XCTAssertEqual(result.history?.count, 1)
+        XCTAssertEqual(result.historyId, "12346")
+        XCTAssertEqual(result.history?.first?.messagesAdded?.count, 1)
+    }
+
+    func testListDraftsRequestAndResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertTrue(request.url!.absoluteString.contains("/drafts"))
+            XCTAssertEqual(request.httpMethod, "GET")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"drafts": [{"id": "d1", "message": {"id": "m1", "threadId": "t1"}}, {"id": "d2", "message": {"id": "m2", "threadId": "t2"}}]}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.listDrafts()
+        XCTAssertEqual(result.drafts?.count, 2)
+        XCTAssertEqual(result.drafts?.first?.id, "d1")
+    }
+
+    func testGetDraftRequestAndResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertTrue(request.url!.absoluteString.contains("/drafts/d1"))
+            XCTAssertTrue(request.url!.absoluteString.contains("format=full"))
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "d1", "message": {"id": "m1", "threadId": "t1", "snippet": "Draft content"}}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let draft = try await client.getDraft(draftId: "d1")
+        XCTAssertEqual(draft.id, "d1")
+        XCTAssertEqual(draft.message?.snippet, "Draft content")
+    }
+
+    func testSendDraftRequestShape() async throws {
+        var capturedBody: [String: String]?
+        MockURLProtocol.requestHandler = { request in
+            capturedBody = try? JSONDecoder().decode([String: String].self, from: request.httpBody!)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "sent1", "threadId": "t1", "labelIds": ["SENT"]}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.sendDraft(draftId: "d1")
+        XCTAssertEqual(capturedBody?["id"], "d1")
+        XCTAssertEqual(result.id, "sent1")
+    }
+
+    func testSearchWithQueryAndPageToken() async throws {
+        var capturedURL: String?
+        MockURLProtocol.requestHandler = { request in
+            capturedURL = request.url!.absoluteString
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"messages": [{"id": "s1", "threadId": "t1"}], "nextPageToken": "page2", "resultSizeEstimate": 20}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.listMessages(query: "from:user@test.com has:attachment", maxResults: 20, pageToken: "page1")
+        XCTAssertTrue(capturedURL!.contains("q=from"))
+        XCTAssertTrue(capturedURL!.contains("pageToken=page1"))
+        XCTAssertTrue(capturedURL!.contains("maxResults=20"))
+        XCTAssertEqual(result.nextPageToken, "page2")
+        XCTAssertEqual(result.messages?.count, 1)
+    }
+
+    // MARK: - Rate Limiting
+
+    func testRateLimitRetriesAndEventuallyThrows() async {
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+            guard url.contains("gmail.googleapis.com") else {
+                // Shouldn't happen, but return error
+                let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+                return (response, Data())
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "0"])!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.listMessages()
+            XCTFail("Should have thrown rateLimited")
+        } catch let error as GmailAPIError {
+            if case .rateLimited = error {
+                // expected — exhausted retries
+            } else {
+                XCTFail("Expected rateLimited, got \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     // MARK: - Batch Get

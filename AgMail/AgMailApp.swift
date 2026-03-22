@@ -112,6 +112,7 @@ final class AppState: ObservableObject {
     let defaults: UserDefaults
     private var badgeCancellable: AnyCancellable?
     private var defaultsCancellable: AnyCancellable?
+    var badgeCountHandler: ((Int) -> Void)?
 
     static let showDockBadgeKey = "showDockBadge"
     static let downloadsDirectoryKey = "downloadsDirectory"
@@ -205,6 +206,10 @@ final class AppState: ObservableObject {
     }
 
     private func setBadgeCount(_ count: Int) {
+        if let handler = badgeCountHandler {
+            handler(count)
+            return
+        }
         Task {
             do {
                 try await UNUserNotificationCenter.current().setBadgeCount(count)

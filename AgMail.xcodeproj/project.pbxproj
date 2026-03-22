@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11AABB0000000000000000CC /* GmailAPIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */; };
 		15394663B46D55AFCAA687BE /* GmailAPIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127E4AF5BF43102B2B0C38EC /* GmailAPIModels.swift */; };
 		1EEB4BD08DFA461F588C8CDC /* RFC2822BuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */; };
 		218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */; };
@@ -70,6 +71,7 @@
 		15C440ADA83895F815072C69 /* GmailAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GmailAPIClient.swift; path = AgMail/Services/GmailAPIClient.swift; sourceTree = SOURCE_ROOT; };
 		20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManager.swift; sourceTree = "<group>"; };
 		5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822Builder.swift; path = AgMail/Services/RFC2822Builder.swift; sourceTree = SOURCE_ROOT; };
+		22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIModelsTests.swift; sourceTree = "<group>"; };
 		8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManagerTests.swift; sourceTree = "<group>"; };
 		A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822BuilderTests.swift; path = AgMailTests/RFC2822BuilderTests.swift; sourceTree = SOURCE_ROOT; };
 		BB0000000000000000000010 /* AgMailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgMailApp.swift; sourceTree = "<group>"; };
@@ -173,6 +175,7 @@
 				C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */,
 				8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */,
 				A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */,
+				22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */,
 				CD0000000000000000000002 /* ComposeDraftTests.swift */,
 				EF0000000000000000000004 /* SearchOverlayTests.swift */,
 				FA0000000000000000000004 /* ContactsCacheTests.swift */,
@@ -391,6 +394,7 @@
 				42D3493B9B3AFC047D437EA0 /* GmailAPIClientTests.swift in Sources */,
 				218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */,
 				1EEB4BD08DFA461F588C8CDC /* RFC2822BuilderTests.swift in Sources */,
+				11AABB0000000000000000CC /* GmailAPIModelsTests.swift in Sources */,
 				CD0000000000000000000001 /* ComposeDraftTests.swift in Sources */,
 				EF0000000000000000000003 /* SearchOverlayTests.swift in Sources */,
 				FA0000000000000000000003 /* ContactsCacheTests.swift in Sources */,
