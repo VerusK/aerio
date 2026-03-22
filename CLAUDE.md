@@ -20,7 +20,7 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 
 - `AgMail/Models/` — Data models: Account, Email, Folder (enum)
 - `AgMail/Services/` — Business logic: GmailAPIClient (REST HTTP client with auth/retry, attachment download), GmailAPIManager (per-account orchestration via API with batched fetch and infinite scroll), OAuthManager (OAuth 2.0 PKCE via ASWebAuthenticationSession), OAuthConfig (OAuth constants/endpoints), KeychainHelper (secure token storage via KeychainStore protocol), AccountManager (add/remove/update accounts), UnifiedMailbox (merge all accounts), RFC2822Builder (email composition with multipart/related inline images), ContactsCache (address autocomplete from synced contacts), NotificationManager (desktop notifications via UNUserNotificationCenter)
-- `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search with ↑/↓ nav, → preview panel, pagination, ? help link), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with attachment download/open and inline image display), ComposeView (with address autocomplete, draft editing, drag-drop/paste inline images, file attachments via ⇧⌘A), ComposeWindowManager (non-modal NSPanel windows for compose), AccountSetupView, SettingsView (dock badge, downloads directory)
+- `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search with ↑/↓ nav, → preview panel, pagination, ? help link), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with attachment download/open and inline image display), ComposeView (with address autocomplete, draft editing, drag-drop/paste inline images, file attachments via ⇧⌘A), ComposeWindowManager (non-modal NSPanel windows for compose), AccountSetupView, SettingsView (General: dock badge, downloads directory, poll interval; Cache: size breakdown + clear; Keyboard Shortcuts; Esc to close via app-level NSEvent monitor)
 - `AgMail/Persistence/` — SwiftData cache (DataStore) for instant launch display
 - `AgMail/Utilities/` — KeyboardShortcuts (layout-independent hotkeys via keyCode + NSEvent local monitor), KeyEventMonitor (Go-To state machine with timer)
 - `AgMailTests/` — Unit tests (140+ tests)
@@ -59,6 +59,7 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - **Compose window size**: `NSWindow.frameAutosaveName` (key `AgMailComposeWindow`)
 - **Dock badge toggle**: `UserDefaults` (key `showDockBadge`)
 - **Downloads directory**: `UserDefaults` (key `downloadsDirectory`, empty = ~/Downloads)
+- **Poll interval**: `UserDefaults` (key `pollInterval`, default 45 seconds)
 - **Contacts cache**: `UserDefaults` (key `agmail_contacts_cache`)
 - **OAuth tokens**: macOS Keychain (per-account access/refresh tokens via KeychainHelper)
 

@@ -15,6 +15,15 @@ struct AgMailApp: App {
         if let bundleURL = Bundle.main.bundleURL as CFURL? {
             LSRegisterURL(bundleURL, true)
         }
+        // Close Settings window on Escape
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53,
+                  let window = event.window,
+                  window.styleMask.contains(.titled),
+                  window.title == "Settings" else { return event }
+            window.close()
+            return nil
+        }
     }
 
     var body: some Scene {
@@ -28,6 +37,7 @@ struct AgMailApp: App {
                 notificationManager: appState.notificationManager
             )
             .background(WindowAccessor())
+            .navigationTitle("")
         }
         .commands {
             // Suppress default Cmd+N "New Window" — our KeyEventInterceptor
@@ -104,6 +114,8 @@ final class AppState: ObservableObject {
 
     static let showDockBadgeKey = "showDockBadge"
     static let downloadsDirectoryKey = "downloadsDirectory"
+    static let pollIntervalKey = "pollInterval"
+    static let defaultPollInterval: Double = 45
 
     private static let logger = Logger(subsystem: "AgMail", category: "AppState")
 
@@ -128,7 +140,10 @@ final class AppState: ObservableObject {
         self.notificationManager = notifications
         self.defaults = .standard
 
-        defaults.register(defaults: [AppState.showDockBadgeKey: true])
+        defaults.register(defaults: [
+            AppState.showDockBadgeKey: true,
+            AppState.pollIntervalKey: AppState.defaultPollInterval
+        ])
         observeDockBadge()
 
         Task {
@@ -148,7 +163,10 @@ final class AppState: ObservableObject {
         self.notificationManager = notificationManager ?? NotificationManager()
         self.defaults = defaults
 
-        defaults.register(defaults: [AppState.showDockBadgeKey: true])
+        defaults.register(defaults: [
+            AppState.showDockBadgeKey: true,
+            AppState.pollIntervalKey: AppState.defaultPollInterval
+        ])
         observeDockBadge()
     }
 

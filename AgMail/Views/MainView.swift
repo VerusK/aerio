@@ -236,7 +236,8 @@ struct MainView: View {
         }
         .onAppear {
             keyMonitor.install { event in handleKeyEvent(event) }
-            apiManager.startPollingAll()
+            let interval = UserDefaults.standard.double(forKey: AppState.pollIntervalKey)
+            apiManager.startPollingAll(interval: interval > 0 ? interval : AppState.defaultPollInterval)
             notificationManager?.onNotificationClick = { [self] emailId, accountId in
                 navigateToEmail(msgId: emailId, accountId: accountId)
             }
