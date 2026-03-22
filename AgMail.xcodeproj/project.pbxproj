@@ -9,9 +9,10 @@
 /* Begin PBXBuildFile section */
 		15394663B46D55AFCAA687BE /* GmailAPIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127E4AF5BF43102B2B0C38EC /* GmailAPIModels.swift */; };
 		1EEB4BD08DFA461F588C8CDC /* RFC2822BuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */; };
-		42D3493B9B3AFC047D437EA0 /* GmailAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */; };
 		218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */; };
+		42D3493B9B3AFC047D437EA0 /* GmailAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */; };
 		5E594F81A3A04AC3B3F165FD /* RFC2822Builder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */; };
+		A118A8598CE5BB54C26422EC /* GmailAPIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */; };
 		AA0000000000000000000010 /* AgMailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000010 /* AgMailApp.swift */; };
 		AA0000000000000000000012 /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000012 /* Account.swift */; };
 		AA0000000000000000000013 /* Email.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000013 /* Email.swift */; };
@@ -40,11 +41,8 @@
 		AA0000000000000000000101 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* KeychainHelper.swift */; };
 		AA0000000000000000000102 /* OAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* OAuthManager.swift */; };
 		AA0000000000000000000103 /* KeychainHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000103 /* KeychainHelperTests.swift */; };
-		BB0000000000000000000105 /* MockKeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockKeychainStore.swift; sourceTree = "<group>"; };
-		AA0000000000000000000105 /* MockKeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000105 /* MockKeychainStore.swift */; };
 		AA0000000000000000000104 /* OAuthManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000104 /* OAuthManagerTests.swift */; };
-		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
-		A118A8598CE5BB54C26422EC /* GmailAPIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */; };
+		AA0000000000000000000105 /* MockKeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000105 /* MockKeychainStore.swift */; };
 		CD0000000000000000000001 /* ComposeDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0000000000000000000002 /* ComposeDraftTests.swift */; };
 		DE0000000000000000000001 /* UnifiedSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE0000000000000000000002 /* UnifiedSidebar.swift */; };
 		EF0000000000000000000001 /* SearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000002 /* SearchOverlay.swift */; };
@@ -53,6 +51,7 @@
 		FA0000000000000000000003 /* ContactsCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* ContactsCacheTests.swift */; };
 		FB0000000000000000000001 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000002 /* NotificationManager.swift */; };
 		FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000004 /* NotificationManagerTests.swift */; };
+		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +69,7 @@
 		15C440ADA83895F815072C69 /* GmailAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GmailAPIClient.swift; path = AgMail/Services/GmailAPIClient.swift; sourceTree = SOURCE_ROOT; };
 		20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManager.swift; sourceTree = "<group>"; };
 		5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822Builder.swift; path = AgMail/Services/RFC2822Builder.swift; sourceTree = SOURCE_ROOT; };
+		8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManagerTests.swift; sourceTree = "<group>"; };
 		A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822BuilderTests.swift; path = AgMailTests/RFC2822BuilderTests.swift; sourceTree = SOURCE_ROOT; };
 		BB0000000000000000000010 /* AgMailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgMailApp.swift; sourceTree = "<group>"; };
 		BB0000000000000000000012 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
@@ -102,8 +102,8 @@
 		BB0000000000000000000102 /* OAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthManager.swift; sourceTree = "<group>"; };
 		BB0000000000000000000103 /* KeychainHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelperTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000104 /* OAuthManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthManagerTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000105 /* MockKeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockKeychainStore.swift; sourceTree = "<group>"; };
 		C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GmailAPIClientTests.swift; path = AgMailTests/GmailAPIClientTests.swift; sourceTree = SOURCE_ROOT; };
-		8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManagerTests.swift; sourceTree = "<group>"; };
 		CD0000000000000000000002 /* ComposeDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeDraftTests.swift; sourceTree = "<group>"; };
 		DE0000000000000000000002 /* UnifiedSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSidebar.swift; sourceTree = "<group>"; };
 		EF0000000000000000000002 /* SearchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchOverlay.swift; sourceTree = "<group>"; };
@@ -132,30 +132,30 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		'GG0000000000000000000001' = {
+		GG0000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				GG0000000000000000000002,
-				GG0000000000000000000003,
-				GG0000000000000000000004,
+				GG0000000000000000000002 /* AgMail */,
+				GG0000000000000000000003 /* AgMailTests */,
+				GG0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000002' = {
+		GG0000000000000000000002 /* AgMail */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000010 /* AgMailApp.swift */,
-				GG0000000000000000000005,
-				GG0000000000000000000006,
-				GG0000000000000000000008,
-				GG0000000000000000000009,
-				GG000000000000000000000A,
+				GG0000000000000000000005 /* Models */,
+				GG0000000000000000000006 /* Services */,
+				GG0000000000000000000008 /* Views */,
+				GG0000000000000000000009 /* Utilities */,
+				GG000000000000000000000A /* Persistence */,
 				BB0000000000000000000090 /* Assets.xcassets */,
 			);
 			path = AgMail;
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000003' = {
+		GG0000000000000000000003 /* AgMailTests */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000015 /* ModelTests.swift */,
@@ -179,7 +179,7 @@
 			path = AgMailTests;
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000004' = {
+		GG0000000000000000000004 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000020 /* AgMail.app */,
@@ -188,7 +188,7 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000005' = {
+		GG0000000000000000000005 /* Models */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000012 /* Account.swift */,
@@ -199,7 +199,7 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000006' = {
+		GG0000000000000000000006 /* Services */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000016 /* AccountManager.swift */,
@@ -216,7 +216,7 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000008' = {
+		GG0000000000000000000008 /* Views */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000050 /* MainView.swift */,
@@ -233,7 +233,7 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		'GG0000000000000000000009' = {
+		GG0000000000000000000009 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000080 /* KeyboardShortcuts.swift */,
@@ -241,7 +241,7 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
-		'GG000000000000000000000A' = {
+		GG000000000000000000000A /* Persistence */ = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000081 /* DataStore.swift */,
@@ -254,7 +254,7 @@
 /* Begin PBXNativeTarget section */
 		EE0000000000000000000001 /* AgMail */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = LL0000000000000000000002;
+			buildConfigurationList = LL0000000000000000000002 /* Build configuration list for PBXNativeTarget "AgMail" */;
 			buildPhases = (
 				FF0000000000000000000001 /* Sources */,
 				FF0000000000000000000002 /* Frameworks */,
@@ -271,7 +271,7 @@
 		};
 		EE0000000000000000000002 /* AgMailTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = LL0000000000000000000003;
+			buildConfigurationList = LL0000000000000000000003 /* Build configuration list for PBXNativeTarget "AgMailTests" */;
 			buildPhases = (
 				FF0000000000000000000005 /* Sources */,
 				FF0000000000000000000004 /* Frameworks */,
@@ -279,7 +279,7 @@
 			buildRules = (
 			);
 			dependencies = (
-				HH0000000000000000000001,
+				HH0000000000000000000001 /* PBXTargetDependency */,
 			);
 			name = AgMailTests;
 			productName = AgMailTests;
@@ -294,7 +294,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					EE0000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
@@ -305,7 +305,7 @@
 					};
 				};
 			};
-			buildConfigurationList = LL0000000000000000000001;
+			buildConfigurationList = LL0000000000000000000001 /* Build configuration list for PBXProject "AgMail" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -314,7 +314,7 @@
 				Base,
 			);
 			mainGroup = GG0000000000000000000001;
-			productRefGroup = GG0000000000000000000004;
+			productRefGroup = GG0000000000000000000004 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -397,7 +397,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		'HH0000000000000000000001' = {
+		HH0000000000000000000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = EE0000000000000000000001 /* AgMail */;
 			targetProxy = CC0000000000000000000001 /* PBXContainerItemProxy */;
@@ -405,7 +405,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		'KK0000000000000000000001' = {
+		KK0000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -414,29 +414,55 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
 				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
-		'KK0000000000000000000002' = {
+		KK0000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -445,26 +471,55 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
-		'KK0000000000000000000003' = {
+		KK0000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = YP8Y455729;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AgMail/Info.plist;
 				INFOPLIST_KEY_NSMainStoryboardFile = "";
@@ -478,13 +533,16 @@
 			};
 			name = Debug;
 		};
-		'KK0000000000000000000004' = {
+		KK0000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = YP8Y455729;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AgMail/Info.plist;
 				INFOPLIST_KEY_NSMainStoryboardFile = "";
@@ -498,12 +556,13 @@
 			};
 			name = Release;
 		};
-		'KK0000000000000000000005' = {
+		KK0000000000000000000005 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
@@ -515,12 +574,13 @@
 			};
 			name = Debug;
 		};
-		'KK0000000000000000000006' = {
+		KK0000000000000000000006 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
@@ -535,29 +595,29 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		'LL0000000000000000000001' = {
+		LL0000000000000000000001 /* Build configuration list for PBXProject "AgMail" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				KK0000000000000000000001,
-				KK0000000000000000000002,
+				KK0000000000000000000001 /* Debug */,
+				KK0000000000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		'LL0000000000000000000002' = {
+		LL0000000000000000000002 /* Build configuration list for PBXNativeTarget "AgMail" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				KK0000000000000000000003,
-				KK0000000000000000000004,
+				KK0000000000000000000003 /* Debug */,
+				KK0000000000000000000004 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		'LL0000000000000000000003' = {
+		LL0000000000000000000003 /* Build configuration list for PBXNativeTarget "AgMailTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				KK0000000000000000000005,
-				KK0000000000000000000006,
+				KK0000000000000000000005 /* Debug */,
+				KK0000000000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

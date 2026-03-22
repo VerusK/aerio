@@ -5,29 +5,110 @@ private let logger = Logger(subsystem: "AgMail", category: "MainView")
 
 // MARK: - SplitView configurator
 
-/// Finds the underlying NSSplitView and sets autosaveName so macOS persists divider positions.
+/// Manually saves and restores NSSplitView divider positions via UserDefaults.
 struct SplitViewConfigurator: NSViewRepresentable {
     let autosaveName: String
-    static let maxRetries = 3
+    static let maxRetries = 20
     static let retryInterval: TimeInterval = 0.1
+
+    private var defaultsKey: String {
+        "AgMailSplit_\(autosaveName)"
+    }
+
+    class Coordinator {
+        var splitView: NSSplitView?
+        var observer: NSObjectProtocol?
+        var saveTimer: Timer?
+        var defaultsKey: String = ""
+        private var lastPositions: [Double] = []
+
+        deinit {
+            if let obs = observer { NotificationCenter.default.removeObserver(obs) }
+            saveTimer?.invalidate()
+        }
+
+        func saveDividerPositions() {
+            guard let splitView else { return }
+            let count = splitView.arrangedSubviews.isEmpty
+                ? splitView.subviews.count
+                : splitView.arrangedSubviews.count
+            // Use NSSplitView API: number of dividers = arrangedSubviews - 1
+            let dividerCount = max(0, count - 1)
+            guard dividerCount > 0 else { return }
+            // Collect divider positions from panel frames
+            // Panels are the arranged subviews; divider i sits between panel i and i+1
+            let panels = splitView.arrangedSubviews.isEmpty ? Array(splitView.subviews) : splitView.arrangedSubviews
+            var positions: [Double] = []
+            for i in 0..<dividerCount {
+                let panelFrame = panels[i].frame
+                // For vertical split (horizontal dividers): position = maxX of panel
+                if splitView.isVertical {
+                    positions.append(Double(panelFrame.maxX))
+                } else {
+                    positions.append(Double(panelFrame.maxY))
+                }
+            }
+            guard positions != lastPositions else { return }
+            lastPositions = positions
+            UserDefaults.standard.set(positions, forKey: defaultsKey)
+            logger.debug("SplitViewConfigurator: saved divider positions \(positions)")
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        configureSplitView(from: view, attempt: 0)
+        context.coordinator.defaultsKey = defaultsKey
+        findAndConfigure(from: view, coordinator: context.coordinator, attempt: 0)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
 
-    private func configureSplitView(from view: NSView, attempt: Int) {
+    private func findAndConfigure(from view: NSView, coordinator: Coordinator, attempt: Int) {
         DispatchQueue.main.async {
-            if let splitView = Self.findSplitView(from: view) {
-                splitView.autosaveName = self.autosaveName
-                splitView.arrangesAllSubviews = false
+            if let splitView = Self.findSplitViewUp(from: view) {
+                coordinator.splitView = splitView
+                // Listen for both resize and willResize notifications
+                coordinator.observer = NotificationCenter.default.addObserver(
+                    forName: NSSplitView.didResizeSubviewsNotification,
+                    object: splitView,
+                    queue: .main
+                ) { _ in
+                    coordinator.saveDividerPositions()
+                }
+                // Also observe window resize which triggers split view layout
+                if let window = splitView.window {
+                    NotificationCenter.default.addObserver(
+                        forName: NSWindow.willCloseNotification,
+                        object: window,
+                        queue: .main
+                    ) { _ in
+                        coordinator.saveDividerPositions()
+                    }
+                }
+                // Save periodically via a timer to catch drag changes
+                coordinator.saveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+                    DispatchQueue.main.async {
+                        coordinator.saveDividerPositions()
+                    }
+                }
                 logger.debug("SplitViewConfigurator: configured on attempt \(attempt)")
+                // Hide window, restore positions, then show — avoids visible jump
+                let hasSaved = UserDefaults.standard.array(forKey: self.defaultsKey) != nil
+                if hasSaved {
+                    splitView.window?.alphaValue = 0
+                }
+                // Restore immediately, then once more after layout settles
+                self.restoreDividerPositions(splitView)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    self.restoreDividerPositions(splitView)
+                    splitView.window?.alphaValue = 1
+                }
             } else if attempt < Self.maxRetries {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.retryInterval) {
-                    self.configureSplitView(from: view, attempt: attempt + 1)
+                    self.findAndConfigure(from: view, coordinator: coordinator, attempt: attempt + 1)
                 }
             } else {
                 logger.warning("SplitViewConfigurator: NSSplitView not found after \(Self.maxRetries) retries")
@@ -35,7 +116,20 @@ struct SplitViewConfigurator: NSViewRepresentable {
         }
     }
 
-    static func findSplitView(from view: NSView) -> NSSplitView? {
+    private func restoreDividerPositions(_ splitView: NSSplitView) {
+        guard let saved = UserDefaults.standard.array(forKey: defaultsKey) as? [Double],
+              !saved.isEmpty else {
+            logger.debug("SplitViewConfigurator: no saved positions")
+            return
+        }
+        for (i, position) in saved.enumerated() {
+            splitView.setPosition(CGFloat(position), ofDividerAt: i)
+            logger.debug("SplitViewConfigurator: setPosition(\(position), ofDividerAt: \(i))")
+        }
+        logger.debug("SplitViewConfigurator: restore complete")
+    }
+
+    static func findSplitViewUp(from view: NSView) -> NSSplitView? {
         var current: NSView? = view
         while let v = current {
             if let split = v as? NSSplitView { return split }
@@ -86,6 +180,7 @@ struct MainView: View {
                 selectedFolder: $selectedFolder,
                 selectedAccountId: $selectedAccountId
             )
+            .background(SplitViewConfigurator(autosaveName: "AgMailMainSplit"))
 
             MessageList(
                 unifiedMailbox: unifiedMailbox,
@@ -110,7 +205,6 @@ struct MainView: View {
             messageDetailPanel
                 .frame(minWidth: 300, idealWidth: 500)
         }
-        .background(SplitViewConfigurator(autosaveName: "AgMailMainSplit"))
         .background(KeyEventInterceptor(handler: { event in
             handleKeyEvent(event)
         }))

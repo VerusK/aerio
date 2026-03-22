@@ -8,9 +8,14 @@ protocol KeychainStore {
     func updateAccessToken(_ accessToken: String, expiresIn: Int, for accountId: String) throws
 }
 
-struct KeychainHelper: KeychainStore {
+final class KeychainHelper: KeychainStore {
     private static let service = "com.agmail.oauth"
     static let shared = KeychainHelper()
+
+    /// In-memory cache: avoids repeated Keychain prompts on unsigned builds.
+    /// Populated on first read, updated on save/delete — Keychain is hit at most once per account per app session.
+    private var cache: [String: OAuthTokens] = [:]
+    private var cacheLoaded: Set<String> = []
 
     struct OAuthTokens: Codable, Equatable {
         var accessToken: String
@@ -49,9 +54,15 @@ struct KeychainHelper: KeychainStore {
         guard status == errSecSuccess else {
             throw KeychainError.unexpectedStatus(status)
         }
+        cache[accountId] = tokens
+        cacheLoaded.insert(accountId)
     }
 
     func loadTokens(for accountId: String) throws -> OAuthTokens? {
+        if cacheLoaded.contains(accountId) {
+            return cache[accountId]
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
@@ -64,6 +75,7 @@ struct KeychainHelper: KeychainStore {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
         if status == errSecItemNotFound {
+            cacheLoaded.insert(accountId)
             return nil
         }
         guard status == errSecSuccess else {
@@ -72,7 +84,10 @@ struct KeychainHelper: KeychainStore {
         guard let data = result as? Data else {
             throw KeychainError.decodingFailed
         }
-        return try JSONDecoder().decode(OAuthTokens.self, from: data)
+        let tokens = try JSONDecoder().decode(OAuthTokens.self, from: data)
+        cache[accountId] = tokens
+        cacheLoaded.insert(accountId)
+        return tokens
     }
 
     func deleteTokens(for accountId: String) throws {
@@ -85,6 +100,8 @@ struct KeychainHelper: KeychainStore {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
         }
+        cache.removeValue(forKey: accountId)
+        cacheLoaded.insert(accountId)
     }
 
     func updateAccessToken(_ accessToken: String, expiresIn: Int, for accountId: String) throws {
