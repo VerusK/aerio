@@ -42,6 +42,7 @@ struct ComposeView: View {
     @State private var bodyText: String = ""
     @State private var attachments: [ComposeAttachment] = []
     @State private var isSending = false
+    @State private var hasSent = false
     @State private var isLoadingRecipients = false
     @State private var sendError: String?
     @State private var replyAllWarning: String?
@@ -700,6 +701,7 @@ struct ComposeView: View {
     }
 
     private func saveDraftIfNeeded() {
+        guard !hasSent else { return }
         // Don't create a new draft when editing an existing one
         guard composeType != .draft else { return }
         guard isDirty, hasContent else { return }
@@ -762,6 +764,7 @@ struct ComposeView: View {
                         inlineImages: rfcInlineImages
                     )
                 }
+                hasSent = true
                 onDismiss?()
                 Task { await apiManager.refreshAll() }
             } catch {

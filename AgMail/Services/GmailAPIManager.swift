@@ -664,7 +664,11 @@ final class GmailAPIManager: ObservableObject {
                 inReplyTo: inReplyTo, references: references
             )
         }
-        _ = try await client.sendMessage(raw: raw)
+        let sent = try await client.sendMessage(raw: raw)
+        // Remove INBOX label from self-sent messages so they don't appear in inbox
+        if (sent.labelIds ?? []).contains(GmailLabelId.inbox) {
+            _ = try? await client.modifyMessage(id: sent.id, removeLabels: [GmailLabelId.inbox])
+        }
     }
 
     func searchEmails(query: String) async -> [Email] {
@@ -753,8 +757,12 @@ final class GmailAPIManager: ObservableObject {
 
     func sendDraft(draftId: String, accountId: String) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
-        _ = try await client.sendDraft(draftId: draftId)
+        let sent = try await client.sendDraft(draftId: draftId)
         logger.info("[\(accountId)] draft sent: \(draftId)")
+        // Remove INBOX label from self-sent messages so they don't appear in inbox
+        if (sent.labelIds ?? []).contains(GmailLabelId.inbox) {
+            _ = try? await client.modifyMessage(id: sent.id, removeLabels: [GmailLabelId.inbox])
+        }
     }
 
     func deleteDraft(draftId: String, accountId: String) async throws {
