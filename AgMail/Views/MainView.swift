@@ -157,6 +157,7 @@ struct MainView: View {
     @State private var isNavigatingProgrammatically = false
     @StateObject private var searchViewModel: SearchViewModel
     @State private var keyMonitor = KeyEventMonitor()
+    @State private var processingEmailId: String?
 
     init(accountManager: AccountManager, unifiedMailbox: UnifiedMailbox, apiManager: GmailAPIManager, oauthManager: OAuthManager, contactsCache: ContactsCache? = nil, notificationManager: NotificationManager? = nil) {
         self.accountManager = accountManager
@@ -196,7 +197,8 @@ struct MainView: View {
                 onDelete: { email in executeActionOnEmail(email, action: .delete) },
                 onSpam: { email in executeActionOnEmail(email, action: .spam) },
                 onLoadMore: { loadMoreEmails() },
-                hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId)
+                hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId),
+                processingEmailId: processingEmailId
             )
             .overlay {
                 messageListOverlay
@@ -508,6 +510,20 @@ struct MainView: View {
         let accountId = email.accountId
         let msgId = email.msgId
         let folder = email.folder
+
+        // Calculate next email to select before the action removes this one
+        let emails = currentEmails
+        let nextEmailId: String? = {
+            guard let idx = emails.firstIndex(where: { $0.id == email.id }) else { return nil }
+            if idx + 1 < emails.count {
+                return emails[idx + 1].id
+            } else if idx > 0 {
+                return emails[idx - 1].id
+            }
+            return nil
+        }()
+
+        processingEmailId = email.id
         Task {
             do {
                 switch action {
@@ -518,8 +534,12 @@ struct MainView: View {
                 case .spam:
                     try await apiManager.spamEmail(msgId: msgId, accountId: accountId, folder: folder)
                 }
-                self.selectedEmailId = nil
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    processingEmailId = nil
+                    selectedEmailId = nextEmailId
+                }
             } catch {
+                processingEmailId = nil
                 logger.error("Action '\(action)' failed: \(error.localizedDescription)")
             }
         }

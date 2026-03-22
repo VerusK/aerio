@@ -14,6 +14,7 @@ struct MessageList: View {
     var onSpam: ((Email) -> Void)?
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
+    var processingEmailId: String? = nil
 
     var body: some View {
         Group {
@@ -31,12 +32,28 @@ struct MessageList: View {
             } else {
                 List(selection: $selectedEmailId) {
                     ForEach(filteredEmails) { email in
+                        let isProcessing = processingEmailId == email.id
                         MessageRow(
                             email: email,
                             account: accountManager.account(for: email.accountId),
                             showAccountIndicator: selectedAccountId == nil
                         )
                         .tag(email.id)
+                        .overlay {
+                            if isProcessing {
+                                HStack(spacing: 6) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("Processing…")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(.background.opacity(0.8))
+                            }
+                        }
+                        .opacity(isProcessing ? 0.6 : 1.0)
+                        .allowsHitTesting(!isProcessing)
                         .contextMenu {
                             contextMenuItems(for: email)
                         }
