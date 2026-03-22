@@ -28,8 +28,9 @@ final class UnifiedMailboxTests: XCTestCase {
     private func makeManager() -> (AccountManager, GmailAPIManager) {
         let defaults = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
         let am = AccountManager(defaults: defaults)
-        let oauth = OAuthManager()
-        let api = GmailAPIManager(accountManager: am, oauthManager: oauth)
+        let mockKeychain = MockKeychainStore()
+        let oauth = OAuthManager(keychainStore: mockKeychain)
+        let api = GmailAPIManager(accountManager: am, oauthManager: oauth, keychainStore: mockKeychain)
         return (am, api)
     }
 
@@ -147,6 +148,50 @@ final class UnifiedMailboxTests: XCTestCase {
         XCTAssertEqual(mailbox.emails(for: .trash).count, 1)
         XCTAssertEqual(mailbox.emails(for: .spam).count, 1)
         XCTAssertEqual(mailbox.emails(for: .archive).count, 0)
+    }
+
+    // MARK: - hasMoreEmails
+
+    func testHasMoreEmailsReturnsTrueWhenPageTokenExists() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        api.pageTokens["acc1"] = [.inbox: "nextPage123"]
+
+        XCTAssertTrue(mailbox.hasMoreEmails(folder: .inbox))
+        XCTAssertTrue(mailbox.hasMoreEmails(folder: .inbox, accountId: "acc1"))
+        XCTAssertFalse(mailbox.hasMoreEmails(folder: .trash))
+    }
+
+    func testHasMoreEmailsReturnsFalseWhenNoPageToken() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        XCTAssertFalse(mailbox.hasMoreEmails(folder: .inbox))
+        XCTAssertFalse(mailbox.hasMoreEmails(folder: .inbox, accountId: "acc1"))
+    }
+
+    func testHasMoreEmailsReturnsFalseForEmptyToken() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        api.pageTokens["acc1"] = [.inbox: ""]
+
+        XCTAssertFalse(mailbox.hasMoreEmails(folder: .inbox))
+        XCTAssertFalse(mailbox.hasMoreEmails(folder: .inbox, accountId: "acc1"))
+    }
+
+    func testHasMoreEmailsAnyAccountHasToken() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        // Only acc2 has more pages
+        api.pageTokens["acc1"] = [:]
+        api.pageTokens["acc2"] = [.inbox: "morePages"]
+
+        XCTAssertTrue(mailbox.hasMoreEmails(folder: .inbox))
+        XCTAssertFalse(mailbox.hasMoreEmails(folder: .inbox, accountId: "acc1"))
+        XCTAssertTrue(mailbox.hasMoreEmails(folder: .inbox, accountId: "acc2"))
     }
 
     // MARK: - Empty state

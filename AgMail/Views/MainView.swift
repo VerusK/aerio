@@ -50,6 +50,8 @@ struct MainView: View {
     @ObservedObject var unifiedMailbox: UnifiedMailbox
     @ObservedObject var apiManager: GmailAPIManager
     let oauthManager: OAuthManager
+    var contactsCache: ContactsCache?
+    var notificationManager: NotificationManager?
     @State private var selectedAccountId: String?
     @State private var selectedFolder: Folder = .inbox
     @State private var selectedEmailId: String?
@@ -57,7 +59,19 @@ struct MainView: View {
     @State private var composeType: ComposeType = .new
     @State private var composeTargetMsgId: String?
     @State private var isRefreshing = false
-    @State private var keyMonitor: Any?
+    @State private var showingSearch = false
+    @State private var isNavigatingProgrammatically = false
+    @StateObject private var searchViewModel: SearchViewModel
+
+    init(accountManager: AccountManager, unifiedMailbox: UnifiedMailbox, apiManager: GmailAPIManager, oauthManager: OAuthManager, contactsCache: ContactsCache? = nil, notificationManager: NotificationManager? = nil) {
+        self.accountManager = accountManager
+        self.unifiedMailbox = unifiedMailbox
+        self.apiManager = apiManager
+        self.oauthManager = oauthManager
+        self.contactsCache = contactsCache
+        self.notificationManager = notificationManager
+        self._searchViewModel = StateObject(wrappedValue: SearchViewModel(apiManager: apiManager))
+    }
 
     private var currentEmails: [Email] {
         unifiedMailbox.emails(for: selectedFolder, accountId: selectedAccountId)
@@ -65,28 +79,28 @@ struct MainView: View {
 
     var body: some View {
         HSplitView {
-            AccountSidebar(
+            UnifiedSidebar(
                 accountManager: accountManager,
                 unifiedMailbox: unifiedMailbox,
                 oauthManager: oauthManager,
-                apiManager: apiManager,
+                selectedFolder: $selectedFolder,
                 selectedAccountId: $selectedAccountId
             )
-            .frame(width: 56)
-
-            FolderList(
-                unifiedMailbox: unifiedMailbox,
-                selectedFolder: $selectedFolder,
-                selectedAccountId: selectedAccountId
-            )
-            .frame(minWidth: 120, idealWidth: 160, maxWidth: 220)
 
             MessageList(
                 unifiedMailbox: unifiedMailbox,
                 accountManager: accountManager,
                 selectedEmailId: $selectedEmailId,
                 selectedFolder: selectedFolder,
-                selectedAccountId: selectedAccountId
+                selectedAccountId: selectedAccountId,
+                onReply: { email in triggerCompose(.reply, msgId: email.msgId) },
+                onReplyAll: { email in triggerCompose(.replyAll, msgId: email.msgId) },
+                onForward: { email in triggerCompose(.forward, msgId: email.msgId) },
+                onArchive: { email in executeActionOnEmail(email, action: .archive) },
+                onDelete: { email in executeActionOnEmail(email, action: .delete) },
+                onSpam: { email in executeActionOnEmail(email, action: .spam) },
+                onLoadMore: { loadMoreEmails() },
+                hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId)
             )
             .overlay {
                 messageListOverlay
@@ -97,6 +111,9 @@ struct MainView: View {
                 .frame(minWidth: 300, idealWidth: 500)
         }
         .background(SplitViewConfigurator(autosaveName: "AgMailMainSplit"))
+        .background(KeyEventInterceptor(handler: { event in
+            handleKeyEvent(event)
+        }))
         .frame(minWidth: 900, minHeight: 600)
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -115,7 +132,7 @@ struct MainView: View {
         }
         .onChange(of: selectedAccountId) { _, newValue in
             unifiedMailbox.selectedAccountId = newValue
-            selectedEmailId = nil
+            if !isNavigatingProgrammatically { selectedEmailId = nil }
         }
         .onChange(of: selectedEmailId) { _, newId in
             if let newId, let email = findEmail(by: newId), !email.isRead {
@@ -124,19 +141,43 @@ struct MainView: View {
         }
         .onChange(of: selectedFolder) { _, newValue in
             unifiedMailbox.selectedFolder = newValue
-            selectedEmailId = nil
+            if !isNavigatingProgrammatically { selectedEmailId = nil }
             Task { await apiManager.navigateAllToFolder(newValue) }
         }
         .onAppear {
             apiManager.startPollingAll()
-            installKeyMonitor()
+            notificationManager?.onNotificationClick = { [self] emailId, accountId in
+                navigateToEmail(msgId: emailId, accountId: accountId)
+            }
         }
         .onDisappear {
-            removeKeyMonitor()
             apiManager.stopPollingAll()
         }
         .sheet(isPresented: $showingCompose) {
             composeSheet
+        }
+        .overlay {
+            if showingSearch {
+                SearchOverlay(
+                    isPresented: $showingSearch,
+                    searchViewModel: searchViewModel,
+                    accountManager: accountManager,
+                    onSelectEmail: { email in
+                        // Inject search result into emailsByAccount so findEmail can locate it
+                        let accountId = email.accountId
+                        var emails = apiManager.emailsByAccount[accountId] ?? []
+                        if !emails.contains(where: { $0.id == email.id }) {
+                            emails.append(email)
+                            apiManager.emailsByAccount[accountId] = emails
+                        }
+                        isNavigatingProgrammatically = true
+                        selectedFolder = email.folder
+                        selectedAccountId = email.accountId
+                        selectedEmailId = email.id
+                        DispatchQueue.main.async { isNavigatingProgrammatically = false }
+                    }
+                )
+            }
         }
     }
 
@@ -196,7 +237,13 @@ struct MainView: View {
                 NativeMessageDetail(
                     email: email,
                     apiManager: apiManager,
-                    folder: selectedFolder
+                    folder: selectedFolder,
+                    onReply: { triggerCompose(.reply, msgId: email.msgId) },
+                    onReplyAll: { triggerCompose(.replyAll, msgId: email.msgId) },
+                    onForward: { triggerCompose(.forward, msgId: email.msgId) },
+                    onArchive: { executeActionOnEmail(email, action: .archive) },
+                    onDelete: { executeActionOnEmail(email, action: .delete) },
+                    onSpam: { executeActionOnEmail(email, action: .spam) }
                 )
                 .id(email.id)
             } else {
@@ -218,6 +265,7 @@ struct MainView: View {
         ComposeView(
             accountManager: accountManager,
             apiManager: apiManager,
+            contactsCache: contactsCache,
             composeType: composeType,
             replyToEmail: composeTargetMsgId.flatMap { findEmail(byMsgId: $0) },
             preselectedAccountId: composeAccount?.id,
@@ -251,25 +299,27 @@ struct MainView: View {
         currentEmails.first { $0.msgId == msgId }
     }
 
+    private func navigateToEmail(msgId: String, accountId: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        // Search across all accounts/folders for the email
+        if let emails = apiManager.emailsByAccount[accountId],
+           let email = emails.first(where: { $0.msgId == msgId }) {
+            isNavigatingProgrammatically = true
+            selectedFolder = email.folder
+            selectedAccountId = email.accountId
+            selectedEmailId = email.id
+            DispatchQueue.main.async { isNavigatingProgrammatically = false }
+        } else {
+            // Email not yet in memory — switch to inbox so next poll will show it
+            selectedFolder = .inbox
+            selectedAccountId = accountId
+        }
+    }
+
     /// Returns true when the user is typing in a text field (TextField, TextEditor, NSTextField).
     private var isTextFieldFocused: Bool {
         guard let responder = NSApp.keyWindow?.firstResponder else { return false }
         return responder is NSTextView || responder is NSTextField
-    }
-
-    // MARK: - Layout-independent keyboard shortcut monitor
-
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            return self.handleKeyEvent(event) ? nil : event
-        }
-    }
-
-    private func removeKeyMonitor() {
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyMonitor = nil
-        }
     }
 
     /// Handle an NSEvent keyDown. Returns `true` if the event was consumed.
@@ -290,39 +340,33 @@ struct MainView: View {
         case .previousMessage, .previousMessageAlt:
             selectAdjacentEmail(offset: -1)
         case .compose:
-            composeType = .new
+            triggerCompose(.new, msgId: "")
             composeTargetMsgId = nil
-            showingCompose = true
         case .reply:
             if let msgId = selectedEmailMsgId {
-                composeType = .reply
-                composeTargetMsgId = msgId
-                showingCompose = true
+                triggerCompose(.reply, msgId: msgId)
             }
         case .replyAll:
             if let msgId = selectedEmailMsgId {
-                composeType = .replyAll
-                composeTargetMsgId = msgId
-                showingCompose = true
+                triggerCompose(.replyAll, msgId: msgId)
             }
         case .forward:
             if let msgId = selectedEmailMsgId {
-                composeType = .forward
-                composeTargetMsgId = msgId
-                showingCompose = true
+                triggerCompose(.forward, msgId: msgId)
             }
         case .archiveMessage:
-            executeActionOnSelected("archive")
+            if selectedFolder == .inbox { executeActionOnSelected(.archive) }
         case .deleteMessage:
-            executeActionOnSelected("delete")
+            executeActionOnSelected(.delete)
         case .spamMessage:
-            executeActionOnSelected("spam")
+            executeActionOnSelected(.spam)
         case .refresh:
             performRefresh()
         case .openSettings:
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        case .search, .sendMessage:
-            // Not yet implemented
+            KeyboardShortcuts.openSettings()
+        case .search:
+            showingSearch.toggle()
+        case .sendMessage:
             return false
         case .selectAllAccounts:
             selectedAccountId = nil
@@ -343,27 +387,66 @@ struct MainView: View {
         return email.msgId
     }
 
-    private func executeActionOnSelected(_ action: String) {
+    private func triggerCompose(_ type: ComposeType, msgId: String) {
+        composeType = type
+        composeTargetMsgId = msgId
+        showingCompose = true
+    }
+
+    enum EmailAction: CustomStringConvertible {
+        case archive, delete, spam
+        var description: String {
+            switch self {
+            case .archive: return "archive"
+            case .delete: return "delete"
+            case .spam: return "spam"
+            }
+        }
+    }
+
+    private func executeActionOnSelected(_ action: EmailAction) {
         guard let selectedEmailId,
               let email = findEmail(by: selectedEmailId) else { return }
+        executeActionOnEmail(email, action: action)
+    }
+
+    private func executeActionOnEmail(_ email: Email, action: EmailAction) {
         let accountId = email.accountId
         let msgId = email.msgId
         let folder = email.folder
         Task {
             do {
                 switch action {
-                case "archive":
+                case .archive:
                     try await apiManager.archiveEmail(msgId: msgId, accountId: accountId, folder: folder)
-                case "delete":
+                case .delete:
                     try await apiManager.deleteEmail(msgId: msgId, accountId: accountId, folder: folder)
-                case "spam":
+                case .spam:
                     try await apiManager.spamEmail(msgId: msgId, accountId: accountId, folder: folder)
-                default:
-                    break
                 }
                 self.selectedEmailId = nil
             } catch {
                 logger.error("Action '\(action)' failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func loadMoreEmails() {
+        let folder = selectedFolder
+        Task {
+            if let accountId = selectedAccountId {
+                await apiManager.fetchMoreEmails(accountId: accountId, folder: folder)
+            } else {
+                // Load more for all accounts that have more pages
+                await withTaskGroup(of: Void.self) { group in
+                    for accountId in apiManager.clients.keys {
+                        if apiManager.pageTokens[accountId]?[folder] != nil {
+                            group.addTask { @MainActor in
+                                await self.apiManager.fetchMoreEmails(accountId: accountId, folder: folder)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

@@ -6,7 +6,7 @@ final class OAuthManagerTests: XCTestCase {
 
     @MainActor
     func testPKCEVerifierLength() {
-        let manager = OAuthManager()
+        let manager = OAuthManager(keychainStore: MockKeychainStore())
         let pkce = manager.generatePKCE()
         // 32 random bytes -> base64url = 43 characters
         XCTAssertEqual(pkce.verifier.count, 43)
@@ -14,7 +14,7 @@ final class OAuthManagerTests: XCTestCase {
 
     @MainActor
     func testPKCEChallengeIsSHA256OfVerifier() {
-        let manager = OAuthManager()
+        let manager = OAuthManager(keychainStore: MockKeychainStore())
         let pkce = manager.generatePKCE()
 
         // Manually compute expected challenge
@@ -27,7 +27,7 @@ final class OAuthManagerTests: XCTestCase {
 
     @MainActor
     func testPKCEGeneratesDifferentValues() {
-        let manager = OAuthManager()
+        let manager = OAuthManager(keychainStore: MockKeychainStore())
         let pkce1 = manager.generatePKCE()
         let pkce2 = manager.generatePKCE()
 
@@ -37,7 +37,7 @@ final class OAuthManagerTests: XCTestCase {
 
     @MainActor
     func testPKCEVerifierIsBase64URL() {
-        let manager = OAuthManager()
+        let manager = OAuthManager(keychainStore: MockKeychainStore())
         let pkce = manager.generatePKCE()
 
         // base64url should not contain +, /, or =
@@ -48,7 +48,7 @@ final class OAuthManagerTests: XCTestCase {
 
     @MainActor
     func testPKCEChallengeIsBase64URL() {
-        let manager = OAuthManager()
+        let manager = OAuthManager(keychainStore: MockKeychainStore())
         let pkce = manager.generatePKCE()
 
         XCTAssertFalse(pkce.challenge.contains("+"))

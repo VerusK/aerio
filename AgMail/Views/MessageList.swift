@@ -6,18 +6,108 @@ struct MessageList: View {
     @Binding var selectedEmailId: String?
     var selectedFolder: Folder
     var selectedAccountId: String?
+    var onReply: ((Email) -> Void)?
+    var onReplyAll: ((Email) -> Void)?
+    var onForward: ((Email) -> Void)?
+    var onArchive: ((Email) -> Void)?
+    var onDelete: ((Email) -> Void)?
+    var onSpam: ((Email) -> Void)?
+    var onLoadMore: (() -> Void)?
+    var hasMoreEmails: Bool = false
 
     var body: some View {
-        List(filteredEmails, selection: $selectedEmailId) { email in
-            MessageRow(
-                email: email,
-                account: accountManager.account(for: email.accountId),
-                showAccountIndicator: selectedAccountId == nil
-            )
-            .tag(email.id)
+        Group {
+            if filteredEmails.isEmpty && !hasMoreEmails {
+                VStack(spacing: 8) {
+                    Image(systemName: selectedFolder.iconName)
+                        .font(.system(size: 32))
+                        .foregroundStyle(.secondary)
+                    Text("No messages")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("empty-folder-placeholder")
+            } else {
+                List(selection: $selectedEmailId) {
+                    ForEach(filteredEmails) { email in
+                        MessageRow(
+                            email: email,
+                            account: accountManager.account(for: email.accountId),
+                            showAccountIndicator: selectedAccountId == nil
+                        )
+                        .tag(email.id)
+                        .contextMenu {
+                            contextMenuItems(for: email)
+                        }
+                    }
+
+                    if hasMoreEmails {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                            Spacer()
+                        }
+                        .onAppear {
+                            onLoadMore?()
+                        }
+                        .accessibilityIdentifier("load-more-sentinel")
+                    }
+                }
+                .listStyle(.inset)
+            }
         }
-        .listStyle(.inset)
         .frame(minWidth: 250)
+    }
+
+    @ViewBuilder
+    private func contextMenuItems(for email: Email) -> some View {
+        Button {
+            onReply?(email)
+        } label: {
+            Text("Reply  \(ShortcutAction.reply.shortcutLabel)")
+            Image(systemName: "arrowshape.turn.up.left")
+        }
+
+        Button {
+            onReplyAll?(email)
+        } label: {
+            Text("Reply All  \(ShortcutAction.replyAll.shortcutLabel)")
+            Image(systemName: "arrowshape.turn.up.left.2")
+        }
+
+        Button {
+            onForward?(email)
+        } label: {
+            Text("Forward  \(ShortcutAction.forward.shortcutLabel)")
+            Image(systemName: "arrowshape.turn.up.right")
+        }
+
+        Divider()
+
+        if selectedFolder == .inbox {
+            Button {
+                onArchive?(email)
+            } label: {
+                Text("Archive  \(ShortcutAction.archiveMessage.shortcutLabel)")
+                Image(systemName: "archivebox")
+            }
+        }
+
+        Button {
+            onDelete?(email)
+        } label: {
+            Text("Delete  \(ShortcutAction.deleteMessage.shortcutLabel)")
+            Image(systemName: "trash")
+        }
+
+        Button(role: .destructive) {
+            onSpam?(email)
+        } label: {
+            Text("Spam  \(ShortcutAction.spamMessage.shortcutLabel)")
+            Image(systemName: "exclamationmark.octagon")
+        }
     }
 
     var filteredEmails: [Email] {

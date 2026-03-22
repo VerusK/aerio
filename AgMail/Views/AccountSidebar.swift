@@ -28,7 +28,7 @@ struct AccountSidebar: View {
 
     private var settingsButton: some View {
         Button {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            KeyboardShortcuts.openSettings()
         } label: {
             Image(systemName: "gearshape")
                 .font(.system(size: 16, weight: .medium))

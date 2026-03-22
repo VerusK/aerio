@@ -2,8 +2,9 @@ import XCTest
 @testable import AgMail
 
 final class KeychainHelperTests: XCTestCase {
-    private let testAccountId = "keychain-test-\(UUID().uuidString)"
-    private let testAccountId2 = "keychain-test2-\(UUID().uuidString)"
+    private var store: MockKeychainStore!
+    private let testAccountId = "keychain-test-account1"
+    private let testAccountId2 = "keychain-test-account2"
 
     private func makeTokens(
         accessToken: String = "access_123",
@@ -19,17 +20,17 @@ final class KeychainHelperTests: XCTestCase {
         )
     }
 
-    override func tearDown() {
-        try? KeychainHelper.deleteTokens(for: testAccountId)
-        try? KeychainHelper.deleteTokens(for: testAccountId2)
-        super.tearDown()
+    override func setUp() {
+        store = MockKeychainStore()
     }
+
+    // MARK: - KeychainStore protocol tests (via MockKeychainStore)
 
     func testSaveAndLoadTokens() throws {
         let tokens = makeTokens()
-        try KeychainHelper.saveTokens(tokens, for: testAccountId)
+        try store.saveTokens(tokens, for: testAccountId)
 
-        let loaded = try KeychainHelper.loadTokens(for: testAccountId)
+        let loaded = try store.loadTokens(for: testAccountId)
         XCTAssertNotNil(loaded)
         XCTAssertEqual(loaded?.accessToken, "access_123")
         XCTAssertEqual(loaded?.refreshToken, "refresh_456")
@@ -37,30 +38,30 @@ final class KeychainHelperTests: XCTestCase {
     }
 
     func testLoadNonexistentReturnsNil() throws {
-        let loaded = try KeychainHelper.loadTokens(for: "nonexistent-account-id")
+        let loaded = try store.loadTokens(for: "nonexistent-account-id")
         XCTAssertNil(loaded)
     }
 
     func testDeleteTokens() throws {
         let tokens = makeTokens()
-        try KeychainHelper.saveTokens(tokens, for: testAccountId)
-        try KeychainHelper.deleteTokens(for: testAccountId)
+        try store.saveTokens(tokens, for: testAccountId)
+        try store.deleteTokens(for: testAccountId)
 
-        let loaded = try KeychainHelper.loadTokens(for: testAccountId)
+        let loaded = try store.loadTokens(for: testAccountId)
         XCTAssertNil(loaded)
     }
 
     func testDeleteNonexistentDoesNotThrow() throws {
-        XCTAssertNoThrow(try KeychainHelper.deleteTokens(for: "nonexistent-account"))
+        XCTAssertNoThrow(try store.deleteTokens(for: "nonexistent-account"))
     }
 
     func testUpdateAccessToken() throws {
         let tokens = makeTokens()
-        try KeychainHelper.saveTokens(tokens, for: testAccountId)
+        try store.saveTokens(tokens, for: testAccountId)
 
-        try KeychainHelper.updateAccessToken("new_access_token", expiresIn: 7200, for: testAccountId)
+        try store.updateAccessToken("new_access_token", expiresIn: 7200, for: testAccountId)
 
-        let loaded = try KeychainHelper.loadTokens(for: testAccountId)
+        let loaded = try store.loadTokens(for: testAccountId)
         XCTAssertEqual(loaded?.accessToken, "new_access_token")
         XCTAssertEqual(loaded?.refreshToken, "refresh_456")
         XCTAssertEqual(loaded?.email, "test@gmail.com")
@@ -68,14 +69,16 @@ final class KeychainHelperTests: XCTestCase {
 
     func testSaveOverwritesExisting() throws {
         let tokens1 = makeTokens(accessToken: "first")
-        try KeychainHelper.saveTokens(tokens1, for: testAccountId)
+        try store.saveTokens(tokens1, for: testAccountId)
 
         let tokens2 = makeTokens(accessToken: "second")
-        try KeychainHelper.saveTokens(tokens2, for: testAccountId)
+        try store.saveTokens(tokens2, for: testAccountId)
 
-        let loaded = try KeychainHelper.loadTokens(for: testAccountId)
+        let loaded = try store.loadTokens(for: testAccountId)
         XCTAssertEqual(loaded?.accessToken, "second")
     }
+
+    // MARK: - OAuthTokens model tests
 
     func testIsExpired() {
         let expired = makeTokens(expiresAt: Date().addingTimeInterval(-10))
@@ -86,7 +89,6 @@ final class KeychainHelperTests: XCTestCase {
     }
 
     func testIsExpiredWithBuffer() {
-        // Token expiring in 30 seconds should be considered expired (60s buffer)
         let almostExpired = makeTokens(expiresAt: Date().addingTimeInterval(30))
         XCTAssertTrue(almostExpired.isExpired)
     }
@@ -95,18 +97,18 @@ final class KeychainHelperTests: XCTestCase {
         let tokens1 = makeTokens(accessToken: "token_1", email: "user1@gmail.com")
         let tokens2 = makeTokens(accessToken: "token_2", email: "user2@gmail.com")
 
-        try KeychainHelper.saveTokens(tokens1, for: testAccountId)
-        try KeychainHelper.saveTokens(tokens2, for: testAccountId2)
+        try store.saveTokens(tokens1, for: testAccountId)
+        try store.saveTokens(tokens2, for: testAccountId2)
 
-        let loaded1 = try KeychainHelper.loadTokens(for: testAccountId)
-        let loaded2 = try KeychainHelper.loadTokens(for: testAccountId2)
+        let loaded1 = try store.loadTokens(for: testAccountId)
+        let loaded2 = try store.loadTokens(for: testAccountId2)
 
         XCTAssertEqual(loaded1?.accessToken, "token_1")
         XCTAssertEqual(loaded2?.accessToken, "token_2")
 
-        try KeychainHelper.deleteTokens(for: testAccountId)
+        try store.deleteTokens(for: testAccountId)
 
-        XCTAssertNil(try KeychainHelper.loadTokens(for: testAccountId))
-        XCTAssertNotNil(try KeychainHelper.loadTokens(for: testAccountId2))
+        XCTAssertNil(try store.loadTokens(for: testAccountId))
+        XCTAssertNotNil(try store.loadTokens(for: testAccountId2))
     }
 }

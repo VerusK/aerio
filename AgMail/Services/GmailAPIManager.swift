@@ -14,6 +14,7 @@ final class GmailAPIManager: ObservableObject {
 
     private let accountManager: AccountManager
     private let oauthManager: OAuthManager
+    let keychainStore: KeychainStore
     private var cancellables = Set<AnyCancellable>()
     private var clientCancellables: [String: AnyCancellable] = [:]
     private var currentFolder: Folder = .inbox
@@ -21,14 +22,19 @@ final class GmailAPIManager: ObservableObject {
     private var pollingTask: Task<Void, Never>?
     var historyIds: [String: String] = [:]
     var dataStore: EmailCache?
+    var contactsCache: ContactsCache?
+    var notificationManager: NotificationManager?
     private(set) var accountsWithCompletedFetch = Set<String>()
+    var pageTokens: [String: [Folder: String]] = [:]
+    private var fetchingMore: Set<String> = []
 
     // Factory closure for creating clients — allows test injection
     var clientFactory: ((String, OAuthManager) -> GmailAPIClient)?
 
-    init(accountManager: AccountManager, oauthManager: OAuthManager, dataStore: EmailCache? = nil) {
+    init(accountManager: AccountManager, oauthManager: OAuthManager, dataStore: EmailCache? = nil, keychainStore: KeychainStore = KeychainHelper.shared) {
         self.accountManager = accountManager
         self.oauthManager = oauthManager
+        self.keychainStore = keychainStore
         self.dataStore = dataStore
         if let dataStore {
             loadCachedEmails(from: dataStore)
@@ -75,20 +81,42 @@ final class GmailAPIManager: ObservableObject {
     // MARK: - Client Management
 
     func addClient(for account: Account) {
-        guard clients[account.id] == nil else { return }
+        guard clients[account.id] == nil else {
+            logger.debug("[\(account.id)] addClient skipped — client already exists")
+            return
+        }
+
+        // Verify tokens exist before creating client
+        let hasTokens: Bool
+        do {
+            let tokens = try keychainStore.loadTokens(for: account.id)
+            hasTokens = tokens != nil
+            if let tokens {
+                logger.info("[\(account.id)] addClient: tokens found (expired=\(tokens.isExpired), email=\(tokens.email ?? "nil"))")
+            } else {
+                logger.warning("[\(account.id)] addClient: no tokens in keychain — client will fail on first API call")
+            }
+        } catch {
+            hasTokens = false
+            logger.error("[\(account.id)] addClient: failed to load tokens — \(error.localizedDescription)")
+        }
 
         let client: GmailAPIClient
         if let factory = clientFactory {
             client = factory(account.id, oauthManager)
         } else {
-            client = GmailAPIClient(accountId: account.id, oauthManager: oauthManager)
+            client = GmailAPIClient(accountId: account.id, oauthManager: oauthManager, keychainStore: keychainStore)
         }
 
         clients[account.id] = client
         clientStates[account.id] = client.state
+        logger.info("[\(account.id)] addClient: client created (hasTokens=\(hasTokens), totalClients=\(self.clients.count))")
 
         clientCancellables[account.id] = client.$state
             .sink { [weak self] newState in
+                if case .error(let msg) = newState {
+                    logger.error("[\(account.id)] client state → error: \(msg)")
+                }
                 self?.clientStates[account.id] = newState
             }
 
@@ -105,8 +133,9 @@ final class GmailAPIManager: ObservableObject {
         emailsByAccount.removeValue(forKey: accountId)
         unreadCountsByAccount.removeValue(forKey: accountId)
         historyIds.removeValue(forKey: accountId)
+        pageTokens.removeValue(forKey: accountId)
         accountsWithCompletedFetch.remove(accountId)
-        try? KeychainHelper.deleteTokens(for: accountId)
+        try? keychainStore.deleteTokens(for: accountId)
         dataStore?.clearEmails(for: accountId)
     }
 
@@ -144,6 +173,7 @@ final class GmailAPIManager: ObservableObject {
     func navigateAllToFolder(_ folder: Folder) async {
         currentFolder = folder
         historyIds.removeAll()
+        pageTokens.removeAll()
         accountsWithCompletedFetch.removeAll()
         await fetchAllAccounts()
     }
@@ -175,72 +205,95 @@ final class GmailAPIManager: ObservableObject {
     }
 
     func fetchEmails(for accountId: String) async {
-        guard let client = clients[accountId] else { return }
+        guard let client = clients[accountId] else {
+            logger.warning("[\(accountId)] fetchEmails: no client found — skipping (available clients: \(Array(self.clients.keys)))")
+            return
+        }
 
         client.state = .syncing
+        logger.info("[\(accountId)] fetchEmails: starting for folder=\(self.currentFolder.displayName)")
+        let folder = currentFolder
         do {
-            let folder = currentFolder
-
-            // Paginate to collect message IDs (capped to avoid quota exhaustion)
-            let maxMessages = 500
-            var allMessageIds: [String] = []
             var pageToken: String?
             var listHistoryId: String?
-            repeat {
-                let listResponse: GmailMessageListResponse
-                if folder.gmailLabelIds.isEmpty {
-                    listResponse = try await client.listMessages(query: folder.gmailQuery, maxResults: 500, pageToken: pageToken)
-                } else {
-                    listResponse = try await client.listMessages(labelIds: folder.gmailLabelIds, maxResults: 500, pageToken: pageToken)
-                }
-                if let ids = listResponse.messages?.map(\.id) {
-                    allMessageIds.append(contentsOf: ids)
-                }
-                if let hid = listResponse.historyId {
-                    listHistoryId = hid
-                }
-                pageToken = listResponse.nextPageToken
-            } while pageToken != nil && allMessageIds.count < maxMessages
+            var allFetchedEmails: [Email] = []
 
-            if allMessageIds.count > maxMessages {
-                allMessageIds = Array(allMessageIds.prefix(maxMessages))
+            // Fetch first page of message IDs (50 per batch)
+            let listResponse: GmailMessageListResponse
+            if folder.gmailLabelIds.isEmpty {
+                listResponse = try await client.listMessages(query: folder.gmailQuery, maxResults: 50, pageToken: pageToken)
+            } else {
+                listResponse = try await client.listMessages(labelIds: folder.gmailLabelIds, maxResults: 50, pageToken: pageToken)
             }
 
-            let messageIds = allMessageIds
+            if let hid = listResponse.historyId {
+                listHistoryId = hid
+            }
+
+            let messageIds = listResponse.messages?.map(\.id) ?? []
+            pageToken = listResponse.nextPageToken
+
             guard !messageIds.isEmpty else {
-                emailsByAccount[accountId] = emailsByAccount[accountId]?.filter { $0.folder != folder } ?? []
+                // No emails at all for this folder — clear both cache and in-memory list
                 client.state = .idle
                 accountsWithCompletedFetch.insert(accountId)
+                pageTokens[accountId, default: [:]][folder] = nil
+                emailsByAccount[accountId]?.removeAll { $0.folder == folder }
                 dataStore?.replaceEmails(for: accountId, folder: folder, with: [])
                 return
             }
 
+            // Fetch full metadata for this batch
             let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
-            let emails = messages.compactMap { convertGmailMessageToEmail($0, accountId: accountId, folder: folder) }
+            let batchEmails = messages.compactMap { convertGmailMessageToEmail($0, accountId: accountId, folder: folder) }
+            allFetchedEmails.append(contentsOf: batchEmails)
 
-            // Save historyId for incremental sync — prefer list response (current mailbox head)
-            if let listHistoryId {
-                historyIds[accountId] = listHistoryId
-            } else {
-                let maxHistoryId = messages.compactMap(\.historyId).compactMap(UInt64.init).max()
-                if let maxHistoryId {
-                    historyIds[accountId] = String(maxHistoryId)
+            // Update UI — replace folder emails with fetched batch (avoids blank flash)
+            var current = emailsByAccount[accountId] ?? []
+            current.removeAll { $0.folder == folder }
+            current.append(contentsOf: batchEmails)
+            emailsByAccount[accountId] = current
+
+            // Update historyId from messages in this batch
+            if listHistoryId == nil {
+                let maxHid = messages.compactMap(\.historyId).compactMap(UInt64.init).max()
+                if let maxHid {
+                    listHistoryId = String(maxHid)
                 }
             }
 
-            var existing = emailsByAccount[accountId] ?? []
-            existing.removeAll { $0.folder == folder }
-            existing.append(contentsOf: emails)
-            emailsByAccount[accountId] = existing
+            logger.debug("[\(accountId)] fetchEmails: batch loaded \(batchEmails.count) emails, total=\(allFetchedEmails.count), hasMore=\(pageToken != nil)")
+
+            // Save historyId for incremental sync
+            if let listHistoryId {
+                historyIds[accountId] = listHistoryId
+            }
+
+            // Save pageToken for infinite scroll (nil means all loaded)
+            pageTokens[accountId, default: [:]][folder] = pageToken
 
             // Update unread count
             await fetchUnreadCount(for: accountId, client: client)
 
             client.state = .idle
             accountsWithCompletedFetch.insert(accountId)
-            dataStore?.replaceEmails(for: accountId, folder: folder, with: emails)
+            dataStore?.replaceEmails(for: accountId, folder: folder, with: allFetchedEmails)
+            contactsCache?.addContacts(from: allFetchedEmails)
+        } catch let apiError as GmailAPIError {
+            logger.error("[\(accountId)] fetchEmails failed (API): \(apiError.localizedDescription) — folder=\(self.currentFolder.displayName)")
+            switch apiError {
+            case .unauthorized, .sessionExpired:
+                logger.error("[\(accountId)] fetchEmails: auth failure — token may be missing or expired, user may need to re-authenticate")
+            case .forbidden(let detail):
+                logger.error("[\(accountId)] fetchEmails: forbidden — \(detail) — check OAuth scopes or account permissions")
+            case .rateLimited:
+                logger.warning("[\(accountId)] fetchEmails: rate limited — too many requests to Gmail API")
+            default:
+                break
+            }
+            client.state = .error(apiError.localizedDescription)
         } catch {
-            logger.error("[\(accountId)] fetchEmails failed: \(error.localizedDescription)")
+            logger.error("[\(accountId)] fetchEmails failed (unexpected): \(error.localizedDescription) — folder=\(self.currentFolder.displayName)")
             client.state = .error(error.localizedDescription)
         }
     }
@@ -283,6 +336,7 @@ final class GmailAPIManager: ObservableObject {
             }
 
             var currentEmails = emailsByAccount[accountId] ?? []
+            let previousEmailIds = Set(currentEmails.map(\.msgId))
 
             // Collect IDs of messages to fetch (added or label-changed)
             var messageIdsToFetch = Set<String>()
@@ -344,12 +398,28 @@ final class GmailAPIManager: ObservableObject {
                     return convertGmailMessageToEmail(msg, accountId: accountId, folder: folder)
                 }
                 currentEmails.append(contentsOf: newEmails)
+
+                // Trigger notifications for new inbox+unread emails
+                let notifiable = NotificationManager.newInboxUnreadEmails(
+                    newEmails: newEmails,
+                    previousEmailIds: previousEmailIds
+                )
+                for email in notifiable {
+                    notificationManager?.showNotification(
+                        from: email.from,
+                        subject: email.subject,
+                        snippet: email.snippet,
+                        emailId: email.msgId,
+                        accountId: email.accountId
+                    )
+                }
             }
 
             // Track which folders had emails before the sync
             let foldersBefore = Set((emailsByAccount[accountId] ?? []).map(\.folder))
 
             emailsByAccount[accountId] = currentEmails
+            contactsCache?.addContacts(from: currentEmails)
             await fetchUnreadCount(for: accountId, client: client)
             client.state = .idle
 
@@ -373,6 +443,51 @@ final class GmailAPIManager: ObservableObject {
         } catch {
             logger.error("[\(accountId)] incrementalSync failed: \(error.localizedDescription)")
             client.state = .error(error.localizedDescription)
+        }
+    }
+
+    func fetchMoreEmails(accountId: String, folder: Folder) async {
+        let fetchKey = "\(accountId)_\(folder.rawValue)"
+        guard !fetchingMore.contains(fetchKey),
+              let client = clients[accountId],
+              let pageToken = pageTokens[accountId]?[folder] else {
+            return
+        }
+
+        fetchingMore.insert(fetchKey)
+        defer { fetchingMore.remove(fetchKey) }
+
+        logger.debug("[\(accountId)] fetchMoreEmails: loading more for folder=\(folder.displayName), pageToken=\(pageToken)")
+        do {
+            let listResponse: GmailMessageListResponse
+            if folder.gmailLabelIds.isEmpty {
+                listResponse = try await client.listMessages(query: folder.gmailQuery, maxResults: 50, pageToken: pageToken)
+            } else {
+                listResponse = try await client.listMessages(labelIds: folder.gmailLabelIds, maxResults: 50, pageToken: pageToken)
+            }
+
+            let messageIds = listResponse.messages?.map(\.id) ?? []
+            let nextPageToken = listResponse.nextPageToken
+
+            // Update stored page token (nil if no more pages)
+            pageTokens[accountId, default: [:]][folder] = nextPageToken
+
+            guard !messageIds.isEmpty else { return }
+
+            let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
+            let newEmails = messages.compactMap { convertGmailMessageToEmail($0, accountId: accountId, folder: folder) }
+
+            // Append to existing emails, avoiding duplicates
+            var current = emailsByAccount[accountId] ?? []
+            let existingMsgIds = Set(current.filter { $0.folder == folder }.map(\.msgId))
+            let uniqueNewEmails = newEmails.filter { !existingMsgIds.contains($0.msgId) }
+            current.append(contentsOf: uniqueNewEmails)
+            emailsByAccount[accountId] = current
+
+            dataStore?.saveEmails(uniqueNewEmails)
+            logger.debug("[\(accountId)] fetchMoreEmails: appended \(uniqueNewEmails.count) emails, hasMore=\(nextPageToken != nil)")
+        } catch {
+            logger.error("[\(accountId)] fetchMoreEmails failed: \(error.localizedDescription)")
         }
     }
 
@@ -449,20 +564,49 @@ final class GmailAPIManager: ObservableObject {
 
     func archiveEmail(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
         _ = try await client.modifyMessage(id: msgId, removeLabels: [GmailLabelId.inbox])
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
+        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: false)
+        if let emailCopy {
+            moveEmailToFolder(emailCopy, targetFolder: .archive, accountId: accountId)
+        }
     }
 
     func deleteEmail(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
         _ = try await client.trashMessage(id: msgId)
         removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
+        if let emailCopy {
+            moveEmailToFolder(emailCopy, targetFolder: .trash, accountId: accountId)
+        }
     }
 
     func spamEmail(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
         _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.spam], removeLabels: [GmailLabelId.inbox])
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
+        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: false)
+        if let emailCopy {
+            moveEmailToFolder(emailCopy, targetFolder: .spam, accountId: accountId)
+        }
+    }
+
+    private func moveEmailToFolder(_ email: Email, targetFolder: Folder, accountId: String) {
+        let movedEmail = Email(
+            msgId: email.msgId,
+            from: email.from,
+            subject: email.subject,
+            date: email.date,
+            snippet: email.snippet,
+            isRead: email.isRead,
+            accountId: accountId,
+            folder: targetFolder,
+            messageId: email.messageId
+        )
+        emailsByAccount[accountId, default: []].append(movedEmail)
+        dataStore?.saveEmails([movedEmail])
+        logger.debug("[\(accountId)] moved email \(email.msgId) to \(targetFolder.displayName)")
     }
 
     func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil) async throws {
@@ -474,11 +618,51 @@ final class GmailAPIManager: ObservableObject {
         _ = try await client.sendMessage(raw: raw)
     }
 
+    func searchEmails(query: String) async -> [Email] {
+        await withTaskGroup(of: [Email].self) { group in
+            for (accountId, client) in clients {
+                group.addTask { @MainActor in
+                    do {
+                        let listResponse = try await client.listMessages(query: query, maxResults: 20)
+                        let messageIds = listResponse.messages?.map(\.id) ?? []
+                        guard !messageIds.isEmpty else { return [] }
+                        let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
+                        return messages.compactMap { msg -> Email? in
+                            let labelIds = msg.labelIds ?? []
+                            let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
+                            return self.convertGmailMessageToEmail(msg, accountId: accountId, folder: folder, skipLabelCheck: true)
+                        }
+                    } catch {
+                        logger.error("[\(accountId)] searchEmails failed: \(error.localizedDescription)")
+                        return []
+                    }
+                }
+            }
+            var results: [Email] = []
+            for await emails in group {
+                results.append(contentsOf: emails)
+            }
+            return Email.sortedByDate(results)
+        }
+    }
+
+    func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil) async throws {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let raw = RFC2822Builder.buildRawMessage(
+            from: from, to: to, cc: cc, subject: subject, body: body,
+            inReplyTo: inReplyTo, references: references
+        )
+        _ = try await client.createDraft(raw: raw)
+        logger.info("[\(accountId)] draft saved")
+    }
+
     // MARK: - Conversion
 
-    func convertGmailMessageToEmail(_ message: GmailMessage, accountId: String, folder: Folder) -> Email? {
+    func convertGmailMessageToEmail(_ message: GmailMessage, accountId: String, folder: Folder, skipLabelCheck: Bool = false) -> Email? {
         let labelIds = message.labelIds ?? []
-        guard folder.matchesLabels(labelIds) else { return nil }
+        if !skipLabelCheck {
+            guard folder.matchesLabels(labelIds) else { return nil }
+        }
 
         let headers = message.payload?.headers ?? []
         let from = headers.first(where: { $0.name.lowercased() == "from" })?.value ?? ""

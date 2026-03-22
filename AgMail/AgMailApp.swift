@@ -12,7 +12,9 @@ struct AgMailApp: App {
                 accountManager: appState.accountManager,
                 unifiedMailbox: appState.unifiedMailbox,
                 apiManager: appState.apiManager,
-                oauthManager: appState.oauthManager
+                oauthManager: appState.oauthManager,
+                contactsCache: appState.contactsCache,
+                notificationManager: appState.notificationManager
             )
             .background(WindowAccessor())
         }
@@ -78,79 +80,61 @@ final class AppState: ObservableObject {
     let emailCache: EmailCache
     let apiManager: GmailAPIManager
     let unifiedMailbox: UnifiedMailbox
+    let contactsCache: ContactsCache
+    let notificationManager: NotificationManager
     let defaults: UserDefaults
     private var badgeCancellable: AnyCancellable?
     private var defaultsCancellable: AnyCancellable?
 
     static let showDockBadgeKey = "showDockBadge"
 
-    private static let legacyMigrationKey = "agmail_legacy_migration_done"
     private static let logger = Logger(subsystem: "AgMail", category: "AppState")
 
     init() {
         let am = AccountManager()
-        let oauth = OAuthManager()
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+        let keychain: KeychainStore = isTestHost ? InMemoryKeychainStore() : KeychainHelper.shared
+        let oauth = OAuthManager(keychainStore: keychain)
         let cache = EmailCache()
 
-        // One-time migration: remove legacy accounts that have no OAuth tokens in Keychain
-        if !UserDefaults.standard.bool(forKey: Self.legacyMigrationKey) {
-            let migrationComplete = Self.removeLegacyAccounts(accountManager: am, emailCache: cache)
-            if migrationComplete {
-                UserDefaults.standard.set(true, forKey: Self.legacyMigrationKey)
-            }
-        }
-
-        let api = GmailAPIManager(accountManager: am, oauthManager: oauth, dataStore: cache)
+        let api = GmailAPIManager(accountManager: am, oauthManager: oauth, dataStore: cache, keychainStore: keychain)
+        let contacts = ContactsCache()
+        api.contactsCache = contacts
+        let notifications = NotificationManager()
+        api.notificationManager = notifications
         self.accountManager = am
         self.oauthManager = oauth
         self.emailCache = cache
         self.apiManager = api
         self.unifiedMailbox = UnifiedMailbox(apiManager: api)
+        self.contactsCache = contacts
+        self.notificationManager = notifications
         self.defaults = .standard
 
         defaults.register(defaults: [AppState.showDockBadgeKey: true])
         observeDockBadge()
+
+        Task {
+            await notifications.requestPermission()
+        }
     }
 
-    init(accountManager: AccountManager, apiManager: GmailAPIManager, defaults: UserDefaults = .standard) {
+    init(accountManager: AccountManager, apiManager: GmailAPIManager, defaults: UserDefaults = .standard, notificationManager: NotificationManager? = nil, keychainStore: KeychainStore = KeychainHelper.shared) {
         self.accountManager = accountManager
-        self.oauthManager = OAuthManager()
+        self.oauthManager = OAuthManager(keychainStore: keychainStore)
         self.emailCache = EmailCache()
         self.apiManager = apiManager
         self.unifiedMailbox = UnifiedMailbox(apiManager: apiManager)
+        let contacts = ContactsCache()
+        self.contactsCache = contacts
+        apiManager.contactsCache = contacts
+        self.notificationManager = notificationManager ?? NotificationManager()
         self.defaults = defaults
 
         defaults.register(defaults: [AppState.showDockBadgeKey: true])
         observeDockBadge()
     }
 
-    /// Returns `true` if all accounts were checked successfully (migration complete),
-    /// or `false` if any account was skipped due to Keychain errors (retry next launch).
-    @discardableResult
-    private static func removeLegacyAccounts(accountManager: AccountManager, emailCache: EmailCache) -> Bool {
-        var removed = 0
-        var hadKeychainError = false
-        for account in accountManager.accounts {
-            do {
-                let tokens = try KeychainHelper.loadTokens(for: account.id)
-                if tokens == nil {
-                    // errSecItemNotFound — confirmed no tokens, safe to remove
-                    logger.info("Removing legacy account without OAuth tokens: \(account.id)")
-                    emailCache.clearEmails(for: account.id)
-                    accountManager.removeAccount(id: account.id)
-                    removed += 1
-                }
-            } catch {
-                // Keychain error (locked, unavailable, corrupt data) — keep the account
-                logger.warning("Skipping migration for account \(account.id): Keychain error: \(error.localizedDescription)")
-                hadKeychainError = true
-            }
-        }
-        if removed > 0 {
-            logger.info("Removed \(removed) legacy account(s) without OAuth tokens")
-        }
-        return !hadKeychainError
-    }
 
     private func observeDockBadge() {
         badgeCancellable = apiManager.$unreadCountsByAccount

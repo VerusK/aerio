@@ -78,6 +78,61 @@ final class AccountManagerTests: XCTestCase {
         XCTAssertEqual(manager2.accounts.first?.email, "user@gmail.com")
     }
 
+    func testUpdateAccountPersistence() {
+        var account = Account(id: "a1", email: "user@gmail.com", displayName: "User", color: .blue)
+        manager.addAccount(account)
+        account.displayName = "New Name"
+        account.color = .green
+        manager.updateAccount(account)
+
+        let manager2 = AccountManager(defaults: defaults)
+        XCTAssertEqual(manager2.accounts.first?.displayName, "New Name")
+        XCTAssertEqual(manager2.accounts.first?.color, .green)
+    }
+
+    func testUpdateNonexistentAccountNoOp() {
+        let account = Account(id: "nonexistent", email: "x@gmail.com", displayName: "X")
+        manager.updateAccount(account)
+        XCTAssertTrue(manager.accounts.isEmpty)
+    }
+
+    func testAccountInitialsSingleName() {
+        let account = Account(id: "a1", email: "user@gmail.com", displayName: "Alice")
+        XCTAssertEqual(account.initials, "A")
+    }
+
+    func testAccountInitialsTwoNames() {
+        let account = Account(id: "a1", email: "user@gmail.com", displayName: "Alice Brown")
+        XCTAssertEqual(account.initials, "AB")
+    }
+
+    func testAccountInitialsThreeNames() {
+        let account = Account(id: "a1", email: "user@gmail.com", displayName: "Alice B Carter")
+        XCTAssertEqual(account.initials, "AB")
+    }
+
+    func testComputeInitialsStatic() {
+        XCTAssertEqual(Account.computeInitials(from: "John Doe"), "JD")
+        XCTAssertEqual(Account.computeInitials(from: "Jane"), "J")
+        XCTAssertEqual(Account.computeInitials(from: ""), "")
+    }
+
+    func testUpdateAccountColorAndName() {
+        var account = Account(id: "a1", email: "user@gmail.com", displayName: "Old Name", color: .blue)
+        manager.addAccount(account)
+
+        account.displayName = "New Name"
+        account.color = .purple
+        account.avatarLetter = String("New Name".prefix(1)).uppercased()
+        manager.updateAccount(account)
+
+        let updated = manager.account(for: "a1")
+        XCTAssertEqual(updated?.displayName, "New Name")
+        XCTAssertEqual(updated?.color, .purple)
+        XCTAssertEqual(updated?.avatarLetter, "N")
+        XCTAssertEqual(updated?.initials, "NN")
+    }
+
     func testMultipleAccounts() {
         let a1 = Account(id: "a1", email: "one@gmail.com", displayName: "One", color: .blue)
         let a2 = Account(id: "a2", email: "two@gmail.com", displayName: "Two", color: .red)

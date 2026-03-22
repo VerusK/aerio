@@ -77,6 +77,21 @@ struct GmailSendRequest: Codable {
     let raw: String
 }
 
+// MARK: - Draft
+
+struct GmailDraftRequest: Codable {
+    let message: GmailDraftMessage
+}
+
+struct GmailDraftMessage: Codable {
+    let raw: String
+}
+
+struct GmailDraft: Codable {
+    let id: String
+    let message: GmailMessage?
+}
+
 // MARK: - History
 
 struct GmailHistoryResponse: Codable {

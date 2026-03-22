@@ -44,14 +44,4 @@ struct FolderList: View {
     }
 }
 
-extension Folder {
-    var iconName: String {
-        switch self {
-        case .inbox: return "tray.fill"
-        case .archive: return "archivebox.fill"
-        case .trash: return "trash.fill"
-        case .spam: return "exclamationmark.triangle.fill"
-        case .drafts: return "doc.fill"
-        }
-    }
-}
+// iconName extension moved to Folder.swift

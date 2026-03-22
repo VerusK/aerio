@@ -41,16 +41,18 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
     let accountId: String
     let oauthManager: OAuthManager
     let session: URLSession
+    let keychainStore: KeychainStore
 
     @Published var state: ClientState = .idle
 
     /// Coalesces concurrent token refresh calls into a single in-flight request.
     private var refreshTask: Task<String, Error>?
 
-    init(accountId: String, oauthManager: OAuthManager, session: URLSession = .shared) {
+    init(accountId: String, oauthManager: OAuthManager, session: URLSession = .shared, keychainStore: KeychainStore = KeychainHelper.shared) {
         self.accountId = accountId
         self.oauthManager = oauthManager
         self.session = session
+        self.keychainStore = keychainStore
     }
 
     // MARK: - Public API
@@ -125,6 +127,14 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
     func sendMessage(raw: String) async throws -> GmailMessage {
         let body = GmailSendRequest(raw: raw)
         var request = try buildRequest(path: "/messages/send", method: "POST")
+        request.httpBody = try JSONEncoder().encode(body)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await execute(request: request)
+    }
+
+    func createDraft(raw: String) async throws -> GmailDraft {
+        let body = GmailDraftRequest(message: GmailDraftMessage(raw: raw))
+        var request = try buildRequest(path: "/drafts", method: "POST")
         request.httpBody = try JSONEncoder().encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return try await execute(request: request)
@@ -241,7 +251,7 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
     }
 
     private func getValidAccessToken() async throws -> String {
-        guard let tokens = try KeychainHelper.loadTokens(for: accountId) else {
+        guard let tokens = try keychainStore.loadTokens(for: accountId) else {
             throw GmailAPIError.unauthorized
         }
         if tokens.isExpired {

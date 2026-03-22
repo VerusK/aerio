@@ -58,6 +58,7 @@ final class RequestCounter: @unchecked Sendable {
 final class GmailAPIClientTests: XCTestCase {
     private var client: GmailAPIClient!
     private var session: URLSession!
+    private var mockKeychain: MockKeychainStore!
     private let testAccountId = "api-client-test@gmail.com"
 
     override func setUp() async throws {
@@ -65,20 +66,21 @@ final class GmailAPIClientTests: XCTestCase {
         config.protocolClasses = [MockURLProtocol.self]
         session = URLSession(configuration: config)
 
+        mockKeychain = MockKeychainStore()
+
         let tokens = KeychainHelper.OAuthTokens(
             accessToken: "test_access_token",
             refreshToken: "test_refresh_token",
             expiresAt: Date().addingTimeInterval(3600),
             email: testAccountId
         )
-        try KeychainHelper.saveTokens(tokens, for: testAccountId)
+        try mockKeychain.saveTokens(tokens, for: testAccountId)
 
-        let oauthManager = OAuthManager()
-        client = GmailAPIClient(accountId: testAccountId, oauthManager: oauthManager, session: session)
+        let oauthManager = OAuthManager(keychainStore: mockKeychain)
+        client = GmailAPIClient(accountId: testAccountId, oauthManager: oauthManager, session: session, keychainStore: mockKeychain)
     }
 
     override func tearDown() {
-        try? KeychainHelper.deleteTokens(for: testAccountId)
         MockURLProtocol.requestHandler = nil
     }
 
@@ -160,6 +162,42 @@ final class GmailAPIClientTests: XCTestCase {
 
         let result = try await client.sendMessage(raw: "dGVzdA")
         XCTAssertEqual(result.id, "sent1")
+    }
+
+    // MARK: - Draft
+
+    func testCreateDraftConstruction() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertTrue(request.url!.absoluteString.contains("/drafts"))
+
+            let body = try! JSONDecoder().decode(GmailDraftRequest.self, from: request.httpBody!)
+            XCTAssertEqual(body.message.raw, "dGVzdA")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "draft1", "message": {"id": "m1", "threadId": "t1"}}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let result = try await client.createDraft(raw: "dGVzdA")
+        XCTAssertEqual(result.id, "draft1")
+    }
+
+    func testCreateDraftURLPath() async throws {
+        var capturedURL: URL?
+        MockURLProtocol.requestHandler = { request in
+            capturedURL = request.url
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "draft2", "message": {"id": "m2", "threadId": "t2"}}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        _ = try await client.createDraft(raw: "raw_content")
+        XCTAssertTrue(capturedURL!.absoluteString.hasSuffix("/drafts"))
     }
 
     // MARK: - Error Handling

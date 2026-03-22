@@ -8,6 +8,11 @@ final class OAuthManager: ObservableObject {
     private let logger = Logger(subsystem: "AgMail", category: "OAuthManager")
     private var activeSession: ASWebAuthenticationSession?
     private var contextProvider: PresentationContextProvider?
+    let keychainStore: KeychainStore
+
+    init(keychainStore: KeychainStore = KeychainHelper.shared) {
+        self.keychainStore = keychainStore
+    }
 
     enum OAuthError: LocalizedError {
         case authSessionFailed(Error?)
@@ -96,7 +101,7 @@ final class OAuthManager: ObservableObject {
         tokens.email = email
 
         let accountId = email
-        try KeychainHelper.saveTokens(tokens, for: accountId)
+        try keychainStore.saveTokens(tokens, for: accountId)
         logger.info("OAuth complete for \(email)")
 
         return (tokens, accountId)
@@ -136,7 +141,7 @@ final class OAuthManager: ObservableObject {
     }
 
     func refreshAccessToken(for accountId: String) async throws -> String {
-        guard let tokens = try KeychainHelper.loadTokens(for: accountId) else {
+        guard let tokens = try keychainStore.loadTokens(for: accountId) else {
             throw OAuthError.noTokensFound
         }
 
@@ -161,13 +166,13 @@ final class OAuthManager: ObservableObject {
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
         if let newRefreshToken = tokenResponse.refresh_token {
             // Server rotated the refresh token — save the new one to avoid permanent logout
-            var tokens = try KeychainHelper.loadTokens(for: accountId) ?? KeychainHelper.OAuthTokens(accessToken: tokenResponse.access_token, refreshToken: newRefreshToken, expiresAt: Date(), email: accountId)
+            var tokens = try keychainStore.loadTokens(for: accountId) ?? KeychainHelper.OAuthTokens(accessToken: tokenResponse.access_token, refreshToken: newRefreshToken, expiresAt: Date(), email: accountId)
             tokens.accessToken = tokenResponse.access_token
             tokens.refreshToken = newRefreshToken
             tokens.expiresAt = Date().addingTimeInterval(TimeInterval(tokenResponse.expires_in))
-            try KeychainHelper.saveTokens(tokens, for: accountId)
+            try keychainStore.saveTokens(tokens, for: accountId)
         } else {
-            try KeychainHelper.updateAccessToken(tokenResponse.access_token, expiresIn: tokenResponse.expires_in, for: accountId)
+            try keychainStore.updateAccessToken(tokenResponse.access_token, expiresIn: tokenResponse.expires_in, for: accountId)
         }
         logger.debug("Refreshed access token for \(accountId)")
         return tokenResponse.access_token

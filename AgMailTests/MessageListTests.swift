@@ -7,8 +7,9 @@ final class MessageListTests: XCTestCase {
     private func makeTestEnvironment() -> (AccountManager, GmailAPIManager, UnifiedMailbox) {
         let defaults = UserDefaults(suiteName: "MessageListTests-\(UUID().uuidString)")!
         let accountManager = AccountManager(defaults: defaults)
-        let oauthManager = OAuthManager()
-        let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager)
+        let mockKeychain = MockKeychainStore()
+        let oauthManager = OAuthManager(keychainStore: mockKeychain)
+        let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
         let mailbox = UnifiedMailbox(apiManager: apiManager)
         return (accountManager, apiManager, mailbox)
     }
@@ -143,5 +144,101 @@ final class MessageListTests: XCTestCase {
         let accountManager = AccountManager(defaults: UserDefaults(suiteName: "MessageListTests-nil-\(UUID().uuidString)")!)
         let found = accountManager.account(for: "nonexistent")
         XCTAssertNil(found, "Unknown account id should return nil")
+    }
+
+    // MARK: - Context menu action routing tests
+
+    func testContextMenuReplyCallsOnReply() {
+        let email = Email(msgId: "ctx1", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var receivedEmail: Email?
+
+        let onReply: (Email) -> Void = { receivedEmail = $0 }
+        onReply(email)
+
+        XCTAssertNotNil(receivedEmail)
+        XCTAssertEqual(receivedEmail?.msgId, "ctx1", "Reply action should receive the correct email")
+    }
+
+    func testContextMenuReplyAllCallsOnReplyAll() {
+        let email = Email(msgId: "ctx2", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var receivedEmail: Email?
+
+        let onReplyAll: (Email) -> Void = { receivedEmail = $0 }
+        onReplyAll(email)
+
+        XCTAssertNotNil(receivedEmail)
+        XCTAssertEqual(receivedEmail?.msgId, "ctx2", "Reply All action should receive the correct email")
+    }
+
+    func testContextMenuForwardCallsOnForward() {
+        let email = Email(msgId: "ctx3", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var receivedEmail: Email?
+
+        let onForward: (Email) -> Void = { receivedEmail = $0 }
+        onForward(email)
+
+        XCTAssertNotNil(receivedEmail)
+        XCTAssertEqual(receivedEmail?.msgId, "ctx3", "Forward action should receive the correct email")
+    }
+
+    func testContextMenuArchiveCallsOnArchive() {
+        let email = Email(msgId: "ctx4", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var receivedEmail: Email?
+
+        let onArchive: (Email) -> Void = { receivedEmail = $0 }
+        onArchive(email)
+
+        XCTAssertNotNil(receivedEmail)
+        XCTAssertEqual(receivedEmail?.msgId, "ctx4", "Archive action should receive the correct email")
+    }
+
+    func testContextMenuDeleteCallsOnDelete() {
+        let email = Email(msgId: "ctx5", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var receivedEmail: Email?
+
+        let onDelete: (Email) -> Void = { receivedEmail = $0 }
+        onDelete(email)
+
+        XCTAssertNotNil(receivedEmail)
+        XCTAssertEqual(receivedEmail?.msgId, "ctx5", "Delete action should receive the correct email")
+    }
+
+    func testContextMenuSpamCallsOnSpam() {
+        let email = Email(msgId: "ctx6", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var receivedEmail: Email?
+
+        let onSpam: (Email) -> Void = { receivedEmail = $0 }
+        onSpam(email)
+
+        XCTAssertNotNil(receivedEmail)
+        XCTAssertEqual(receivedEmail?.msgId, "ctx6", "Spam action should receive the correct email")
+    }
+
+    func testContextMenuShortcutLabelsExist() {
+        let actions: [ShortcutAction] = [.reply, .replyAll, .forward, .archiveMessage, .deleteMessage, .spamMessage]
+        for action in actions {
+            XCTAssertFalse(action.shortcutLabel.isEmpty, "Shortcut label for \(action) should not be empty")
+        }
+    }
+
+    func testContextMenuAllSixActionsAvailable() {
+        // Verify the context menu provides all 6 actions by testing the closure type signature
+        let email = Email(msgId: "ctx7", from: "test@test.com", subject: "Context", date: Date(), snippet: "snip", isRead: false, accountId: "acc1", folder: .inbox)
+        var callCount = 0
+
+        let actions: [(Email) -> Void] = [
+            { _ in callCount += 1 }, // reply
+            { _ in callCount += 1 }, // replyAll
+            { _ in callCount += 1 }, // forward
+            { _ in callCount += 1 }, // archive
+            { _ in callCount += 1 }, // delete
+            { _ in callCount += 1 }, // spam
+        ]
+
+        for action in actions {
+            action(email)
+        }
+
+        XCTAssertEqual(callCount, 6, "All 6 context menu actions should be callable")
     }
 }

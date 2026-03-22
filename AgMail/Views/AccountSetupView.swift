@@ -75,12 +75,12 @@ struct AccountSetupView: View {
                     return
                 }
 
-                let colorIndex = accountManager.accounts.count % AccountColor.allCases.count
+                let color = AccountColor.nextUniqueColor(existingAccounts: accountManager.accounts)
                 let account = Account(
                     id: accountId,
                     email: email,
                     displayName: email.components(separatedBy: "@").first ?? email,
-                    color: AccountColor.allCases[colorIndex]
+                    color: color
                 )
                 accountManager.addAccount(account)
                 isAuthenticating = false

@@ -1,16 +1,17 @@
 import SwiftUI
+import AppKit
 
 enum ShortcutAction: String, CaseIterable, Sendable {
     case nextMessage          // Cmd+J
     case previousMessage      // Cmd+K
     case archiveMessage       // Cmd+E
-    case deleteMessage        // # (Shift+3)
-    case spamMessage          // ! (Shift+1)
-    case reply                // Cmd+R
-    case replyAll             // Cmd+Shift+R
-    case forward              // Cmd+F
+    case deleteMessage        // Cmd+D
+    case spamMessage          // Cmd+Shift+1
+    case reply                // Cmd+Shift+R
+    case replyAll             // Cmd+R
+    case forward              // Cmd+T
     case compose              // Cmd+N
-    case search               // Cmd+/
+    case search               // Cmd+Shift+F
     case sendMessage          // Cmd+Enter
     case selectAccount1       // Cmd+1
     case selectAccount2       // Cmd+2
@@ -22,7 +23,7 @@ enum ShortcutAction: String, CaseIterable, Sendable {
     case selectAccount8       // Cmd+8
     case selectAccount9       // Cmd+9
     case selectAllAccounts    // Cmd+0
-    case refresh              // Cmd+Shift+E (was Cmd+R, moved to avoid conflict with reply)
+    case refresh              // Cmd+Shift+E
     case openSettings         // Cmd+,
     case nextMessageAlt       // Alt+Down
     case previousMessageAlt   // Alt+Up
@@ -104,13 +105,13 @@ struct KeyboardShortcuts: Sendable {
         .nextMessage:       NSEventKeyBinding("j", modifiers: .command),
         .previousMessage:   NSEventKeyBinding("k", modifiers: .command),
         .archiveMessage:    NSEventKeyBinding("e", modifiers: .command),
-        .deleteMessage:     NSEventKeyBinding("3", modifiers: [.command, .shift]),   // Cmd+# (Shift+3)
-        .spamMessage:       NSEventKeyBinding("1", modifiers: [.command, .shift]),   // Cmd+! (Shift+1)
-        .reply:             NSEventKeyBinding("r", modifiers: .command),
-        .replyAll:          NSEventKeyBinding("r", modifiers: [.command, .shift]),
-        .forward:           NSEventKeyBinding("f", modifiers: [.command, .shift]),
+        .deleteMessage:     NSEventKeyBinding("d", modifiers: .command),
+        .spamMessage:       NSEventKeyBinding("1", modifiers: [.command, .shift]),
+        .reply:             NSEventKeyBinding("r", modifiers: [.command, .shift]),
+        .replyAll:          NSEventKeyBinding("r", modifiers: .command),
+        .forward:           NSEventKeyBinding("t", modifiers: .command),
         .compose:           NSEventKeyBinding("n", modifiers: .command),
-        .search:            NSEventKeyBinding("/", modifiers: .command),
+        .search:            NSEventKeyBinding("f", modifiers: [.command, .shift]),
         .sendMessage:       NSEventKeyBinding("\r", modifiers: .command),
         .selectAccount1:    NSEventKeyBinding("1", modifiers: .command),
         .selectAccount2:    NSEventKeyBinding("2", modifiers: .command),
@@ -170,6 +171,23 @@ struct KeyboardShortcuts: Sendable {
         }
     }
 
+    /// Returns the correct selector name for opening the Settings window
+    /// based on macOS version. macOS 14+ uses `showSettingsWindow:`,
+    /// older versions use `showPreferencesWindow:`.
+    static var settingsSelectorName: String {
+        if #available(macOS 14, *) {
+            return "showSettingsWindow:"
+        } else {
+            return "showPreferencesWindow:"
+        }
+    }
+
+    /// Sends the appropriate Settings action to NSApp.
+    @MainActor
+    static func openSettings() {
+        NSApp.sendAction(Selector((settingsSelectorName)), to: nil, from: nil)
+    }
+
     static func isAccountSelection(_ action: ShortcutAction) -> Bool {
         switch action {
         case .selectAccount1, .selectAccount2, .selectAccount3,
@@ -179,6 +197,38 @@ struct KeyboardShortcuts: Sendable {
             return true
         default:
             return false
+        }
+    }
+}
+
+// MARK: - KeyEventInterceptor
+
+/// NSViewRepresentable that intercepts key events via `performKeyEquivalent`,
+/// which fires BEFORE the system menu bar processes them. This ensures
+/// shortcuts work on any keyboard layout (English, Russian, etc.).
+struct KeyEventInterceptor: NSViewRepresentable {
+    let handler: (NSEvent) -> Bool
+
+    func makeNSView(context: Context) -> KeyInterceptorView {
+        let view = KeyInterceptorView()
+        view.handler = handler
+        return view
+    }
+
+    func updateNSView(_ nsView: KeyInterceptorView, context: Context) {
+        nsView.handler = handler
+    }
+
+    final class KeyInterceptorView: NSView {
+        var handler: ((NSEvent) -> Bool)?
+
+        override var acceptsFirstResponder: Bool { false }
+
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if let handler, handler(event) {
+                return true
+            }
+            return super.performKeyEquivalent(with: event)
         }
     }
 }

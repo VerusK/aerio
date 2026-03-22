@@ -87,6 +87,13 @@ struct NativeMessageDetail: View {
     let apiManager: GmailAPIManager
     let folder: Folder
 
+    var onReply: (() -> Void)?
+    var onReplyAll: (() -> Void)?
+    var onForward: (() -> Void)?
+    var onArchive: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var onSpam: (() -> Void)?
+
     @State private var messageContent: MessageContentData?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -95,6 +102,7 @@ struct NativeMessageDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             messageHeaders
+            actionButtonBar
             Divider()
             if isLoading {
                 ProgressView("Loading message…")
@@ -160,6 +168,36 @@ struct NativeMessageDetail: View {
         .padding(12)
     }
 
+    private var actionButtonBar: some View {
+        HStack(spacing: 4) {
+            actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply (\(ShortcutAction.reply.shortcutLabel))", action: onReply)
+            actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All (\(ShortcutAction.replyAll.shortcutLabel))", action: onReplyAll)
+            actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))", action: onForward)
+
+            Spacer()
+
+            if folder == .inbox {
+                actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)
+            }
+            actionButton(icon: "trash", tooltip: "Delete (\(ShortcutAction.deleteMessage.shortcutLabel))", action: onDelete)
+            actionButton(icon: "exclamationmark.octagon", tooltip: "Spam (\(ShortcutAction.spamMessage.shortcutLabel))", action: onSpam)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+    }
+
+    private func actionButton(icon: String, tooltip: String, action: (() -> Void)?) -> some View {
+        Button {
+            action?()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+        }
+        .buttonStyle(.borderless)
+        .help(tooltip)
+        .disabled(action == nil)
+    }
+
     private func headerRow(_ label: String, value: String) -> some View {
         HStack(alignment: .top, spacing: 4) {
             Text(label + ":")
@@ -214,55 +252,52 @@ struct NativeMessageDetail: View {
         }
     }
 
-    private func wrapHTML(_ body: String, subject: String) -> String {
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none';">
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                font-size: 14px;
-                line-height: 1.5;
-                color: #1d1d1f;
-                padding: 16px;
-                margin: 0;
-                word-wrap: break-word;
-                overflow-wrap: break-word;
-            }
-            @media (prefers-color-scheme: dark) {
-                body { color: #f5f5f7; background-color: #1e1e1e; }
-                a { color: #5ac8fa; }
-            }
-            img { max-width: 100%; height: auto; }
-            blockquote {
-                border-left: 3px solid #ccc;
-                margin: 8px 0;
-                padding-left: 12px;
-                color: #666;
-            }
-            pre, code {
-                background: #f4f4f4;
-                border-radius: 4px;
-                padding: 2px 6px;
-                font-size: 13px;
-            }
-            @media (prefers-color-scheme: dark) {
-                pre, code { background: #2d2d2d; }
-                blockquote { border-left-color: #555; color: #aaa; }
-            }
-            table { max-width: 100%; }
-        </style>
-        </head>
-        <body>
-        \(body)
-        </body>
-        </html>
-        """
+    func wrapHTML(_ body: String, subject: String) -> String {
+        wrapEmailHTML(body, subject: subject)
     }
+}
+
+/// Wraps email body HTML in a full document with light-only styling (no dark mode).
+func wrapEmailHTML(_ body: String, subject: String) -> String {
+    """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none';">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #1d1d1f;
+            padding: 16px;
+            margin: 0;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        img { max-width: 100%; height: auto; }
+        blockquote {
+            border-left: 3px solid #ccc;
+            margin: 8px 0;
+            padding-left: 12px;
+            color: #666;
+        }
+        pre, code {
+            background: #f4f4f4;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 13px;
+        }
+        table { max-width: 100%; }
+    </style>
+    </head>
+    <body>
+    \(body)
+    </body>
+    </html>
+    """
 }
 
 @MainActor
@@ -276,6 +311,7 @@ final class BodyWebViewStore: ObservableObject {
         config.defaultWebpagePreferences.allowsContentJavaScript = false
         self.webView = WKWebView(frame: .zero, configuration: config)
         self.webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        self.webView.appearance = NSAppearance(named: .aqua)
         self.webView.navigationDelegate = navigationDelegate
     }
 

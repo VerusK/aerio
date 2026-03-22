@@ -63,6 +63,22 @@ final class UnifiedMailbox: ObservableObject {
         return source.filter { $0.folder == folder && !$0.isRead }.count
     }
 
+    func hasMoreEmails(folder: Folder, accountId: String? = nil) -> Bool {
+        if let accountId {
+            if let token = apiManager.pageTokens[accountId]?[folder], !token.isEmpty {
+                return true
+            }
+            return false
+        }
+        // Any account has more pages for this folder
+        for (_, folderTokens) in apiManager.pageTokens {
+            if let token = folderTokens[folder], !token.isEmpty {
+                return true
+            }
+        }
+        return false
+    }
+
     func emails(for folder: Folder, accountId: String? = nil) -> [Email] {
         let source: [Email]
         if let accountId {
