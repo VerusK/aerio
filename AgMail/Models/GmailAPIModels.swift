@@ -46,6 +46,14 @@ struct GmailBody: Codable {
     let data: String?
 }
 
+// MARK: - Attachment
+
+struct GmailAttachment: Codable {
+    let attachmentId: String?
+    let size: Int?
+    let data: String?
+}
+
 // MARK: - Labels
 
 struct GmailLabel: Codable {

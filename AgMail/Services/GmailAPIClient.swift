@@ -179,6 +179,11 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         return try await execute(request: request)
     }
 
+    func getAttachment(messageId: String, attachmentId: String) async throws -> GmailAttachment {
+        let request = try buildRequest(path: "/messages/\(messageId)/attachments/\(attachmentId)")
+        return try await execute(request: request)
+    }
+
     func listHistory(startHistoryId: String, labelId: String? = nil, pageToken: String? = nil) async throws -> GmailHistoryResponse {
         var queryItems = [URLQueryItem(name: "startHistoryId", value: startHistoryId)]
         if let labelId = labelId {

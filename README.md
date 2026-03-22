@@ -10,6 +10,10 @@ Native macOS application (Swift/SwiftUI) for managing multiple Gmail accounts. U
 - Full keyboard-only navigation: panel focus (←/→), in-panel nav (↑/↓/J/K), Go-To folders (G+key), sidebar expand (Space)
 - Gmail actions via REST API: archive, delete, mark as spam, move to inbox, mark as read
 - Compose: new email, reply, reply all, forward — with address autocomplete from synced contacts
+- Attachments: drag & drop files, paste images from clipboard (⌘V), file picker (⇧⌘A)
+- Inline images: pasted/dropped images embed in email body via multipart/related
+- Attachment viewer: download to configurable directory, open in default app, or save-only
+- Inline image display in received emails (CID + image attachment embedding)
 - Draft auto-save on compose window close via Gmail Drafts API
 - Spotlight-style global search across all accounts (Cmd+Shift+F) with 300ms debounce
 - Incremental sync via Gmail History API with 410 Gone fallback to full re-fetch
@@ -119,6 +123,7 @@ Press `G` then one of:
 | `Cmd+Shift+R` | Reply |
 | `Cmd+T` | Forward |
 | `Cmd+Enter` | Send |
+| `Cmd+Shift+A` | Attach files |
 | `Cmd+Shift+F` | Search |
 | `Cmd+Shift+E` | Refresh |
 | `Cmd+,` | Settings |
@@ -132,6 +137,7 @@ Press `G` then one of:
 | Window frame | UserDefaults (key `mainWindowFrame`) |
 | Split positions | UserDefaults (autosave key `AgMailMainSplit`) |
 | Dock badge toggle | UserDefaults (key `showDockBadge`) |
+| Downloads directory | UserDefaults (key `downloadsDirectory`) |
 | Contacts cache | UserDefaults (key `agmail_contacts_cache`) |
 | OAuth tokens | macOS Keychain (per-account access/refresh tokens) |
 

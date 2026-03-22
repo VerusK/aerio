@@ -502,6 +502,15 @@ final class GmailAPIManager: ObservableObject {
         return try await client.getMessage(id: msgId, format: "full")
     }
 
+    func downloadAttachment(messageId: String, attachmentId: String, accountId: String) async throws -> Data {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let attachment = try await client.getAttachment(messageId: messageId, attachmentId: attachmentId)
+        guard let base64Data = attachment.data, let data = Data.fromBase64URL(base64Data) else {
+            throw GmailAPIError.decodingError("Failed to decode attachment data")
+        }
+        return data
+    }
+
     private func fetchUnreadCount(for accountId: String, client: GmailAPIClient) async {
         do {
             let label = try await client.getLabel(id: GmailLabelId.inbox)
@@ -633,10 +642,17 @@ final class GmailAPIManager: ObservableObject {
         logger.debug("[\(accountId)] moved email \(email.msgId) to \(targetFolder.displayName)")
     }
 
-    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil) async throws {
+    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let raw: String
-        if let htmlBody, !htmlBody.isEmpty {
+        if !attachments.isEmpty || !inlineImages.isEmpty {
+            raw = RFC2822Builder.buildRawHTMLMessageWithAttachments(
+                from: from, to: to, cc: cc, subject: subject,
+                htmlBody: htmlBody ?? "", plainBody: body,
+                attachments: attachments, inlineImages: inlineImages,
+                inReplyTo: inReplyTo, references: references
+            )
+        } else if let htmlBody, !htmlBody.isEmpty {
             raw = RFC2822Builder.buildRawHTMLMessage(
                 from: from, to: to, cc: cc, subject: subject,
                 htmlBody: htmlBody, plainBody: body,
@@ -679,10 +695,17 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
-    func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil) async throws {
+    func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let raw: String
-        if let htmlBody, !htmlBody.isEmpty {
+        if !attachments.isEmpty || !inlineImages.isEmpty {
+            raw = RFC2822Builder.buildRawHTMLMessageWithAttachments(
+                from: from, to: to, cc: cc, subject: subject,
+                htmlBody: htmlBody ?? "", plainBody: body,
+                attachments: attachments, inlineImages: inlineImages,
+                inReplyTo: inReplyTo, references: references
+            )
+        } else if let htmlBody, !htmlBody.isEmpty {
             raw = RFC2822Builder.buildRawHTMLMessage(
                 from: from, to: to, cc: cc, subject: subject,
                 htmlBody: htmlBody, plainBody: body,

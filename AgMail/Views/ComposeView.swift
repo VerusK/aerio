@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import os.log
 
 private let logger = Logger(subsystem: "AgMail", category: "ComposeView")
@@ -20,11 +21,26 @@ struct ComposeView: View {
     var preselectedAccountId: String?
     var onDismiss: (() -> Void)?
 
+    struct ComposeAttachment: Identifiable {
+        let id = UUID()
+        let filename: String
+        let mimeType: String
+        let data: Data
+
+        var sizeString: String {
+            let bytes = data.count
+            if bytes < 1024 { return "\(bytes) B" }
+            if bytes < 1024 * 1024 { return "\(bytes / 1024) KB" }
+            return String(format: "%.1f MB", Double(bytes) / (1024 * 1024))
+        }
+    }
+
     @State private var selectedAccountId: String = ""
     @State private var toField: String = ""
     @State private var ccField: String = ""
     @State private var subjectField: String = ""
     @State private var bodyText: String = ""
+    @State private var attachments: [ComposeAttachment] = []
     @State private var isSending = false
     @State private var isLoadingRecipients = false
     @State private var sendError: String?
@@ -113,9 +129,21 @@ struct ComposeView: View {
                 editorState: editorState,
                 cursorAtStart: composeType == .reply || composeType == .replyAll || composeType == .forward,
                 onTab: { focusedField = .to },
-                onBackTab: { focusedField = .subject }
+                onBackTab: { focusedField = .subject },
+                onAttachFiles: { urls in
+                    for url in urls { addAttachment(from: url) }
+                },
+                onAttachImageData: { data, filename in
+                    addAttachmentFromData(data, filename: filename, mimeType: "image/png")
+                }
             )
             .frame(maxHeight: .infinity)
+
+            // Attachments
+            if !attachments.isEmpty {
+                Divider()
+                attachmentsList
+            }
 
             if let replyAllWarning {
                 HStack {
@@ -303,6 +331,36 @@ struct ComposeView: View {
         .help(shortcut.map { "\(label) (\($0))" } ?? label)
     }
 
+    private var attachmentsList: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(attachments) { att in
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 10))
+                        Text("\(att.filename) (\(att.sizeString))")
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                        Button {
+                            attachments.removeAll { $0.id == att.id }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.gray.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+    }
+
     private var toolbar: some View {
         HStack {
             if isLoadingRecipients {
@@ -326,6 +384,17 @@ struct ComposeView: View {
             }
 
             Spacer()
+
+            Button {
+                pickFiles()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "paperclip")
+                    Text("Attach")
+                }
+            }
+            .keyboardShortcut("a", modifiers: [.command, .shift])
+            .help("Attach files (⇧⌘A)")
 
             Button {
                 sendMessage()
@@ -548,13 +617,56 @@ struct ComposeView: View {
         !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.begin { response in
+            guard response == .OK else { return }
+            for url in panel.urls {
+                addAttachment(from: url)
+            }
+        }
+    }
+
+    private func addAttachment(from url: URL) {
+        guard let data = try? Data(contentsOf: url) else { return }
+        let mimeType = mimeTypeForURL(url)
+        let attachment = ComposeAttachment(filename: url.lastPathComponent, mimeType: mimeType, data: data)
+        attachments.append(attachment)
+        isDirty = true
+    }
+
+    private func addAttachmentFromData(_ data: Data, filename: String, mimeType: String) {
+        // Generate unique name for screenshots
+        var name = filename
+        if filename == "screenshot.png" {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+            name = "Screenshot \(formatter.string(from: Date())).png"
+        }
+        let attachment = ComposeAttachment(filename: name, mimeType: mimeType, data: data)
+        attachments.append(attachment)
+        isDirty = true
+    }
+
+    private func mimeTypeForURL(_ url: URL) -> String {
+        if let utType = UTType(filenameExtension: url.pathExtension) {
+            return utType.preferredMIMEType ?? "application/octet-stream"
+        }
+        return "application/octet-stream"
+    }
+
     private func saveDraftIfNeeded() {
         // Don't create a new draft when editing an existing one
         guard composeType != .draft else { return }
         guard isDirty, hasContent else { return }
         guard let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email else { return }
 
-        let html = editorState.htmlBody
+        let (html, editorInlineImages) = editorState.htmlBodyWithInlineImages()
+        let rfcAttachments = attachments.map { RFC2822Builder.Attachment(filename: $0.filename, mimeType: $0.mimeType, data: $0.data) }
+        let rfcInlineImages = editorInlineImages.map { RFC2822Builder.InlineImage(cid: $0.cid, mimeType: $0.mimeType, data: $0.data) }
         Task {
             do {
                 try await apiManager.saveDraft(
@@ -566,7 +678,9 @@ struct ComposeView: View {
                     accountId: selectedAccountId,
                     inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
                     references: replyToEmail?.messageId ?? fetchedMessageId,
-                    htmlBody: html.isEmpty ? nil : html
+                    htmlBody: html.isEmpty ? nil : html,
+                    attachments: rfcAttachments,
+                    inlineImages: rfcInlineImages
                 )
             } catch {
                 logger.error("Draft save failed: \(error.localizedDescription)")
@@ -585,7 +699,9 @@ struct ComposeView: View {
             return
         }
 
-        let html = editorState.htmlBody
+        let (html, editorInlineImages) = editorState.htmlBodyWithInlineImages()
+        let rfcAttachments = attachments.map { RFC2822Builder.Attachment(filename: $0.filename, mimeType: $0.mimeType, data: $0.data) }
+        let rfcInlineImages = editorInlineImages.map { RFC2822Builder.InlineImage(cid: $0.cid, mimeType: $0.mimeType, data: $0.data) }
         Task {
             do {
                 if let draftId, composeType == .draft {
@@ -600,7 +716,9 @@ struct ComposeView: View {
                         accountId: selectedAccountId,
                         inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
                         references: replyToEmail?.messageId ?? fetchedMessageId,
-                        htmlBody: html.isEmpty ? nil : html
+                        htmlBody: html.isEmpty ? nil : html,
+                        attachments: rfcAttachments,
+                        inlineImages: rfcInlineImages
                     )
                 }
                 onDismiss?()
@@ -755,18 +873,84 @@ class ComposeEditorState: ObservableObject {
         storage.endEditing()
     }
 
-    var htmlBody: String {
-        guard let textView, let storage = textView.textStorage else { return "" }
-        let range = NSRange(location: 0, length: storage.length)
-        guard range.length > 0 else { return "" }
-        guard let data = try? storage.data(
-            from: range,
+    struct InlineImage {
+        let cid: String
+        let mimeType: String
+        let data: Data
+    }
+
+    /// Extract inline images from text storage and return HTML with cid: references.
+    func htmlBodyWithInlineImages() -> (html: String, inlineImages: [InlineImage]) {
+        guard let textView, let storage = textView.textStorage else { return ("", []) }
+        let fullRange = NSRange(location: 0, length: storage.length)
+        guard fullRange.length > 0 else { return ("", []) }
+
+        // Find all NSTextAttachment images and collect their data
+        var images: [InlineImage] = []
+        var attachmentRanges: [(range: NSRange, cid: String)] = []
+
+        storage.enumerateAttribute(.attachment, in: fullRange) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            var image: NSImage?
+            if let cell = attachment.attachmentCell as? NSTextAttachmentCell {
+                image = cell.image
+            }
+            guard let img = image else { return }
+
+            guard let tiff = img.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let pngData = bitmap.representation(using: .png, properties: [:]) else { return }
+
+            let cid = "inline_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))@agmail"
+            images.append(InlineImage(cid: cid, mimeType: "image/png", data: pngData))
+            attachmentRanges.append((range: range, cid: cid))
+        }
+
+        if images.isEmpty {
+            // No inline images — use standard HTML export
+            guard let data = try? storage.data(
+                from: fullRange,
+                documentAttributes: [
+                    .documentType: NSAttributedString.DocumentType.html,
+                    .characterEncoding: String.Encoding.utf8.rawValue
+                ]
+            ) else { return ("", []) }
+            return (String(data: data, encoding: .utf8) ?? "", [])
+        }
+
+        // Replace attachments with placeholder text, then export HTML, then swap placeholders for cid:
+        let mutable = NSMutableAttributedString(attributedString: storage)
+        // Process in reverse to preserve range positions
+        for (range, cid) in attachmentRanges.reversed() {
+            let placeholder = "%%CID_\(cid)%%"
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 13),
+                .foregroundColor: NSColor.labelColor
+            ]
+            mutable.replaceCharacters(in: range, with: NSAttributedString(string: placeholder, attributes: attrs))
+        }
+
+        let exportRange = NSRange(location: 0, length: mutable.length)
+        guard let htmlData = try? mutable.data(
+            from: exportRange,
             documentAttributes: [
                 .documentType: NSAttributedString.DocumentType.html,
                 .characterEncoding: String.Encoding.utf8.rawValue
             ]
-        ) else { return "" }
-        return String(data: data, encoding: .utf8) ?? ""
+        ) else { return ("", []) }
+
+        var html = String(data: htmlData, encoding: .utf8) ?? ""
+        // Replace placeholders with <img src="cid:...">
+        for (_, cid) in attachmentRanges {
+            let placeholder = "%%CID_\(cid)%%"
+            html = html.replacingOccurrences(of: placeholder, with: "<img src=\"cid:\(cid)\" style=\"max-width:100%;\">")
+        }
+
+        return (html, images)
+    }
+
+    var htmlBody: String {
+        htmlBodyWithInlineImages().html
     }
 
     var plainBody: String {
@@ -782,6 +966,8 @@ struct ComposeBodyEditor: NSViewRepresentable {
     var cursorAtStart: Bool = false
     var onTab: (() -> Void)?
     var onBackTab: (() -> Void)?
+    var onAttachFiles: (([URL]) -> Void)?
+    var onAttachImageData: ((Data, String) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -810,8 +996,11 @@ struct ComposeBodyEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.onTab = onTab
         textView.onBackTab = onBackTab
+        textView.onAttachFiles = onAttachFiles
+        textView.onAttachImageData = onAttachImageData
         textView.editorState = editorState
         textView.string = text
+        textView.registerForDraggedTypes([.fileURL])
 
         editorState.textView = textView
 
@@ -854,16 +1043,20 @@ struct ComposeBodyEditor: NSViewRepresentable {
     }
 }
 
-/// NSTextView subclass that intercepts Tab/Shift-Tab and handles auto-list.
+/// NSTextView subclass that intercepts Tab/Shift-Tab, handles auto-list,
+/// drag-drop file attachments, and paste image from clipboard.
 class TabAwareTextView: NSTextView {
     var onTab: (() -> Void)?
     var onBackTab: (() -> Void)?
     weak var editorState: ComposeEditorState?
+    var onAttachFiles: (([URL]) -> Void)?
+    var onAttachImageData: ((Data, String) -> Void)?
 
     // keyCode constants (layout-independent)
     private static let kVK_ANSI_B: UInt16 = 11
     private static let kVK_ANSI_I: UInt16 = 34
     private static let kVK_ANSI_U: UInt16 = 32
+    private static let kVK_ANSI_V: UInt16 = 9
 
     override func keyDown(with event: NSEvent) {
         if event.modifierFlags.contains(.command) {
@@ -877,11 +1070,103 @@ class TabAwareTextView: NSTextView {
             case Self.kVK_ANSI_U:
                 editorState?.toggleUnderline()
                 return
+            case Self.kVK_ANSI_V:
+                if pasteImageFromClipboard() { return }
             default:
                 break
             }
         }
         super.keyDown(with: event)
+    }
+
+    // MARK: - Drag & Drop file attachments
+
+    private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp", "heic"]
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let pasteboard = sender.draggingPasteboard
+        if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !fileURLs.isEmpty {
+            var nonImageURLs: [URL] = []
+            for url in fileURLs {
+                if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
+                    insertInlineImage(from: url)
+                } else {
+                    nonImageURLs.append(url)
+                }
+            }
+            if !nonImageURLs.isEmpty {
+                onAttachFiles?(nonImageURLs)
+            }
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
+
+    // MARK: - Paste image from clipboard
+
+    /// Returns true if an image was pasted, false if pasteboard has no image.
+    func pasteImageFromClipboard() -> Bool {
+        let pb = NSPasteboard.general
+        let types = pb.types ?? []
+
+        let hasString = types.contains(.string) || types.contains(.rtf) || types.contains(.html)
+        let hasImage = types.contains(.tiff) || types.contains(.png)
+            || types.contains(NSPasteboard.PasteboardType("public.jpeg"))
+
+        if hasImage && !hasString, let image = NSImage(pasteboard: pb) {
+            insertInlineImage(image)
+            return true
+        }
+
+        // File URLs that are images (e.g., copied from Finder)
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            let imageURLs = urls.filter { Self.imageExtensions.contains($0.pathExtension.lowercased()) }
+            if !imageURLs.isEmpty && !hasString {
+                for url in imageURLs {
+                    insertInlineImage(from: url)
+                }
+                return true
+            }
+        }
+
+        return false
+    }
+
+    // MARK: - Inline image insertion
+
+    private func insertInlineImage(from url: URL) {
+        guard let image = NSImage(contentsOf: url) else {
+            onAttachFiles?([url])
+            return
+        }
+        insertInlineImage(image)
+    }
+
+    private func insertInlineImage(_ image: NSImage) {
+        let maxWidth: CGFloat = min(textContainer?.containerSize.width ?? 500, 600) - 20
+        let imageSize = image.size
+        let scale = imageSize.width > maxWidth ? maxWidth / imageSize.width : 1.0
+        let displaySize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
+
+        let attachment = NSTextAttachment()
+        let cell = NSTextAttachmentCell(imageCell: image)
+        cell.image?.size = displaySize
+        attachment.attachmentCell = cell
+
+        // Save typing attributes before insertion
+        let savedAttrs = typingAttributes
+
+        let attrStr = NSAttributedString(attachment: attachment)
+        let location = selectedRange().location
+        textStorage?.insert(attrStr, at: location)
+        setSelectedRange(NSRange(location: location + 1, length: 0))
+
+        // Restore typing attributes so text after image keeps correct color/font
+        typingAttributes = savedAttrs
+
+        delegate?.textDidChange?(Notification(name: NSText.didChangeNotification, object: self))
     }
 
     override func insertTab(_ sender: Any?) {

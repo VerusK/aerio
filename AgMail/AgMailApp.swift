@@ -103,6 +103,7 @@ final class AppState: ObservableObject {
     private var defaultsCancellable: AnyCancellable?
 
     static let showDockBadgeKey = "showDockBadge"
+    static let downloadsDirectoryKey = "downloadsDirectory"
 
     private static let logger = Logger(subsystem: "AgMail", category: "AppState")
 

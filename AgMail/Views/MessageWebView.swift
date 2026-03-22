@@ -16,6 +16,9 @@ struct MessageContentData {
     struct AttachmentInfo {
         let name: String
         let size: String
+        let attachmentId: String?
+        let messageId: String?
+        let mimeType: String?
     }
 }
 
@@ -55,17 +58,43 @@ private func findLeaf(_ payload: GmailPayload, mimeType target: String) -> Strin
     return String(data: decoded, encoding: .utf8)
 }
 
-/// Extract attachment names from MIME parts.
-func extractAttachments(_ payload: GmailPayload) -> [MessageContentData.AttachmentInfo] {
+/// Extract attachment info from MIME parts, including IDs needed for download.
+func extractAttachments(_ payload: GmailPayload, messageId: String? = nil) -> [MessageContentData.AttachmentInfo] {
     var result: [MessageContentData.AttachmentInfo] = []
     if let parts = payload.parts {
         for part in parts {
             if let filename = part.filename, !filename.isEmpty {
                 let size = part.body?.size ?? 0
                 let sizeStr = size > 0 ? formatSize(size) : ""
-                result.append(.init(name: filename, size: sizeStr))
+                result.append(.init(
+                    name: filename,
+                    size: sizeStr,
+                    attachmentId: part.body?.attachmentId,
+                    messageId: messageId,
+                    mimeType: part.mimeType
+                ))
             }
-            result.append(contentsOf: extractAttachments(part))
+            result.append(contentsOf: extractAttachments(part, messageId: messageId))
+        }
+    }
+    return result
+}
+
+/// Extract inline image CID mappings: Content-ID → (attachmentId, mimeType).
+/// These parts have a Content-ID header and attachmentId but may or may not have a filename.
+func extractInlineImages(_ payload: GmailPayload) -> [(cid: String, attachmentId: String, mimeType: String)] {
+    var result: [(cid: String, attachmentId: String, mimeType: String)] = []
+    if let parts = payload.parts {
+        for part in parts {
+            if let headers = part.headers,
+               let cidHeader = headers.first(where: { $0.name.lowercased() == "content-id" }),
+               let attachmentId = part.body?.attachmentId,
+               let mimeType = part.mimeType, mimeType.lowercased().hasPrefix("image/") {
+                // Strip angle brackets from CID: "<image001>" → "image001"
+                let cid = cidHeader.value.trimmingCharacters(in: CharacterSet(charactersIn: "<>"))
+                result.append((cid: cid, attachmentId: attachmentId, mimeType: mimeType))
+            }
+            result.append(contentsOf: extractInlineImages(part))
         }
     }
     return result
@@ -101,6 +130,7 @@ struct NativeMessageDetail: View {
     @State private var messageContent: MessageContentData?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var downloadingAttachment: String?
     @StateObject private var bodyWebViewStore = BodyWebViewStore()
 
     var body: some View {
@@ -159,19 +189,80 @@ struct NativeMessageDetail: View {
             }
 
             if let attachments = messageContent?.attachments, !attachments.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    ForEach(attachments, id: \.name) { att in
-                        Text("\(att.name) \(att.size)")
-                            .font(.system(size: 11))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.gray.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "paperclip")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("\(attachments.count) attachment\(attachments.count == 1 ? "" : "s")")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    FlowLayout(spacing: 8) {
+                        ForEach(attachments, id: \.name) { att in
+                            HStack(spacing: 0) {
+                                // Main area: click to open
+                                Button {
+                                    downloadAttachment(att, openAfter: true)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        if downloadingAttachment == att.name {
+                                            ProgressView()
+                                                .scaleEffect(0.6)
+                                                .frame(width: 14, height: 14)
+                                        } else {
+                                            Image(systemName: iconForAttachment(att.mimeType))
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(.blue)
+                                        }
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(att.name)
+                                                .font(.system(size: 12, weight: .medium))
+                                                .lineLimit(1)
+                                            if !att.size.isEmpty {
+                                                Text(att.size)
+                                                    .font(.system(size: 10))
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                }
+                                .buttonStyle(.plain)
+                                .onHover { hovering in
+                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                                .help("Open \(att.name)")
+
+                                Divider().frame(height: 20)
+
+                                // Download-only button
+                                Button {
+                                    downloadAttachment(att, openAfter: false)
+                                } label: {
+                                    Image(systemName: "arrow.down.to.line")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 28, height: 28)
+                                }
+                                .buttonStyle(.plain)
+                                .onHover { hovering in
+                                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                                .help("Save to Downloads")
+                            }
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            )
+                        }
                     }
                 }
+                .padding(.top, 4)
             }
         }
         .padding(12)
@@ -231,6 +322,54 @@ struct NativeMessageDetail: View {
         }
     }
 
+    private func iconForAttachment(_ mimeType: String?) -> String {
+        guard let mime = mimeType?.lowercased() else { return "doc" }
+        if mime.hasPrefix("image/") { return "photo" }
+        if mime.hasPrefix("video/") { return "film" }
+        if mime.hasPrefix("audio/") { return "music.note" }
+        if mime.contains("pdf") { return "doc.richtext" }
+        if mime.contains("zip") || mime.contains("archive") || mime.contains("compressed") { return "doc.zipper" }
+        if mime.contains("spreadsheet") || mime.contains("excel") { return "tablecells" }
+        if mime.contains("presentation") || mime.contains("powerpoint") { return "rectangle.on.rectangle" }
+        if mime.contains("word") || mime.contains("document") { return "doc.text" }
+        return "doc"
+    }
+
+    private func downloadAttachment(_ att: MessageContentData.AttachmentInfo, openAfter: Bool) {
+        guard let attachmentId = att.attachmentId, let messageId = att.messageId else { return }
+        downloadingAttachment = att.name
+        Task {
+            do {
+                let data = try await apiManager.downloadAttachment(
+                    messageId: messageId,
+                    attachmentId: attachmentId,
+                    accountId: email.accountId
+                )
+                let downloadsDir = SettingsView.resolvedDownloadsDirectory()
+                try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
+                var fileURL = downloadsDir.appendingPathComponent(att.name)
+                var counter = 1
+                let baseName = (att.name as NSString).deletingPathExtension
+                let ext = (att.name as NSString).pathExtension
+                while FileManager.default.fileExists(atPath: fileURL.path) {
+                    let newName = ext.isEmpty ? "\(baseName) (\(counter))" : "\(baseName) (\(counter)).\(ext)"
+                    fileURL = downloadsDir.appendingPathComponent(newName)
+                    counter += 1
+                }
+                try data.write(to: fileURL)
+                if openAfter {
+                    NSWorkspace.shared.open(fileURL)
+                } else {
+                    // Bounce in Dock to signal download complete
+                    NSApp.requestUserAttention(.informationalRequest)
+                }
+            } catch {
+                logger.error("Failed to download attachment: \(error.localizedDescription)")
+            }
+            downloadingAttachment = nil
+        }
+    }
+
     private func loadContent() {
         isLoading = true
         errorMessage = nil
@@ -245,7 +384,7 @@ struct NativeMessageDetail: View {
                 let subject = headers.first { $0.name.lowercased() == "subject" }?.value ?? email.subject
                 let dateStr = headers.first { $0.name.lowercased() == "date" }?.value ?? email.date.shortRelative
 
-                let bodyHTML: String
+                var bodyHTML: String
                 if let payload = message.payload {
                     let extracted = extractBodyFromPayload(payload)
                     bodyHTML = extracted.isEmpty ? "<p>No message body</p>" : extracted
@@ -253,7 +392,56 @@ struct NativeMessageDetail: View {
                     bodyHTML = "<p>No message body</p>"
                 }
 
-                let attachments = message.payload.map { extractAttachments($0) } ?? []
+                // Resolve inline CID images → data URIs, and collect resolved CIDs
+                var resolvedAttachmentIds: Set<String> = []
+                if let payload = message.payload {
+                    let inlineImages = extractInlineImages(payload)
+                    for inline in inlineImages {
+                        guard bodyHTML.contains("cid:\(inline.cid)") else { continue }
+                        do {
+                            let data = try await apiManager.downloadAttachment(
+                                messageId: message.id,
+                                attachmentId: inline.attachmentId,
+                                accountId: email.accountId
+                            )
+                            let base64 = data.base64EncodedString()
+                            let dataURI = "data:\(inline.mimeType);base64,\(base64)"
+                            bodyHTML = bodyHTML.replacingOccurrences(of: "cid:\(inline.cid)", with: dataURI)
+                            resolvedAttachmentIds.insert(inline.attachmentId)
+                        } catch {
+                            logger.debug("Failed to resolve inline image \(inline.cid): \(error.localizedDescription)")
+                        }
+                    }
+                }
+
+                let attachments = message.payload.map { extractAttachments($0, messageId: message.id) } ?? []
+
+                // Embed remaining image attachments (not resolved via CID) at the end of the body
+                let unresolvedImages = attachments.filter {
+                    guard let mime = $0.mimeType?.lowercased(), mime.hasPrefix("image/") else { return false }
+                    guard let attId = $0.attachmentId else { return false }
+                    return !resolvedAttachmentIds.contains(attId)
+                }
+                if !unresolvedImages.isEmpty {
+                    var imagesHTML = "<div style=\"margin-top: 16px;\">"
+                    for imgAtt in unresolvedImages {
+                        guard let attachmentId = imgAtt.attachmentId else { continue }
+                        do {
+                            let data = try await apiManager.downloadAttachment(
+                                messageId: message.id,
+                                attachmentId: attachmentId,
+                                accountId: email.accountId
+                            )
+                            let base64 = data.base64EncodedString()
+                            let mime = imgAtt.mimeType ?? "image/png"
+                            imagesHTML += "<p><img src=\"data:\(mime);base64,\(base64)\" style=\"max-width:100%;\" alt=\"\(imgAtt.name)\"></p>"
+                        } catch {
+                            logger.debug("Failed to embed image \(imgAtt.name): \(error.localizedDescription)")
+                        }
+                    }
+                    imagesHTML += "</div>"
+                    bodyHTML += imagesHTML
+                }
 
                 let content = MessageContentData(
                     from: from, to: to, cc: cc, subject: subject,
@@ -367,4 +555,45 @@ struct BodyWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {}
+}
+
+/// Simple horizontal flow layout that wraps items to the next line.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = computeLayout(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = computeLayout(proposal: proposal, subviews: subviews)
+        for (index, offset) in result.offsets.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y), proposal: .unspecified)
+        }
+    }
+
+    private func computeLayout(proposal: ProposedViewSize, subviews: Subviews) -> (offsets: [CGPoint], size: CGSize) {
+        let maxWidth = proposal.width ?? .infinity
+        var offsets: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth && x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            offsets.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x - spacing)
+        }
+
+        return (offsets, CGSize(width: maxX, height: y + rowHeight))
+    }
 }
