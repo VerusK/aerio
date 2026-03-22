@@ -101,8 +101,8 @@ struct NativeMessageDetail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            messageHeaders
             actionButtonBar
+            messageHeaders
             Divider()
             if isLoading {
                 ProgressView("Loading message…")
@@ -174,7 +174,8 @@ struct NativeMessageDetail: View {
             actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All (\(ShortcutAction.replyAll.shortcutLabel))", action: onReplyAll)
             actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))", action: onForward)
 
-            Spacer()
+            Divider()
+                .frame(height: 16)
 
             if folder == .inbox {
                 actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)

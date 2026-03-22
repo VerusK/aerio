@@ -7,6 +7,10 @@ import os.log
 struct AgMailApp: App {
     @StateObject private var appState = AppState()
 
+    init() {
+        UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
+    }
+
     var body: some Scene {
         WindowGroup {
             MainView(

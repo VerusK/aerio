@@ -180,7 +180,9 @@ struct MainView: View {
                 unifiedMailbox: unifiedMailbox,
                 oauthManager: oauthManager,
                 selectedFolder: $selectedFolder,
-                selectedAccountId: $selectedAccountId
+                selectedAccountId: $selectedAccountId,
+                isRefreshing: isRefreshing,
+                onRefresh: { performRefresh() }
             )
             .background(SplitViewConfigurator(autosaveName: "AgMailMainSplit"))
 
@@ -209,21 +211,6 @@ struct MainView: View {
                 .frame(minWidth: 300, idealWidth: 500)
         }
         .frame(minWidth: 900, minHeight: 600)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                if isRefreshing {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else {
-                    Button {
-                        performRefresh()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh (⌘⇧E)")
-                }
-            }
-        }
         .onChange(of: selectedAccountId) { _, newValue in
             unifiedMailbox.selectedAccountId = newValue
             if !isNavigatingProgrammatically { selectedEmailId = nil }
@@ -459,7 +446,7 @@ struct MainView: View {
         case .refresh:
             performRefresh()
         case .openSettings:
-            KeyboardShortcuts.openSettings()
+            return false // let macOS handle Cmd+, natively via Settings scene
         case .search:
             showingSearch.toggle()
         case .sendMessage:

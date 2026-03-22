@@ -6,6 +6,8 @@ struct UnifiedSidebar: View {
     let oauthManager: OAuthManager
     @Binding var selectedFolder: Folder
     @Binding var selectedAccountId: String?
+    var isRefreshing: Bool = false
+    var onRefresh: (() -> Void)?
     @State private var showingAccountSetup = false
     @State private var editingAccount: Account?
 
@@ -149,17 +151,32 @@ struct UnifiedSidebar: View {
             Button {
                 showingAccountSetup = true
             } label: {
-                Label("Add Account", systemImage: "plus")
+                Image(systemName: "plus")
                     .font(.subheadline)
             }
             .buttonStyle(.plain)
+            .help("Add Account")
             .accessibilityIdentifier("account-add")
 
             Spacer()
 
-            Button {
-                KeyboardShortcuts.openSettings()
-            } label: {
+            if isRefreshing {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 16, height: 16)
+            } else {
+                Button {
+                    onRefresh?()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh (⌘⇧E)")
+                .accessibilityIdentifier("refresh-button")
+            }
+
+            SettingsLink {
                 Image(systemName: "gearshape")
                     .font(.subheadline)
             }
