@@ -16,56 +16,70 @@ struct MessageList: View {
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
     var processingEmailId: String? = nil
-    var isFocused: Bool = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Color.accentColor.opacity(isFocused ? 1 : 0).frame(height: 2)
-            List(selection: $selectedEmailId) {
-                    ForEach(filteredEmails) { email in
-                        let isProcessing = processingEmailId == email.id
-                        MessageRow(
-                            email: email,
-                            account: accountManager.account(for: email.accountId),
-                            showAccountIndicator: selectedAccountId == nil
-                        )
-                        .tag(email.id)
-                        .overlay {
-                            if isProcessing {
-                                HStack(spacing: 6) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text("Processing…")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .background(.background.opacity(0.8))
-                            }
-                        }
-                        .opacity(isProcessing ? 0.6 : 1.0)
-                        .allowsHitTesting(!isProcessing)
-                        .contextMenu {
-                            contextMenuItems(for: email)
+        ScrollViewReader { proxy in
+            List {
+                ForEach(filteredEmails) { email in
+                    let isProcessing = processingEmailId == email.id
+                    let isSelected = selectedEmailId == email.id
+                    MessageRow(
+                        email: email,
+                        account: accountManager.account(for: email.accountId),
+                        showAccountIndicator: selectedAccountId == nil
+                    )
+                    .id(email.id)
+                    .listRowBackground(
+                        isSelected
+                            ? Color.accentColor.opacity(0.25)
+                            : nil
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if !isProcessing {
+                            selectedEmailId = email.id
                         }
                     }
-
-                    if hasMoreEmails {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                            Spacer()
+                    .overlay {
+                        if isProcessing {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Processing…")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(.background.opacity(0.8))
                         }
-                        .onAppear {
-                            onLoadMore?()
-                        }
-                        .accessibilityIdentifier("load-more-sentinel")
+                    }
+                    .opacity(isProcessing ? 0.6 : 1.0)
+                    .contextMenu {
+                        contextMenuItems(for: email)
                     }
                 }
-                .listStyle(.inset)
+
+                if hasMoreEmails {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                        Spacer()
+                    }
+                    .onAppear {
+                        onLoadMore?()
+                    }
+                    .accessibilityIdentifier("load-more-sentinel")
+                }
+            }
+            .listStyle(.inset)
+            .frame(minWidth: 250)
+            .onChange(of: filteredEmails.count) {
+                if let selectedEmailId {
+                    proxy.scrollTo(selectedEmailId, anchor: nil)
+                }
+            }
         }
-        .frame(minWidth: 250)
     }
 
     @ViewBuilder

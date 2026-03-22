@@ -191,26 +191,28 @@ struct MainView: View {
             )
             .background(SplitViewConfigurator(autosaveName: "AgMailMainSplit"))
 
-            MessageList(
-                unifiedMailbox: unifiedMailbox,
-                accountManager: accountManager,
-                selectedEmailId: $selectedEmailId,
-                selectedFolder: selectedFolder,
-                selectedAccountId: selectedAccountId,
-                onReply: { email in triggerCompose(.reply, msgId: email.msgId) },
-                onReplyAll: { email in triggerCompose(.replyAll, msgId: email.msgId) },
-                onForward: { email in triggerCompose(.forward, msgId: email.msgId) },
-                onArchive: { email in executeActionOnEmail(email, action: .archive) },
-                onDelete: { email in executeActionOnEmail(email, action: .delete) },
-                onSpam: { email in executeActionOnEmail(email, action: .spam) },
-                onMoveToInbox: { email in executeActionOnEmail(email, action: .moveToInbox) },
-                onLoadMore: { loadMoreEmails() },
-                hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId),
-                processingEmailId: processingEmailId,
-                isFocused: focusedPanel == .messageList
-            )
-            .overlay {
-                messageListOverlay
+            VStack(spacing: 0) {
+                Color.accentColor.opacity(focusedPanel == .messageList ? 1 : 0).frame(height: 2)
+                MessageList(
+                    unifiedMailbox: unifiedMailbox,
+                    accountManager: accountManager,
+                    selectedEmailId: $selectedEmailId,
+                    selectedFolder: selectedFolder,
+                    selectedAccountId: selectedAccountId,
+                    onReply: { email in triggerCompose(.reply, msgId: email.msgId) },
+                    onReplyAll: { email in triggerCompose(.replyAll, msgId: email.msgId) },
+                    onForward: { email in triggerCompose(.forward, msgId: email.msgId) },
+                    onArchive: { email in executeActionOnEmail(email, action: .archive) },
+                    onDelete: { email in executeActionOnEmail(email, action: .delete) },
+                    onSpam: { email in executeActionOnEmail(email, action: .spam) },
+                    onMoveToInbox: { email in executeActionOnEmail(email, action: .moveToInbox) },
+                    onLoadMore: { loadMoreEmails() },
+                    hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId),
+                    processingEmailId: processingEmailId
+                )
+                .overlay {
+                    messageListOverlay
+                }
             }
             .frame(minWidth: 250, idealWidth: 350)
 
