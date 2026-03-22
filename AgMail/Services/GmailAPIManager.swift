@@ -672,30 +672,43 @@ final class GmailAPIManager: ObservableObject {
     }
 
     func searchEmails(query: String) async -> [Email] {
-        await withTaskGroup(of: [Email].self) { group in
+        let (emails, _) = await searchEmailsWithTokens(query: query)
+        return emails
+    }
+
+    func searchEmailsWithTokens(query: String, pageTokens: [String: String] = [:]) async -> ([Email], [String: String]) {
+        await withTaskGroup(of: (String, [Email], String?).self) { group in
             for (accountId, client) in clients {
+                // Skip accounts that had no more pages on previous call
+                if !pageTokens.isEmpty && pageTokens[accountId] == nil { continue }
+                let token = pageTokens[accountId]
                 group.addTask { @MainActor in
                     do {
-                        let listResponse = try await client.listMessages(query: query, maxResults: 20)
+                        let listResponse = try await client.listMessages(query: query, maxResults: 20, pageToken: token)
                         let messageIds = listResponse.messages?.map(\.id) ?? []
-                        guard !messageIds.isEmpty else { return [] }
+                        guard !messageIds.isEmpty else { return (accountId, [], nil) }
                         let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
-                        return messages.compactMap { msg -> Email? in
+                        let emails = messages.compactMap { msg -> Email? in
                             let labelIds = msg.labelIds ?? []
                             let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
                             return self.convertGmailMessageToEmail(msg, accountId: accountId, folder: folder, skipLabelCheck: true)
                         }
+                        return (accountId, emails, listResponse.nextPageToken)
                     } catch {
                         logger.error("[\(accountId)] searchEmails failed: \(error.localizedDescription)")
-                        return []
+                        return (accountId, [], nil)
                     }
                 }
             }
             var results: [Email] = []
-            for await emails in group {
+            var nextTokens: [String: String] = [:]
+            for await (accountId, emails, nextToken) in group {
                 results.append(contentsOf: emails)
+                if let nextToken {
+                    nextTokens[accountId] = nextToken
+                }
             }
-            return Email.sortedByDate(results)
+            return (Email.sortedByDate(results), nextTokens)
         }
     }
 
