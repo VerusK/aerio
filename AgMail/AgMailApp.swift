@@ -19,6 +19,11 @@ struct AgMailApp: App {
             )
             .background(WindowAccessor())
         }
+        .commands {
+            // Suppress default Cmd+N "New Window" — our KeyEventInterceptor
+            // handles it as "Compose new email"
+            CommandGroup(replacing: .newItem) { }
+        }
 
         Settings {
             SettingsView()

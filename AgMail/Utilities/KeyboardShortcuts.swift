@@ -99,6 +99,29 @@ struct NSEventKeyBinding: Equatable, Sendable {
 
 struct KeyboardShortcuts: Sendable {
 
+    // MARK: - Hardware keyCode → QWERTY character mapping
+    // These are macOS virtual key codes (kVK_*) which correspond to physical
+    // key positions and are independent of the active keyboard layout.
+
+    private static let keyCodeToQWERTY: [UInt16: Character] = [
+        0x00: "a", 0x01: "s", 0x02: "d", 0x03: "f", 0x04: "h",
+        0x05: "g", 0x06: "z", 0x07: "x", 0x08: "c", 0x09: "v",
+        0x0B: "b", 0x0C: "q", 0x0D: "w", 0x0E: "e", 0x0F: "r",
+        0x10: "y", 0x11: "t", 0x12: "1", 0x13: "2", 0x14: "3",
+        0x15: "4", 0x16: "6", 0x17: "5", 0x18: "=", 0x19: "9",
+        0x1A: "7", 0x1B: "-", 0x1C: "8", 0x1D: "0", 0x1E: "]",
+        0x1F: "o", 0x20: "u", 0x21: "[", 0x22: "i", 0x23: "p",
+        0x25: "l", 0x26: "j", 0x27: "'", 0x28: "k", 0x29: ";",
+        0x2A: "\\", 0x2B: ",", 0x2C: "/", 0x2D: "n", 0x2E: "m",
+        0x2F: ".", 0x32: "`",
+        // Special keys
+        0x24: "\r",         // Return
+        0x7E: "\u{F700}",  // Up arrow
+        0x7D: "\u{F701}",  // Down arrow
+        0x7B: "\u{F702}",  // Left arrow
+        0x7C: "\u{F703}",  // Right arrow
+    ]
+
     // MARK: - Primary bindings (NSEvent-based, layout-independent)
 
     static let eventBindings: [ShortcutAction: NSEventKeyBinding] = [
@@ -129,14 +152,13 @@ struct KeyboardShortcuts: Sendable {
         .previousMessageAlt: NSEventKeyBinding("\u{F700}", modifiers: .option),
     ]
 
-    // MARK: - NSEvent matching (layout-independent)
+    // MARK: - NSEvent matching (layout-independent via keyCode)
 
-    /// Match an NSEvent against the registered bindings using `charactersIgnoringModifiers`
-    /// which always returns the QWERTY character for the physical key, regardless of the
-    /// active input method / keyboard layout.
+    /// Match an NSEvent against the registered bindings using `event.keyCode`
+    /// (hardware scan code) mapped to QWERTY character. This is truly
+    /// layout-independent — works on Russian, German, French, etc.
     static func action(for event: NSEvent) -> ShortcutAction? {
-        guard let chars = event.charactersIgnoringModifiers?.lowercased(),
-              let char = chars.first else { return nil }
+        guard let char = keyCodeToQWERTY[event.keyCode] else { return nil }
 
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
 
@@ -201,34 +223,39 @@ struct KeyboardShortcuts: Sendable {
     }
 }
 
-// MARK: - KeyEventInterceptor
+// MARK: - KeyEventMonitor
 
-/// NSViewRepresentable that intercepts key events via `performKeyEquivalent`,
-/// which fires BEFORE the system menu bar processes them. This ensures
-/// shortcuts work on any keyboard layout (English, Russian, etc.).
-struct KeyEventInterceptor: NSViewRepresentable {
-    let handler: (NSEvent) -> Bool
+/// Installs an `NSEvent.addLocalMonitorForEvents(matching: .keyDown)` handler
+/// that intercepts key events during `NSApplication.sendEvent(_:)` — BEFORE
+/// they reach the window's responder chain or the main menu.
+/// This guarantees layout-independent shortcuts work on any keyboard layout.
+@MainActor
+final class KeyEventMonitor {
+    private var monitor: Any?
+    private var handler: ((NSEvent) -> Bool)?
 
-    func makeNSView(context: Context) -> KeyInterceptorView {
-        let view = KeyInterceptorView()
-        view.handler = handler
-        return view
-    }
-
-    func updateNSView(_ nsView: KeyInterceptorView, context: Context) {
-        nsView.handler = handler
-    }
-
-    final class KeyInterceptorView: NSView {
-        var handler: ((NSEvent) -> Bool)?
-
-        override var acceptsFirstResponder: Bool { false }
-
-        override func performKeyEquivalent(with event: NSEvent) -> Bool {
-            if let handler, handler(event) {
-                return true
+    func install(handler: @escaping (NSEvent) -> Bool) {
+        self.handler = handler
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if let self, let handler = self.handler, handler(event) {
+                return nil // consume the event
             }
-            return super.performKeyEquivalent(with: event)
+            return event // pass through
+        }
+    }
+
+    func uninstall() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        monitor = nil
+        handler = nil
+    }
+
+    deinit {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
         }
     }
 }

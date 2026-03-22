@@ -156,6 +156,7 @@ struct MainView: View {
     @State private var showingSearch = false
     @State private var isNavigatingProgrammatically = false
     @StateObject private var searchViewModel: SearchViewModel
+    @State private var keyMonitor = KeyEventMonitor()
 
     init(accountManager: AccountManager, unifiedMailbox: UnifiedMailbox, apiManager: GmailAPIManager, oauthManager: OAuthManager, contactsCache: ContactsCache? = nil, notificationManager: NotificationManager? = nil) {
         self.accountManager = accountManager
@@ -205,9 +206,6 @@ struct MainView: View {
             messageDetailPanel
                 .frame(minWidth: 300, idealWidth: 500)
         }
-        .background(KeyEventInterceptor(handler: { event in
-            handleKeyEvent(event)
-        }))
         .frame(minWidth: 900, minHeight: 600)
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -239,12 +237,14 @@ struct MainView: View {
             Task { await apiManager.navigateAllToFolder(newValue) }
         }
         .onAppear {
+            keyMonitor.install { event in handleKeyEvent(event) }
             apiManager.startPollingAll()
             notificationManager?.onNotificationClick = { [self] emailId, accountId in
                 navigateToEmail(msgId: emailId, accountId: accountId)
             }
         }
         .onDisappear {
+            keyMonitor.uninstall()
             apiManager.stopPollingAll()
         }
         .sheet(isPresented: $showingCompose) {
