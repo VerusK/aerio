@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreServices
 import UserNotifications
 import os.log
 
@@ -9,6 +10,11 @@ struct AgMailApp: App {
 
     init() {
         UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
+        // Register with Launch Services so notification clicks don't show
+        // "The application can't be opened" when running from a build directory
+        if let bundleURL = Bundle.main.bundleURL as CFURL? {
+            LSRegisterURL(bundleURL, true)
+        }
     }
 
     var body: some Scene {
