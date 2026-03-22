@@ -45,12 +45,17 @@ struct UnifiedSidebar: View {
             } label: {
                 folderLabel(folder)
             }
+            .listRowBackground(
+                selectedFolder == folder
+                    ? Color.accentColor.opacity(0.18)
+                    : Color.clear
+            )
             .accessibilityIdentifier("folder-\(folder.rawValue)")
         } else {
             folderLabel(folder)
                 .listRowBackground(
                     selectedFolder == folder && selectedAccountId == nil
-                        ? Color.accentColor.opacity(0.15)
+                        ? Color.accentColor.opacity(0.18)
                         : Color.clear
                 )
                 .accessibilityIdentifier("folder-\(folder.rawValue)")
@@ -58,11 +63,14 @@ struct UnifiedSidebar: View {
     }
 
     private func folderLabel(_ folder: Folder) -> some View {
-        HStack {
+        let isActive = selectedFolder == folder
+        return HStack {
             Image(systemName: folder.iconName)
                 .frame(width: 20)
+                .foregroundStyle(isActive ? Color.accentColor : .secondary)
             Text(folder.displayName)
                 .lineLimit(1)
+                .fontWeight(isActive ? .semibold : .regular)
             Spacer()
             let count = unifiedMailbox.unreadCount(for: folder)
             if count > 0 {
