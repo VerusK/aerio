@@ -1,21 +1,23 @@
 # AgMail — Gmail Multi-Account Client for macOS
 
-Native macOS application (Swift/SwiftUI) for managing multiple Gmail accounts. Uses the Gmail REST API with OAuth 2.0 PKCE authentication — no IMAP, no SMTP, no web scraping.
+Native macOS application (Swift/SwiftUI) for managing multiple Gmail accounts. Uses the Gmail REST API with OAuth 2.0 PKCE authentication — no IMAP, no SMTP, no web scraping. Designed for keyboard-first workflow.
 
 ## Features
 
-- Multiple Gmail accounts with OAuth 2.0 PKCE token-based authentication (tokens stored in macOS Keychain)
+- Multiple Gmail accounts with OAuth 2.0 PKCE authentication (tokens in macOS Keychain)
 - Unified inbox — merged emails from all accounts sorted by date
-- 4-panel interface: Account sidebar | Folders | Message list | Native message reader
-- Gmail actions via REST API: archive, delete, mark as spam, mark as read
-- Compose: new email, reply, reply all, forward — native SwiftUI form sent via Gmail API
-- Incremental sync via Gmail History API for efficient polling
-- Keyboard shortcuts (Gmail-style): j/k navigation, e/archive, #/delete, r/reply, c/compose
-- Alt+Up/Down alternative message navigation
-- Settings view (Cmd+,) with hotkey reference and dock badge toggle
-- Dock badge showing total unread email count across all accounts
+- 3-panel interface: Unified sidebar (folders + accounts) | Message list | Message detail
+- Full keyboard-only navigation: panel focus (←/→), in-panel nav (↑/↓/J/K), Go-To folders (G+key), sidebar expand (Space)
+- Gmail actions via REST API: archive, delete, mark as spam, move to inbox, mark as read
+- Compose: new email, reply, reply all, forward — with address autocomplete from synced contacts
+- Draft auto-save on compose window close via Gmail Drafts API
+- Spotlight-style global search across all accounts (Cmd+Shift+F) with 300ms debounce
+- Incremental sync via Gmail History API with 410 Gone fallback to full re-fetch
+- Desktop notifications for new emails with click-to-navigate
+- Dock badge showing total unread count across all accounts
 - SwiftData cache for instant display on launch
 - Periodic polling (every 45 sec) for new emails
+- No external dependencies — only macOS SDK
 
 ## Architecture
 
@@ -23,10 +25,16 @@ Native macOS application (Swift/SwiftUI) for managing multiple Gmail accounts. U
 AgMail/
 ├── AgMailApp.swift              # Entry point, AppState
 ├── Models/                      # Account, Email, Folder, GmailAPIModels
-├── Services/                    # GmailAPIClient, GmailAPIManager, OAuthManager, OAuthConfig, KeychainHelper, AccountManager, UnifiedMailbox, RFC2822Builder
-├── Views/                       # MainView, AccountSidebar, FolderList, MessageList, MessageWebView, ComposeView, AccountSetupView, SettingsView
+├── Services/                    # GmailAPIClient, GmailAPIManager, OAuthManager,
+│                                # OAuthConfig, KeychainHelper, AccountManager,
+│                                # UnifiedMailbox, RFC2822Builder, ContactsCache,
+│                                # NotificationManager
+├── Views/                       # MainView (3-panel HSplitView), UnifiedSidebar,
+│                                # MessageList, MessageWebView (NativeMessageDetail),
+│                                # ComposeView, SearchOverlay, AccountSetupView,
+│                                # SettingsView
 ├── Persistence/                 # SwiftData cache (DataStore)
-└── Utilities/                   # KeyboardShortcuts
+└── Utilities/                   # KeyboardShortcuts, KeyEventMonitor
 ```
 
 ## Tech Stack
@@ -35,7 +43,8 @@ AgMail/
 - Gmail REST API (URLSession, no external dependencies)
 - OAuth 2.0 PKCE via ASWebAuthenticationSession
 - macOS Keychain (Security.framework) for token storage
-- SwiftData for local cache
+- SwiftData for local email cache
+- WKWebView for HTML email rendering (forced light theme)
 - async/await + Structured Concurrency
 
 ## Setup
@@ -52,14 +61,11 @@ Requirements: macOS 15+, Xcode 16+
 ## Build & Run
 
 ```bash
+# Build & Run (Release)
+xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Release -derivedDataPath build build && open build/Build/Products/Release/AgMail.app
+
 # Debug build
-xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Debug -derivedDataPath build build
-
-# Release build
-xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Release -derivedDataPath build build
-
-# Run the app
-open build/Build/Products/Release/AgMail.app
+xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Debug build
 
 # Run tests
 xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=macOS'
@@ -72,40 +78,62 @@ Or open `AgMail.xcodeproj` in Xcode and press Cmd+R to run, Cmd+U to test.
 1. Launch AgMail
 2. Click "+" to add a Gmail account — authenticate via the system browser OAuth sheet (supports 2FA and passkeys)
 3. Repeat for additional accounts
-4. Use the sidebar to switch between accounts or view the unified inbox
-5. Click an email to read it with native headers and rendered HTML body
-6. Use keyboard shortcuts for quick actions
+4. Navigate with keyboard: arrows to move between panels and items, G+I to jump to Inbox, etc.
+5. Use sidebar to browse folders; Space to expand/collapse account list within a folder
 
 ## Keyboard Shortcuts
 
+### Navigation
+
 | Key | Action |
 |-----|--------|
-| `Cmd+J` / `Cmd+K` | Next / previous email |
+| `←` / `→` | Switch focus between panels (Sidebar / List / Detail) |
+| `↑` / `↓` or `J` / `K` | Navigate within focused panel |
+| `Escape` | Move focus back (panel left) |
+| `Space` | Expand/collapse folder accounts in sidebar |
+| `Opt+↑` / `Opt+↓` | Next/previous email (always, regardless of panel) |
+
+### Go-To Folders
+
+Press `G` then one of:
+
+| Key | Folder |
+|-----|--------|
+| `I` | Inbox |
+| `S` | Sent |
+| `A` | Archive |
+| `T` | Trash |
+| `D` | Drafts |
+| `P` | Spam |
+
+### Actions
+
+| Key | Action |
+|-----|--------|
 | `Cmd+E` | Archive |
-| `Cmd+Shift+3` | Trash |
+| `Cmd+D` | Delete |
 | `Cmd+Shift+1` | Mark as spam |
-| `Cmd+R` | Reply |
-| `Cmd+Shift+R` | Reply all |
-| `Cmd+F` | Forward |
+| `Cmd+I` | Move to Inbox |
 | `Cmd+N` | Compose new |
-| `Alt+Up` / `Alt+Down` | Next / previous email (alt) |
-| `Cmd+1-9` | Switch account |
-| `Cmd+0` | Unified view |
-| `Cmd+,` | Open settings |
-| `Cmd+Shift+E` | Refresh |
-| `Cmd+/` | Search |
+| `Cmd+R` | Reply All |
+| `Cmd+Shift+R` | Reply |
+| `Cmd+T` | Forward |
 | `Cmd+Enter` | Send |
+| `Cmd+Shift+F` | Search |
+| `Cmd+Shift+E` | Refresh |
+| `Cmd+,` | Settings |
 
 ## Data Storage
 
 | Data | Location |
 |------|----------|
-| Accounts | `~/Library/Preferences/` (UserDefaults, key `agmail_accounts`) |
-| Email cache | `~/Library/Application Support/default.store` (SwiftData) |
-| Window frame | `~/Library/Preferences/` (UserDefaults, key `mainWindowFrame`) |
-| Split positions | `~/Library/Preferences/` (UserDefaults, key `NSSplitView Subview Frames AgMailMainSplit`) |
-| Dock badge toggle | `~/Library/Preferences/` (UserDefaults, key `showDockBadge`) |
-| OAuth tokens | macOS Keychain (per-account access/refresh tokens via KeychainHelper) |
+| Accounts | UserDefaults (key `agmail_accounts`) |
+| Email cache | SwiftData `~/Library/Application Support/default.store` |
+| Window frame | UserDefaults (key `mainWindowFrame`) |
+| Split positions | UserDefaults (autosave key `AgMailMainSplit`) |
+| Dock badge toggle | UserDefaults (key `showDockBadge`) |
+| Contacts cache | UserDefaults (key `agmail_contacts_cache`) |
+| OAuth tokens | macOS Keychain (per-account access/refresh tokens) |
 
 ## Uninstall
 
