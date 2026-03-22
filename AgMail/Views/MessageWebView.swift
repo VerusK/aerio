@@ -93,6 +93,7 @@ struct NativeMessageDetail: View {
     var onArchive: (() -> Void)?
     var onDelete: (() -> Void)?
     var onSpam: (() -> Void)?
+    var onMoveToInbox: (() -> Void)?
 
     @State private var messageContent: MessageContentData?
     @State private var isLoading = true
@@ -179,6 +180,9 @@ struct NativeMessageDetail: View {
 
             if folder == .inbox {
                 actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)
+            }
+            if folder != .inbox {
+                actionButton(icon: "tray.and.arrow.down", tooltip: "Move to Inbox (\(ShortcutAction.moveToInbox.shortcutLabel))", action: onMoveToInbox)
             }
             actionButton(icon: "trash", tooltip: "Delete (\(ShortcutAction.deleteMessage.shortcutLabel))", action: onDelete)
             actionButton(icon: "exclamationmark.octagon", tooltip: "Spam (\(ShortcutAction.spamMessage.shortcutLabel))", action: onSpam)

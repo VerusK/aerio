@@ -592,6 +592,26 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
+    func moveToInbox(msgId: String, accountId: String, folder: Folder) async throws {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
+        switch folder {
+        case .trash:
+            _ = try await client.untrashMessage(id: msgId)
+            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+        case .spam:
+            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox], removeLabels: [GmailLabelId.spam])
+        case .archive:
+            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+        default:
+            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+        }
+        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: folder == .trash)
+        if let emailCopy {
+            moveEmailToFolder(emailCopy, targetFolder: .inbox, accountId: accountId)
+        }
+    }
+
     private func moveEmailToFolder(_ email: Email, targetFolder: Folder, accountId: String) {
         let movedEmail = Email(
             msgId: email.msgId,

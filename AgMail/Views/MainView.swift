@@ -198,6 +198,7 @@ struct MainView: View {
                 onArchive: { email in executeActionOnEmail(email, action: .archive) },
                 onDelete: { email in executeActionOnEmail(email, action: .delete) },
                 onSpam: { email in executeActionOnEmail(email, action: .spam) },
+                onMoveToInbox: { email in executeActionOnEmail(email, action: .moveToInbox) },
                 onLoadMore: { loadMoreEmails() },
                 hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId),
                 processingEmailId: processingEmailId
@@ -326,7 +327,8 @@ struct MainView: View {
                     onForward: { triggerCompose(.forward, msgId: email.msgId) },
                     onArchive: { executeActionOnEmail(email, action: .archive) },
                     onDelete: { executeActionOnEmail(email, action: .delete) },
-                    onSpam: { executeActionOnEmail(email, action: .spam) }
+                    onSpam: { executeActionOnEmail(email, action: .spam) },
+                    onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) }
                 )
                 .id(email.id)
             } else {
@@ -439,6 +441,8 @@ struct MainView: View {
             }
         case .archiveMessage:
             if selectedFolder == .inbox { executeActionOnSelected(.archive) }
+        case .moveToInbox:
+            if selectedFolder != .inbox { executeActionOnSelected(.moveToInbox) }
         case .deleteMessage:
             executeActionOnSelected(.delete)
         case .spamMessage:
@@ -477,12 +481,13 @@ struct MainView: View {
     }
 
     enum EmailAction: CustomStringConvertible {
-        case archive, delete, spam
+        case archive, delete, spam, moveToInbox
         var description: String {
             switch self {
             case .archive: return "archive"
             case .delete: return "delete"
             case .spam: return "spam"
+            case .moveToInbox: return "move to inbox"
             }
         }
     }
@@ -520,6 +525,8 @@ struct MainView: View {
                     try await apiManager.deleteEmail(msgId: msgId, accountId: accountId, folder: folder)
                 case .spam:
                     try await apiManager.spamEmail(msgId: msgId, accountId: accountId, folder: folder)
+                case .moveToInbox:
+                    try await apiManager.moveToInbox(msgId: msgId, accountId: accountId, folder: folder)
                 }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     processingEmailId = nil

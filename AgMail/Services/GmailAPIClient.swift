@@ -124,6 +124,11 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         return try await execute(request: request)
     }
 
+    func untrashMessage(id: String) async throws -> GmailMessage {
+        let request = try buildRequest(path: "/messages/\(id)/untrash", method: "POST")
+        return try await execute(request: request)
+    }
+
     func sendMessage(raw: String) async throws -> GmailMessage {
         let body = GmailSendRequest(raw: raw)
         var request = try buildRequest(path: "/messages/send", method: "POST")

@@ -25,6 +25,7 @@ enum ShortcutAction: String, CaseIterable, Sendable {
     case selectAllAccounts    // Cmd+0
     case refresh              // Cmd+Shift+E
     case openSettings         // Cmd+,
+    case moveToInbox          // Cmd+I
     case nextMessageAlt       // Alt+Down
     case previousMessageAlt   // Alt+Up
 
@@ -53,6 +54,7 @@ enum ShortcutAction: String, CaseIterable, Sendable {
         case .selectAllAccounts: return "All Accounts"
         case .refresh:           return "Refresh"
         case .openSettings:      return "Settings"
+        case .moveToInbox:       return "Move to Inbox"
         case .nextMessageAlt:    return "Next Message"
         case .previousMessageAlt: return "Previous Message"
         }
@@ -147,6 +149,7 @@ struct KeyboardShortcuts: Sendable {
         .selectAccount9:    NSEventKeyBinding("9", modifiers: .command),
         .selectAllAccounts: NSEventKeyBinding("0", modifiers: .command),
         .refresh:           NSEventKeyBinding("e", modifiers: [.command, .shift]),
+        .moveToInbox:       NSEventKeyBinding("i", modifiers: .command),
         .openSettings:      NSEventKeyBinding(",", modifiers: .command),
         .nextMessageAlt:    NSEventKeyBinding("\u{F701}", modifiers: .option),
         .previousMessageAlt: NSEventKeyBinding("\u{F700}", modifiers: .option),

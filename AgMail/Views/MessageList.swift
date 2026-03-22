@@ -12,6 +12,7 @@ struct MessageList: View {
     var onArchive: ((Email) -> Void)?
     var onDelete: ((Email) -> Void)?
     var onSpam: ((Email) -> Void)?
+    var onMoveToInbox: ((Email) -> Void)?
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
     var processingEmailId: String? = nil
@@ -109,6 +110,15 @@ struct MessageList: View {
             } label: {
                 Text("Archive  \(ShortcutAction.archiveMessage.shortcutLabel)")
                 Image(systemName: "archivebox")
+            }
+        }
+
+        if selectedFolder != .inbox {
+            Button {
+                onMoveToInbox?(email)
+            } label: {
+                Text("Move to Inbox  \(ShortcutAction.moveToInbox.shortcutLabel)")
+                Image(systemName: "tray.and.arrow.down")
             }
         }
 
