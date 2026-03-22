@@ -65,7 +65,7 @@ final class OAuthManager: ObservableObject {
         ]
 
         let authURL = components.url!
-        let callbackScheme = "com.agmail"
+        let callbackScheme = "com.googleusercontent.apps.451766587137-5chs7l3rup98dkpavmijkq1gm8mj365h"
 
         let code = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
             let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: callbackScheme) { [weak self] callbackURL, error in
