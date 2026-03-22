@@ -633,12 +633,21 @@ final class GmailAPIManager: ObservableObject {
         logger.debug("[\(accountId)] moved email \(email.msgId) to \(targetFolder.displayName)")
     }
 
-    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil) async throws {
+    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
-        let raw = RFC2822Builder.buildRawMessage(
-            from: from, to: to, cc: cc, subject: subject, body: body,
-            inReplyTo: inReplyTo, references: references
-        )
+        let raw: String
+        if let htmlBody, !htmlBody.isEmpty {
+            raw = RFC2822Builder.buildRawHTMLMessage(
+                from: from, to: to, cc: cc, subject: subject,
+                htmlBody: htmlBody, plainBody: body,
+                inReplyTo: inReplyTo, references: references
+            )
+        } else {
+            raw = RFC2822Builder.buildRawMessage(
+                from: from, to: to, cc: cc, subject: subject, body: body,
+                inReplyTo: inReplyTo, references: references
+            )
+        }
         _ = try await client.sendMessage(raw: raw)
     }
 
@@ -670,14 +679,44 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
-    func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil) async throws {
+    func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
-        let raw = RFC2822Builder.buildRawMessage(
-            from: from, to: to, cc: cc, subject: subject, body: body,
-            inReplyTo: inReplyTo, references: references
-        )
-        _ = try await client.createDraft(raw: raw)
+        let raw: String
+        if let htmlBody, !htmlBody.isEmpty {
+            raw = RFC2822Builder.buildRawHTMLMessage(
+                from: from, to: to, cc: cc, subject: subject,
+                htmlBody: htmlBody, plainBody: body,
+                inReplyTo: inReplyTo, references: references
+            )
+        } else {
+            raw = RFC2822Builder.buildRawMessage(
+                from: from, to: to, cc: cc, subject: subject, body: body,
+                inReplyTo: inReplyTo, references: references
+            )
+        }
+        let draft = try await client.createDraft(raw: raw)
         logger.info("[\(accountId)] draft saved")
+
+        // Optimistic UI update: add draft email immediately
+        let msgId = draft.message?.id ?? draft.id
+        let snippet = String(body.prefix(100))
+        let draftEmail = Email(
+            msgId: msgId,
+            from: from,
+            subject: subject,
+            date: Date(),
+            snippet: snippet,
+            isRead: true,
+            accountId: accountId,
+            folder: .drafts
+        )
+        var current = emailsByAccount[accountId] ?? []
+        current.insert(draftEmail, at: 0)
+        emailsByAccount[accountId] = current
+        dataStore?.replaceEmails(for: accountId, folder: .drafts, with: current.filter { $0.folder == .drafts })
+
+        // Background sync to get accurate server state
+        Task { await syncAllAccounts() }
     }
 
     /// Find draft ID by message ID and return full draft content.

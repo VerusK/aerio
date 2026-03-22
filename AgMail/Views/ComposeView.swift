@@ -37,6 +37,7 @@ struct ComposeView: View {
     @State private var isPopulatingHeaders = false
     @State private var draftId: String?
     @State private var isLoadingDraft = false
+    @StateObject private var editorState = ComposeEditorState()
     @FocusState private var focusedField: ComposeField?
 
     enum ComposeField: Hashable {
@@ -102,9 +103,14 @@ struct ComposeView: View {
             fieldRow("Subject:", text: $subjectField, focusField: .subject)
             Divider()
 
+            // Formatting toolbar
+            formattingToolbar
+            Divider()
+
             // Body
             ComposeBodyEditor(
                 text: $bodyText,
+                editorState: editorState,
                 cursorAtStart: composeType == .reply || composeType == .replyAll || composeType == .forward,
                 onTab: { focusedField = .to },
                 onBackTab: { focusedField = .subject }
@@ -246,6 +252,55 @@ struct ComposeView: View {
     static func extractCurrentToken(from text: String) -> String {
         let parts = text.components(separatedBy: ",")
         return parts.last?.trimmingCharacters(in: .whitespaces) ?? ""
+    }
+
+    private var formattingToolbar: some View {
+        HStack(spacing: 2) {
+            formatButton("Bold", symbol: "bold", shortcut: "⌘B", isActive: editorState.isBold) {
+                editorState.toggleBold()
+            }
+            formatButton("Italic", symbol: "italic", shortcut: "⌘I", isActive: editorState.isItalic) {
+                editorState.toggleItalic()
+            }
+            formatButton("Underline", symbol: "underline", shortcut: "⌘U", isActive: editorState.isUnderlined) {
+                editorState.toggleUnderline()
+            }
+
+            Divider().frame(height: 16).padding(.horizontal, 4)
+
+            formatButton("Bullet List", symbol: "list.bullet", shortcut: nil, isActive: false) {
+                editorState.toggleBulletList()
+            }
+            formatButton("Numbered List", symbol: "list.number", shortcut: nil, isActive: false) {
+                editorState.toggleNumberedList()
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+    }
+
+    private func formatButton(_ label: String, symbol: String, shortcut: String?, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            // Return focus to the text editor after toolbar button click
+            DispatchQueue.main.async {
+                if let tv = editorState.textView {
+                    tv.window?.makeFirstResponder(tv)
+                }
+            }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: isActive ? .bold : .regular))
+                .foregroundStyle(isActive ? Color.accentColor : .primary)
+                .frame(width: 26, height: 22)
+                .background(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(shortcut.map { "\(label) (\($0))" } ?? label)
     }
 
     private var toolbar: some View {
@@ -499,6 +554,7 @@ struct ComposeView: View {
         guard isDirty, hasContent else { return }
         guard let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email else { return }
 
+        let html = editorState.htmlBody
         Task {
             do {
                 try await apiManager.saveDraft(
@@ -509,7 +565,8 @@ struct ComposeView: View {
                     body: bodyText,
                     accountId: selectedAccountId,
                     inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
-                    references: replyToEmail?.messageId ?? fetchedMessageId
+                    references: replyToEmail?.messageId ?? fetchedMessageId,
+                    htmlBody: html.isEmpty ? nil : html
                 )
             } catch {
                 logger.error("Draft save failed: \(error.localizedDescription)")
@@ -528,6 +585,7 @@ struct ComposeView: View {
             return
         }
 
+        let html = editorState.htmlBody
         Task {
             do {
                 if let draftId, composeType == .draft {
@@ -541,7 +599,8 @@ struct ComposeView: View {
                         body: bodyText,
                         accountId: selectedAccountId,
                         inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
-                        references: replyToEmail?.messageId ?? fetchedMessageId
+                        references: replyToEmail?.messageId ?? fetchedMessageId,
+                        htmlBody: html.isEmpty ? nil : html
                     )
                 }
                 onDismiss?()
@@ -554,13 +613,172 @@ struct ComposeView: View {
     }
 }
 
+// MARK: - Rich text editor state
+
+class ComposeEditorState: ObservableObject {
+    weak var textView: NSTextView?
+    @Published var isBold = false
+    @Published var isItalic = false
+    @Published var isUnderlined = false
+
+    private let defaultFont = NSFont.systemFont(ofSize: 13)
+
+    func updateState() {
+        guard let textView else { return }
+        let attrs = textView.selectedRange().length > 0
+            ? textView.textStorage?.attributes(at: textView.selectedRange().location, effectiveRange: nil) ?? textView.typingAttributes
+            : textView.typingAttributes
+        if let font = attrs[.font] as? NSFont {
+            let traits = font.fontDescriptor.symbolicTraits
+            isBold = traits.contains(.bold)
+            isItalic = traits.contains(.italic)
+        } else {
+            isBold = false
+            isItalic = false
+        }
+        isUnderlined = (attrs[.underlineStyle] as? Int ?? 0) != 0
+    }
+
+    func toggleBold() {
+        toggleTrait(.bold, mask: .boldFontMask)
+    }
+
+    func toggleItalic() {
+        toggleTrait(.italic, mask: .italicFontMask)
+    }
+
+    private func toggleTrait(_ trait: NSFontDescriptor.SymbolicTraits, mask: NSFontTraitMask) {
+        guard let textView, let storage = textView.textStorage else { return }
+        let range = textView.selectedRange()
+        let fm = NSFontManager.shared
+
+        let toggle: (NSFont) -> NSFont = { font in
+            if font.fontDescriptor.symbolicTraits.contains(trait) {
+                return fm.convert(font, toNotHaveTrait: mask)
+            } else {
+                return fm.convert(font, toHaveTrait: mask)
+            }
+        }
+
+        if range.length == 0 {
+            var attrs = textView.typingAttributes
+            let font = attrs[.font] as? NSFont ?? self.defaultFont
+            attrs[.font] = toggle(font)
+            attrs[.foregroundColor] = NSColor.labelColor
+            textView.typingAttributes = attrs
+        } else {
+            storage.beginEditing()
+            storage.enumerateAttribute(.font, in: range) { value, r, _ in
+                let font = value as? NSFont ?? self.defaultFont
+                storage.addAttribute(.font, value: toggle(font), range: r)
+            }
+            storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
+            storage.endEditing()
+        }
+        updateState()
+    }
+
+    func toggleUnderline() {
+        guard let textView, let storage = textView.textStorage else { return }
+        let range = textView.selectedRange()
+
+        if range.length == 0 {
+            var attrs = textView.typingAttributes
+            let current = attrs[.underlineStyle] as? Int ?? 0
+            attrs[.underlineStyle] = current == 0 ? NSUnderlineStyle.single.rawValue : 0
+            textView.typingAttributes = attrs
+        } else {
+            var hasUnderline = false
+            storage.enumerateAttribute(.underlineStyle, in: range) { value, _, stop in
+                if (value as? Int ?? 0) != 0 { hasUnderline = true; stop.pointee = true }
+            }
+            let newValue = hasUnderline ? 0 : NSUnderlineStyle.single.rawValue
+            storage.beginEditing()
+            storage.addAttribute(.underlineStyle, value: newValue, range: range)
+            storage.endEditing()
+        }
+        updateState()
+    }
+
+    func toggleBulletList() {
+        toggleListPrefix("•\t")
+    }
+
+    func toggleNumberedList() {
+        guard let textView, let storage = textView.textStorage else { return }
+        let string = storage.string as NSString
+        let paraRange = string.paragraphRange(for: textView.selectedRange())
+        let text = string.substring(with: paraRange)
+        let lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
+
+        let hasNumbers = lines.allSatisfy { $0.range(of: "^\\d+\\.\\t", options: .regularExpression) != nil }
+
+        storage.beginEditing()
+        if hasNumbers {
+            // Remove numbering
+            let mutable = NSMutableString(string: text)
+            let regex = try! NSRegularExpression(pattern: "^\\d+\\.\\t", options: .anchorsMatchLines)
+            regex.replaceMatches(in: mutable, range: NSRange(location: 0, length: mutable.length), withTemplate: "")
+            storage.replaceCharacters(in: paraRange, with: mutable as String)
+        } else {
+            // Remove bullets if present, then add numbers
+            var cleaned = text
+            cleaned = cleaned.replacingOccurrences(of: "^•\\t", with: "", options: .regularExpression)
+            let numberedLines = cleaned.components(separatedBy: "\n").enumerated().map { i, line in
+                line.isEmpty ? line : "\(i + 1).\t\(line)"
+            }
+            storage.replaceCharacters(in: paraRange, with: numberedLines.joined(separator: "\n"))
+        }
+        storage.endEditing()
+    }
+
+    private func toggleListPrefix(_ prefix: String) {
+        guard let textView, let storage = textView.textStorage else { return }
+        let string = storage.string as NSString
+        let paraRange = string.paragraphRange(for: textView.selectedRange())
+        let text = string.substring(with: paraRange)
+        let lines = text.components(separatedBy: "\n")
+
+        let allHavePrefix = lines.filter({ !$0.isEmpty }).allSatisfy { $0.hasPrefix(prefix) }
+
+        storage.beginEditing()
+        if allHavePrefix {
+            let stripped = lines.map { $0.hasPrefix(prefix) ? String($0.dropFirst(prefix.count)) : $0 }
+            storage.replaceCharacters(in: paraRange, with: stripped.joined(separator: "\n"))
+        } else {
+            // Remove numbers if present, then add bullets
+            var cleaned = text
+            cleaned = cleaned.replacingOccurrences(of: "^\\d+\\.\\t", with: "", options: .regularExpression)
+            let prefixed = cleaned.components(separatedBy: "\n").map { $0.isEmpty ? $0 : "\(prefix)\($0)" }
+            storage.replaceCharacters(in: paraRange, with: prefixed.joined(separator: "\n"))
+        }
+        storage.endEditing()
+    }
+
+    var htmlBody: String {
+        guard let textView, let storage = textView.textStorage else { return "" }
+        let range = NSRange(location: 0, length: storage.length)
+        guard range.length > 0 else { return "" }
+        guard let data = try? storage.data(
+            from: range,
+            documentAttributes: [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ]
+        ) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    var plainBody: String {
+        textView?.string ?? ""
+    }
+}
+
 // MARK: - Body text editor (NSTextView wrapper)
 
-/// NSTextView-based editor that:
-/// - Positions cursor at the start on initial focus
-/// - Handles Tab/Shift-Tab to move between fields instead of inserting whitespace
 struct ComposeBodyEditor: NSViewRepresentable {
     @Binding var text: String
+    var editorState: ComposeEditorState
     var cursorAtStart: Bool = false
     var onTab: (() -> Void)?
     var onBackTab: (() -> Void)?
@@ -573,9 +791,17 @@ struct ComposeBodyEditor: NSViewRepresentable {
         scrollView.borderType = .noBorder
 
         let textView = TabAwareTextView()
-        textView.isRichText = false
+        textView.isRichText = true
+        textView.usesFontPanel = false
+        textView.usesRuler = false
         textView.allowsUndo = true
         textView.font = .systemFont(ofSize: 13)
+        textView.textColor = .labelColor
+        textView.insertionPointColor = .labelColor
+        textView.typingAttributes = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.labelColor
+        ]
         textView.textContainerInset = NSSize(width: 8, height: 8)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -584,7 +810,10 @@ struct ComposeBodyEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.onTab = onTab
         textView.onBackTab = onBackTab
+        textView.editorState = editorState
         textView.string = text
+
+        editorState.textView = textView
 
         scrollView.documentView = textView
 
@@ -602,7 +831,6 @@ struct ComposeBodyEditor: NSViewRepresentable {
         if textView.string != text {
             let selectedRange = textView.selectedRange()
             textView.string = text
-            // Preserve cursor position if possible
             let safeRange = NSRange(
                 location: min(selectedRange.location, text.utf16.count),
                 length: 0
@@ -619,13 +847,42 @@ struct ComposeBodyEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
         }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            parent.editorState.updateState()
+        }
     }
 }
 
-/// NSTextView subclass that intercepts Tab/Shift-Tab for field navigation.
+/// NSTextView subclass that intercepts Tab/Shift-Tab and handles auto-list.
 class TabAwareTextView: NSTextView {
     var onTab: (() -> Void)?
     var onBackTab: (() -> Void)?
+    weak var editorState: ComposeEditorState?
+
+    // keyCode constants (layout-independent)
+    private static let kVK_ANSI_B: UInt16 = 11
+    private static let kVK_ANSI_I: UInt16 = 34
+    private static let kVK_ANSI_U: UInt16 = 32
+
+    override func keyDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            switch event.keyCode {
+            case Self.kVK_ANSI_B:
+                editorState?.toggleBold()
+                return
+            case Self.kVK_ANSI_I:
+                editorState?.toggleItalic()
+                return
+            case Self.kVK_ANSI_U:
+                editorState?.toggleUnderline()
+                return
+            default:
+                break
+            }
+        }
+        super.keyDown(with: event)
+    }
 
     override func insertTab(_ sender: Any?) {
         if let onTab {
@@ -641,6 +898,46 @@ class TabAwareTextView: NSTextView {
         } else {
             super.insertBacktab(sender)
         }
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        let cursorLoc = selectedRange().location
+        let nsString = (string as NSString)
+        let lineRange = nsString.lineRange(for: NSRange(location: cursorLoc, length: 0))
+        let line = nsString.substring(with: NSRange(location: lineRange.location, length: cursorLoc - lineRange.location))
+
+        // Continue numbered list: "1. text" → next line "2. "
+        if let match = line.range(of: "^(\\d+)\\. ", options: .regularExpression) {
+            let numStr = line[match].components(separatedBy: ".").first ?? "0"
+            if let num = Int(numStr) {
+                // Empty list item (just "N. ") → remove it and stop the list
+                let afterPrefix = String(line[match.upperBound...])
+                if afterPrefix.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let deleteRange = NSRange(location: lineRange.location, length: cursorLoc - lineRange.location)
+                    insertText("", replacementRange: deleteRange)
+                    return
+                }
+                super.insertNewline(sender)
+                insertText("\(num + 1). ", replacementRange: selectedRange())
+                return
+            }
+        }
+
+        // Continue bullet list: "- text" or "• text" → next line with same prefix
+        if let match = line.range(of: "^([-•]) ", options: .regularExpression) {
+            let prefix = String(line[match])
+            let afterPrefix = String(line[match.upperBound...])
+            if afterPrefix.trimmingCharacters(in: .whitespaces).isEmpty {
+                let deleteRange = NSRange(location: lineRange.location, length: cursorLoc - lineRange.location)
+                insertText("", replacementRange: deleteRange)
+                return
+            }
+            super.insertNewline(sender)
+            insertText(prefix, replacementRange: selectedRange())
+            return
+        }
+
+        super.insertNewline(sender)
     }
 }
 
