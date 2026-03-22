@@ -6,6 +6,8 @@ struct UnifiedSidebar: View {
     let oauthManager: OAuthManager
     @Binding var selectedFolder: Folder
     @Binding var selectedAccountId: String?
+    @Binding var expandedFolders: Set<Folder>
+    var isFocused: Bool = false
     var isRefreshing: Bool = false
     var onRefresh: (() -> Void)?
     @State private var showingAccountSetup = false
@@ -13,6 +15,7 @@ struct UnifiedSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Color.accentColor.opacity(isFocused ? 1 : 0).frame(height: 2)
             List {
                 ForEach(Folder.allCases) { folder in
                     folderSection(folder)
@@ -40,7 +43,15 @@ struct UnifiedSidebar: View {
     @ViewBuilder
     private func folderSection(_ folder: Folder) -> some View {
         if accountManager.accounts.count > 1 {
-            DisclosureGroup {
+            DisclosureGroup(
+                isExpanded: Binding(
+                    get: { expandedFolders.contains(folder) },
+                    set: { newValue in
+                        if newValue { expandedFolders.insert(folder) }
+                        else { expandedFolders.remove(folder) }
+                    }
+                )
+            ) {
                 ForEach(accountManager.accounts) { account in
                     accountRow(account, folder: folder)
                 }
@@ -48,7 +59,7 @@ struct UnifiedSidebar: View {
                 folderLabel(folder)
             }
             .listRowBackground(
-                selectedFolder == folder
+                selectedFolder == folder && selectedAccountId == nil
                     ? Color.accentColor.opacity(0.18)
                     : Color.clear
             )

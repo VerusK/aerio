@@ -1,66 +1,96 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Focused Panel
+
+enum FocusedPanel: Sendable {
+    case sidebar, messageList, detail
+}
+
 enum ShortcutAction: String, CaseIterable, Sendable {
-    case nextMessage          // Cmd+J
-    case previousMessage      // Cmd+K
+    // Panel focus
+    case focusLeft            // ← arrow
+    case focusRight           // → arrow
+    // In-panel navigation
+    case navigateUp           // ↑ arrow / K
+    case navigateDown         // ↓ arrow / J
+    // Go-to folders (triggered via G+X state machine)
+    case goToInbox
+    case goToSent
+    case goToArchive
+    case goToTrash
+    case goToDrafts
+    case goToSpam
+    // Sidebar expand/collapse
+    case toggleExpand           // Space
+    // Escape
+    case escape
+    // Message actions
     case archiveMessage       // Cmd+E
     case deleteMessage        // Cmd+D
     case spamMessage          // Cmd+Shift+1
+    case moveToInbox          // Cmd+I
+    // Compose
     case reply                // Cmd+Shift+R
     case replyAll             // Cmd+R
     case forward              // Cmd+T
     case compose              // Cmd+N
-    case search               // Cmd+Shift+F
     case sendMessage          // Cmd+Enter
-    case selectAccount1       // Cmd+1
-    case selectAccount2       // Cmd+2
-    case selectAccount3       // Cmd+3
-    case selectAccount4       // Cmd+4
-    case selectAccount5       // Cmd+5
-    case selectAccount6       // Cmd+6
-    case selectAccount7       // Cmd+7
-    case selectAccount8       // Cmd+8
-    case selectAccount9       // Cmd+9
-    case selectAllAccounts    // Cmd+0
+    // Other
+    case search               // Cmd+Shift+F
     case refresh              // Cmd+Shift+E
     case openSettings         // Cmd+,
-    case moveToInbox          // Cmd+I
     case nextMessageAlt       // Alt+Down
     case previousMessageAlt   // Alt+Up
 
     var displayName: String {
         switch self {
-        case .nextMessage:       return "Next Message"
-        case .previousMessage:   return "Previous Message"
+        case .focusLeft:         return "Focus Left"
+        case .focusRight:        return "Focus Right"
+        case .navigateUp:        return "Navigate Up"
+        case .navigateDown:      return "Navigate Down"
+        case .goToInbox:         return "Go to Inbox"
+        case .goToSent:          return "Go to Sent"
+        case .goToArchive:       return "Go to Archive"
+        case .goToTrash:         return "Go to Trash"
+        case .goToDrafts:        return "Go to Drafts"
+        case .goToSpam:          return "Go to Spam"
+        case .toggleExpand:      return "Expand/Collapse"
+        case .escape:            return "Back"
         case .archiveMessage:    return "Archive"
         case .deleteMessage:     return "Delete"
         case .spamMessage:       return "Report Spam"
+        case .moveToInbox:       return "Move to Inbox"
         case .reply:             return "Reply"
         case .replyAll:          return "Reply All"
         case .forward:           return "Forward"
         case .compose:           return "Compose"
-        case .search:            return "Search"
         case .sendMessage:       return "Send Message"
-        case .selectAccount1:    return "Account 1"
-        case .selectAccount2:    return "Account 2"
-        case .selectAccount3:    return "Account 3"
-        case .selectAccount4:    return "Account 4"
-        case .selectAccount5:    return "Account 5"
-        case .selectAccount6:    return "Account 6"
-        case .selectAccount7:    return "Account 7"
-        case .selectAccount8:    return "Account 8"
-        case .selectAccount9:    return "Account 9"
-        case .selectAllAccounts: return "All Accounts"
+        case .search:            return "Search"
         case .refresh:           return "Refresh"
         case .openSettings:      return "Settings"
-        case .moveToInbox:       return "Move to Inbox"
         case .nextMessageAlt:    return "Next Message"
         case .previousMessageAlt: return "Previous Message"
         }
     }
 
     var shortcutLabel: String {
+        // Special labels for navigation shortcuts not in eventBindings
+        switch self {
+        case .focusLeft:     return "←"
+        case .focusRight:    return "→"
+        case .navigateUp:    return "↑/K"
+        case .navigateDown:  return "↓/J"
+        case .toggleExpand:  return "Space"
+        case .escape:        return "Esc"
+        case .goToInbox:     return "G I"
+        case .goToSent:      return "G S"
+        case .goToArchive:   return "G A"
+        case .goToTrash:     return "G T"
+        case .goToDrafts:    return "G D"
+        case .goToSpam:      return "G P"
+        default: break
+        }
         guard let binding = KeyboardShortcuts.eventBindings[self] else { return "" }
         var parts: [String] = []
         if binding.modifiers.contains(.control) { parts.append("⌃") }
@@ -115,7 +145,7 @@ struct KeyboardShortcuts: Sendable {
         0x1F: "o", 0x20: "u", 0x21: "[", 0x22: "i", 0x23: "p",
         0x25: "l", 0x26: "j", 0x27: "'", 0x28: "k", 0x29: ";",
         0x2A: "\\", 0x2B: ",", 0x2C: "/", 0x2D: "n", 0x2E: "m",
-        0x2F: ".", 0x32: "`",
+        0x2F: ".", 0x31: " ", 0x32: "`",
         // Special keys
         0x24: "\r",         // Return
         0x7E: "\u{F700}",  // Up arrow
@@ -127,8 +157,6 @@ struct KeyboardShortcuts: Sendable {
     // MARK: - Primary bindings (NSEvent-based, layout-independent)
 
     static let eventBindings: [ShortcutAction: NSEventKeyBinding] = [
-        .nextMessage:       NSEventKeyBinding("j", modifiers: .command),
-        .previousMessage:   NSEventKeyBinding("k", modifiers: .command),
         .archiveMessage:    NSEventKeyBinding("e", modifiers: .command),
         .deleteMessage:     NSEventKeyBinding("d", modifiers: .command),
         .spamMessage:       NSEventKeyBinding("1", modifiers: [.command, .shift]),
@@ -138,16 +166,6 @@ struct KeyboardShortcuts: Sendable {
         .compose:           NSEventKeyBinding("n", modifiers: .command),
         .search:            NSEventKeyBinding("f", modifiers: [.command, .shift]),
         .sendMessage:       NSEventKeyBinding("\r", modifiers: .command),
-        .selectAccount1:    NSEventKeyBinding("1", modifiers: .command),
-        .selectAccount2:    NSEventKeyBinding("2", modifiers: .command),
-        .selectAccount3:    NSEventKeyBinding("3", modifiers: .command),
-        .selectAccount4:    NSEventKeyBinding("4", modifiers: .command),
-        .selectAccount5:    NSEventKeyBinding("5", modifiers: .command),
-        .selectAccount6:    NSEventKeyBinding("6", modifiers: .command),
-        .selectAccount7:    NSEventKeyBinding("7", modifiers: .command),
-        .selectAccount8:    NSEventKeyBinding("8", modifiers: .command),
-        .selectAccount9:    NSEventKeyBinding("9", modifiers: .command),
-        .selectAllAccounts: NSEventKeyBinding("0", modifiers: .command),
         .refresh:           NSEventKeyBinding("e", modifiers: [.command, .shift]),
         .moveToInbox:       NSEventKeyBinding("i", modifiers: .command),
         .openSettings:      NSEventKeyBinding(",", modifiers: .command),
@@ -157,17 +175,38 @@ struct KeyboardShortcuts: Sendable {
 
     // MARK: - NSEvent matching (layout-independent via keyCode)
 
+    // Escape keyCode
+    private static let escapeKeyCode: UInt16 = 0x35
+
     /// Match an NSEvent against the registered bindings using `event.keyCode`
     /// (hardware scan code) mapped to QWERTY character. This is truly
     /// layout-independent — works on Russian, German, French, etc.
     static func action(for event: NSEvent) -> ShortcutAction? {
-        guard let char = keyCodeToQWERTY[event.keyCode] else { return nil }
-
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
 
-        // More-specific bindings (more modifiers) should match first to avoid
-        // e.g. Cmd+Shift+R matching plain Cmd+R.
-        // Sort by descending modifier count.
+        // Escape — no modifiers
+        if event.keyCode == escapeKeyCode && flags.isEmpty {
+            return .escape
+        }
+
+        guard let char = keyCodeToQWERTY[event.keyCode] else { return nil }
+
+        // Bare keys (no modifiers): arrows and J/K for navigation
+        if flags.isEmpty {
+            switch char {
+            case "\u{F702}": return .focusLeft      // ← arrow
+            case "\u{F703}": return .focusRight     // → arrow
+            case "\u{F700}": return .navigateUp     // ↑ arrow
+            case "\u{F701}": return .navigateDown   // ↓ arrow
+            case "j":        return .navigateDown
+            case "k":        return .navigateUp
+            case " ":        return .toggleExpand
+            default: break
+            }
+        }
+
+        // Modifier-based bindings: more-specific (more modifiers) match first
+        // to avoid e.g. Cmd+Shift+R matching plain Cmd+R.
         let sorted = eventBindings.sorted { lhs, rhs in
             lhs.value.modifiers.rawValue.nonzeroBitCount > rhs.value.modifiers.rawValue.nonzeroBitCount
         }
@@ -178,22 +217,6 @@ struct KeyboardShortcuts: Sendable {
             }
         }
         return nil
-    }
-
-    static func accountIndex(for action: ShortcutAction) -> Int? {
-        switch action {
-        case .selectAccount1: return 0
-        case .selectAccount2: return 1
-        case .selectAccount3: return 2
-        case .selectAccount4: return 3
-        case .selectAccount5: return 4
-        case .selectAccount6: return 5
-        case .selectAccount7: return 6
-        case .selectAccount8: return 7
-        case .selectAccount9: return 8
-        case .selectAllAccounts: return nil
-        default: return nil
-        }
     }
 
     /// Returns the correct selector name for opening the Settings window
@@ -213,16 +236,26 @@ struct KeyboardShortcuts: Sendable {
         NSApp.sendAction(Selector((settingsSelectorName)), to: nil, from: nil)
     }
 
-    static func isAccountSelection(_ action: ShortcutAction) -> Bool {
-        switch action {
-        case .selectAccount1, .selectAccount2, .selectAccount3,
-             .selectAccount4, .selectAccount5, .selectAccount6,
-             .selectAccount7, .selectAccount8, .selectAccount9,
-             .selectAllAccounts:
-            return true
-        default:
-            return false
+    /// Check if a bare key (no modifiers) is a Go-To second key.
+    /// Returns the corresponding folder shortcut action, or nil.
+    static func goToAction(for event: NSEvent) -> ShortcutAction? {
+        guard let char = keyCodeToQWERTY[event.keyCode] else { return nil }
+        switch char {
+        case "i": return .goToInbox
+        case "s": return .goToSent
+        case "a": return .goToArchive
+        case "t": return .goToTrash
+        case "d": return .goToDrafts
+        case "p": return .goToSpam
+        default: return nil
         }
+    }
+
+    /// Check if a bare key is the Go-To prefix "G".
+    static func isGoToPrefix(for event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard flags.isEmpty, let char = keyCodeToQWERTY[event.keyCode] else { return false }
+        return char == "g"
     }
 }
 
@@ -236,6 +269,9 @@ struct KeyboardShortcuts: Sendable {
 final class KeyEventMonitor {
     private var monitor: Any?
     private var handler: ((NSEvent) -> Bool)?
+    /// Go-To state machine: true after pressing G, waiting for second key
+    private(set) var pendingGoTo = false
+    private var goToTimer: DispatchWorkItem?
 
     func install(handler: @escaping (NSEvent) -> Bool) {
         self.handler = handler
@@ -248,12 +284,31 @@ final class KeyEventMonitor {
         }
     }
 
+    /// Begin Go-To sequence: set pending flag with 1s timeout.
+    func beginGoTo() {
+        pendingGoTo = true
+        goToTimer?.cancel()
+        let timer = DispatchWorkItem { [weak self] in
+            self?.cancelGoTo()
+        }
+        goToTimer = timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: timer)
+    }
+
+    /// Cancel Go-To sequence.
+    func cancelGoTo() {
+        pendingGoTo = false
+        goToTimer?.cancel()
+        goToTimer = nil
+    }
+
     func uninstall() {
         if let monitor {
             NSEvent.removeMonitor(monitor)
         }
         monitor = nil
         handler = nil
+        cancelGoTo()
     }
 
     deinit {

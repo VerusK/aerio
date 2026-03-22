@@ -158,6 +158,9 @@ struct MainView: View {
     @StateObject private var searchViewModel: SearchViewModel
     @State private var keyMonitor = KeyEventMonitor()
     @State private var processingEmailId: String?
+    @State private var focusedPanel: FocusedPanel = .messageList
+    @State private var detailScrollHandler: ((Int) -> Void)?
+    @State private var expandedFolders: Set<Folder> = []
 
     init(accountManager: AccountManager, unifiedMailbox: UnifiedMailbox, apiManager: GmailAPIManager, oauthManager: OAuthManager, contactsCache: ContactsCache? = nil, notificationManager: NotificationManager? = nil) {
         self.accountManager = accountManager
@@ -181,6 +184,8 @@ struct MainView: View {
                 oauthManager: oauthManager,
                 selectedFolder: $selectedFolder,
                 selectedAccountId: $selectedAccountId,
+                expandedFolders: $expandedFolders,
+                isFocused: focusedPanel == .sidebar,
                 isRefreshing: isRefreshing,
                 onRefresh: { performRefresh() }
             )
@@ -201,7 +206,8 @@ struct MainView: View {
                 onMoveToInbox: { email in executeActionOnEmail(email, action: .moveToInbox) },
                 onLoadMore: { loadMoreEmails() },
                 hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId),
-                processingEmailId: processingEmailId
+                processingEmailId: processingEmailId,
+                isFocused: focusedPanel == .messageList
             )
             .overlay {
                 messageListOverlay
@@ -319,34 +325,38 @@ struct MainView: View {
 
     @ViewBuilder
     private var messageDetailPanel: some View {
-        ZStack {
-            if let selectedEmailId,
-               let email = findEmail(by: selectedEmailId) {
-                NativeMessageDetail(
-                    email: email,
-                    apiManager: apiManager,
-                    folder: selectedFolder,
-                    onReply: { triggerCompose(.reply, msgId: email.msgId) },
-                    onReplyAll: { triggerCompose(.replyAll, msgId: email.msgId) },
-                    onForward: { triggerCompose(.forward, msgId: email.msgId) },
-                    onArchive: { executeActionOnEmail(email, action: .archive) },
-                    onDelete: { executeActionOnEmail(email, action: .delete) },
-                    onSpam: { executeActionOnEmail(email, action: .spam) },
-                    onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) }
-                )
-                .id(email.id)
-            } else {
-                VStack {
-                    Text("Message Detail")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    Text("Select a message to view")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+        VStack(spacing: 0) {
+            Color.accentColor.opacity(focusedPanel == .detail ? 1 : 0).frame(height: 2)
+            ZStack {
+                if let selectedEmailId,
+                   let email = findEmail(by: selectedEmailId) {
+                    NativeMessageDetail(
+                        email: email,
+                        apiManager: apiManager,
+                        folder: selectedFolder,
+                        onReply: { triggerCompose(.reply, msgId: email.msgId) },
+                        onReplyAll: { triggerCompose(.replyAll, msgId: email.msgId) },
+                        onForward: { triggerCompose(.forward, msgId: email.msgId) },
+                        onArchive: { executeActionOnEmail(email, action: .archive) },
+                        onDelete: { executeActionOnEmail(email, action: .delete) },
+                        onSpam: { executeActionOnEmail(email, action: .spam) },
+                        onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
+                        onRegisterScroll: { handler in detailScrollHandler = handler }
+                    )
+                    .id(email.id)
+                } else {
+                    VStack {
+                        Text("Message Detail")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        Text("Select a message to view")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -413,10 +423,30 @@ struct MainView: View {
 
     /// Handle an NSEvent keyDown. Returns `true` if the event was consumed.
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
-        // Skip single-key shortcuts when typing in a text field.
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let isBareKey = flags.isEmpty
+
+        // Skip bare keys when typing in a text field.
         // Cmd/Option shortcuts should always work.
-        if isTextFieldFocused && !event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.option) {
+        if isTextFieldFocused && !flags.contains(.command) && !flags.contains(.option) {
+            keyMonitor.cancelGoTo()
             return false
+        }
+
+        // Go-To state machine: waiting for second key
+        if keyMonitor.pendingGoTo {
+            keyMonitor.cancelGoTo()
+            if isBareKey, let goToAction = KeyboardShortcuts.goToAction(for: event) {
+                handleGoTo(goToAction)
+                return true
+            }
+            // Invalid second key — fall through to normal handling
+        }
+
+        // Go-To prefix: bare G starts the sequence
+        if isBareKey && KeyboardShortcuts.isGoToPrefix(for: event) {
+            keyMonitor.beginGoTo()
+            return true
         }
 
         guard let action = KeyboardShortcuts.action(for: event) else {
@@ -424,10 +454,24 @@ struct MainView: View {
         }
 
         switch action {
-        case .nextMessage, .nextMessageAlt:
+        // Panel focus
+        case .focusLeft, .escape:
+            moveFocus(direction: .left)
+        case .focusRight:
+            moveFocus(direction: .right)
+        case .toggleExpand:
+            toggleSidebarExpand()
+        // In-panel navigation
+        case .navigateUp:
+            handleNavigate(offset: -1)
+        case .navigateDown:
+            handleNavigate(offset: 1)
+        // Alt navigation (Opt+↑/↓ always navigates message list)
+        case .nextMessageAlt:
             selectAdjacentEmail(offset: 1)
-        case .previousMessage, .previousMessageAlt:
+        case .previousMessageAlt:
             selectAdjacentEmail(offset: -1)
+        // Compose
         case .compose:
             triggerCompose(.new, msgId: "")
             composeTargetMsgId = nil
@@ -443,6 +487,7 @@ struct MainView: View {
             if let msgId = selectedEmailMsgId {
                 triggerCompose(.forward, msgId: msgId)
             }
+        // Message actions
         case .archiveMessage:
             if selectedFolder == .inbox { executeActionOnSelected(.archive) }
         case .moveToInbox:
@@ -451,6 +496,7 @@ struct MainView: View {
             executeActionOnSelected(.delete)
         case .spamMessage:
             executeActionOnSelected(.spam)
+        // Other
         case .refresh:
             performRefresh()
         case .openSettings:
@@ -459,17 +505,128 @@ struct MainView: View {
             showingSearch.toggle()
         case .sendMessage:
             return false
-        case .selectAllAccounts:
-            selectedAccountId = nil
-        case _ where KeyboardShortcuts.isAccountSelection(action):
-            if let index = KeyboardShortcuts.accountIndex(for: action),
-               index < accountManager.accounts.count {
-                selectedAccountId = accountManager.accounts[index].id
-            }
         default:
             return false
         }
         return true
+    }
+
+    // MARK: - Panel focus navigation
+
+    private enum FocusDirection { case left, right }
+
+    private func moveFocus(direction: FocusDirection) {
+        switch direction {
+        case .left:
+            switch focusedPanel {
+            case .detail: focusedPanel = .messageList
+            case .messageList: focusedPanel = .sidebar
+            case .sidebar: break
+            }
+        case .right:
+            switch focusedPanel {
+            case .sidebar: focusedPanel = .messageList
+            case .messageList: focusedPanel = .detail
+            case .detail: break
+            }
+        }
+    }
+
+    // MARK: - In-panel navigation
+
+    private func handleNavigate(offset: Int) {
+        switch focusedPanel {
+        case .sidebar:
+            navigateFolder(offset: offset)
+        case .messageList:
+            selectAdjacentEmail(offset: offset)
+        case .detail:
+            scrollDetail(offset: offset)
+        }
+    }
+
+    /// Sidebar item for flat-list navigation
+    private enum SidebarItem: Equatable {
+        case folder(Folder)
+        case account(Folder, String) // folder + accountId
+    }
+
+    /// Build flat list of visible sidebar items based on expanded state
+    private var visibleSidebarItems: [SidebarItem] {
+        var items: [SidebarItem] = []
+        let hasMultipleAccounts = accountManager.accounts.count > 1
+        for folder in Folder.allCases {
+            items.append(.folder(folder))
+            if hasMultipleAccounts && expandedFolders.contains(folder) {
+                for account in accountManager.accounts {
+                    items.append(.account(folder, account.id))
+                }
+            }
+        }
+        return items
+    }
+
+    /// Current sidebar cursor position
+    private var currentSidebarItem: SidebarItem {
+        if let accountId = selectedAccountId {
+            return .account(selectedFolder, accountId)
+        }
+        return .folder(selectedFolder)
+    }
+
+    private func navigateFolder(offset: Int) {
+        let items = visibleSidebarItems
+        guard let currentIndex = items.firstIndex(of: currentSidebarItem) else { return }
+        let newIndex = min(max(currentIndex + offset, 0), items.count - 1)
+        let newItem = items[newIndex]
+        applySidebarItem(newItem)
+    }
+
+    private func applySidebarItem(_ item: SidebarItem) {
+        switch item {
+        case .folder(let folder):
+            if selectedFolder != folder || selectedAccountId != nil {
+                selectedFolder = folder
+                selectedAccountId = nil
+            }
+        case .account(let folder, let accountId):
+            selectedFolder = folder
+            selectedAccountId = accountId
+        }
+    }
+
+    private func toggleSidebarExpand() {
+        guard focusedPanel == .sidebar else { return }
+        guard accountManager.accounts.count > 1 else { return }
+        if expandedFolders.contains(selectedFolder) {
+            expandedFolders.remove(selectedFolder)
+            // If we were on an account row, go back to folder
+            selectedAccountId = nil
+        } else {
+            expandedFolders.insert(selectedFolder)
+        }
+    }
+
+    private func scrollDetail(offset: Int) {
+        detailScrollHandler?(offset)
+    }
+
+    // MARK: - Go-To folders
+
+    private func handleGoTo(_ action: ShortcutAction) {
+        let folder: Folder
+        switch action {
+        case .goToInbox:   folder = .inbox
+        case .goToSent:    folder = .sent
+        case .goToArchive: folder = .archive
+        case .goToTrash:   folder = .trash
+        case .goToDrafts:  folder = .drafts
+        case .goToSpam:    folder = .spam
+        default: return
+        }
+        selectedAccountId = nil
+        selectedFolder = folder
+        focusedPanel = .messageList
     }
 
     private var selectedEmailMsgId: String? {

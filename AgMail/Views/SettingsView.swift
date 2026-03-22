@@ -4,7 +4,9 @@ struct SettingsView: View {
     @AppStorage(AppState.showDockBadgeKey) private var showDockBadge = true
 
     private var shortcuts: [ShortcutAction] {
-        ShortcutAction.allCases.filter { $0 != .openSettings && $0 != .nextMessageAlt && $0 != .previousMessageAlt }
+        ShortcutAction.allCases.filter {
+            $0 != .openSettings && $0 != .nextMessageAlt && $0 != .previousMessageAlt && $0 != .sendMessage
+        }
     }
 
     var body: some View {

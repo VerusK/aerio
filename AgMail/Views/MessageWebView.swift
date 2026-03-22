@@ -94,6 +94,8 @@ struct NativeMessageDetail: View {
     var onDelete: (() -> Void)?
     var onSpam: (() -> Void)?
     var onMoveToInbox: (() -> Void)?
+    /// Called by parent to register a scroll handler for keyboard navigation.
+    var onRegisterScroll: ((@escaping (Int) -> Void) -> Void)?
 
     @State private var messageContent: MessageContentData?
     @State private var isLoading = true
@@ -124,7 +126,12 @@ struct NativeMessageDetail: View {
                 BodyWebView(webView: bodyWebViewStore.webView)
             }
         }
-        .onAppear { loadContent() }
+        .onAppear {
+            loadContent()
+            onRegisterScroll? { direction in
+                bodyWebViewStore.scrollContent(direction: direction)
+            }
+        }
         .onChange(of: email.id) { _, _ in loadContent() }
     }
 
@@ -322,6 +329,13 @@ final class BodyWebViewStore: ObservableObject {
 
     func loadHTML(_ html: String) {
         webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    /// Scroll the web view content by a fixed amount.
+    /// direction: negative = up, positive = down.
+    func scrollContent(direction: Int) {
+        let pixels = direction > 0 ? 100 : -100
+        webView.evaluateJavaScript("window.scrollBy(0, \(pixels))", completionHandler: nil)
     }
 }
 

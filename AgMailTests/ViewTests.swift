@@ -215,7 +215,7 @@ final class ViewTests: XCTestCase {
 
     func testSplitViewConfiguratorFindSplitViewReturnsNilForPlainView() {
         let plainView = NSView()
-        XCTAssertNil(SplitViewConfigurator.findSplitView(from: plainView), "Should return nil when no NSSplitView in hierarchy")
+        XCTAssertNil(SplitViewConfigurator.findSplitViewUp(from: plainView), "Should return nil when no NSSplitView in hierarchy")
     }
 
     func testSplitViewConfiguratorFindSplitViewFindsParentSplitView() {
@@ -225,14 +225,14 @@ final class ViewTests: XCTestCase {
         let grandchild = NSView()
         child.addSubview(grandchild)
 
-        let found = SplitViewConfigurator.findSplitView(from: grandchild)
+        let found = SplitViewConfigurator.findSplitViewUp(from: grandchild)
         XCTAssertNotNil(found, "Should find NSSplitView in ancestor hierarchy")
         XCTAssertEqual(found, splitView, "Should return the correct NSSplitView")
     }
 
     func testSplitViewConfiguratorFindSplitViewReturnsSplitViewItself() {
         let splitView = NSSplitView()
-        let found = SplitViewConfigurator.findSplitView(from: splitView)
+        let found = SplitViewConfigurator.findSplitViewUp(from: splitView)
         XCTAssertEqual(found, splitView, "Should return the NSSplitView itself when starting from it")
     }
 

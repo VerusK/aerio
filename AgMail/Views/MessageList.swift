@@ -16,9 +16,11 @@ struct MessageList: View {
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
     var processingEmailId: String? = nil
+    var isFocused: Bool = false
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            Color.accentColor.opacity(isFocused ? 1 : 0).frame(height: 2)
             List(selection: $selectedEmailId) {
                     ForEach(filteredEmails) { email in
                         let isProcessing = processingEmailId == email.id
