@@ -22,7 +22,7 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - `AgMail/Services/` — Business logic: GmailAPIClient (REST HTTP client with auth/retry), GmailAPIManager (per-account orchestration via API with batched fetch and infinite scroll), OAuthManager (OAuth 2.0 PKCE via ASWebAuthenticationSession), OAuthConfig (OAuth constants/endpoints), KeychainHelper (secure token storage via KeychainStore protocol), AccountManager (add/remove/update accounts), UnifiedMailbox (merge all accounts), RFC2822Builder (email composition), ContactsCache (address autocomplete from synced contacts), NotificationManager (desktop notifications via UNUserNotificationCenter)
 - `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with action buttons), ComposeView (with address autocomplete and draft-on-close), AccountSetupView, SettingsView
 - `AgMail/Persistence/` — SwiftData cache (DataStore) for instant launch display
-- `AgMail/Utilities/` — KeyboardShortcuts handler, KeyEventInterceptor (NSViewRepresentable for layout-independent hotkeys)
+- `AgMail/Utilities/` — KeyboardShortcuts (layout-independent hotkeys via keyCode + NSEvent local monitor), KeyEventMonitor (Go-To state machine with timer)
 - `AgMailTests/` — Unit tests (140+ tests)
 
 ## Key Patterns
@@ -39,7 +39,8 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - `NotificationManager` sends desktop notifications for new INBOX+UNREAD emails; click-to-navigate via userInfo
 - `SearchOverlay` provides Spotlight-style global search across all accounts in parallel with 300ms debounce
 - `UnifiedSidebar` replaces separate AccountSidebar + FolderList with a 3-panel layout: folder tree with per-account sub-items
-- `KeyEventInterceptor` (NSViewRepresentable) intercepts key events before system menu processing for layout-independent hotkeys (EN/RU)
+- Keyboard-only navigation: `FocusedPanel` enum tracks active panel (sidebar/messageList/detail); ←/→ switch panels, ↑/↓ and J/K navigate within panel, Escape = back; `KeyEventMonitor` handles Go-To state machine (G+I/S/A/T/D/P for instant folder switch with 1s timeout); Space expands/collapses sidebar folder accounts; all bare keys suppressed when text field focused
+- Sidebar tree nav: `expandedFolders: Set<Folder>` controls DisclosureGroup expansion; ↑/↓ walks flat visible list of folders + expanded account rows; `SidebarItem` enum models cursor position
 - Folder enum includes: inbox, sent, archive, trash, spam, drafts
 - Dock badge count via `UNUserNotificationCenter.setBadgeCount()` (not `NSApp.dockTile.badgeLabel` — silently ignored on macOS 16+)
 - Debug logging via `os.log` (subsystem: "AgMail", categories: GmailAPIClient, GmailAPIManager, etc.) — view in Console.app or `log stream --predicate 'process == "AgMail"' --debug`; note: `.debug`/`.info` levels invisible in Release builds, use `NSLog` for quick debugging
