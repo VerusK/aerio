@@ -565,6 +565,7 @@ final class GmailAPIManager: ObservableObject {
             unreadInboxRemoved = emailsByAccount[accountId]?.filter { $0.msgId == msgId && $0.folder == .inbox && !$0.isRead }.count ?? 0
             emailsByAccount[accountId]?.removeAll { $0.msgId == msgId }
             dataStore?.deleteEmails(msgId: msgId, accountId: accountId)
+            dataStore?.deleteContent(accountId: accountId, msgId: msgId)
         } else {
             unreadInboxRemoved = emailsByAccount[accountId]?.filter { $0.id == id && $0.folder == .inbox && !$0.isRead }.count ?? 0
             emailsByAccount[accountId]?.removeAll { $0.id == id }

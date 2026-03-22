@@ -46,13 +46,34 @@ final class CachedEmail {
     }
 }
 
+@Model
+final class CachedEmailContent {
+    @Attribute(.unique) var contentKey: String  // "accountId_msgId"
+    var accountId: String
+    var msgId: String
+    var bodyHTML: String
+    var headersJSON: String  // JSON: {from, to, cc, subject, date}
+    var attachmentsJSON: String  // JSON array of attachment info
+    var cachedAt: Date
+
+    init(contentKey: String, accountId: String, msgId: String, bodyHTML: String, headersJSON: String, attachmentsJSON: String, cachedAt: Date = Date()) {
+        self.contentKey = contentKey
+        self.accountId = accountId
+        self.msgId = msgId
+        self.bodyHTML = bodyHTML
+        self.headersJSON = headersJSON
+        self.attachmentsJSON = attachmentsJSON
+        self.cachedAt = cachedAt
+    }
+}
+
 @MainActor
 final class EmailCache: ObservableObject {
     private let modelContainer: ModelContainer
     private var modelContext: ModelContext
 
     init(inMemory: Bool = false) {
-        let schema = Schema([CachedEmail.self])
+        let schema = Schema([CachedEmail.self, CachedEmailContent.self])
         let config = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: inMemory
@@ -183,6 +204,99 @@ final class EmailCache: ObservableObject {
 
     var emailCount: Int {
         let descriptor = FetchDescriptor<CachedEmail>()
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    // MARK: - Content Cache
+
+    func saveContent(accountId: String, msgId: String, bodyHTML: String, headers: [String: String], attachments: [[String: String]]) {
+        let key = "\(accountId)_\(msgId)"
+        let headersJSON = (try? JSONSerialization.data(withJSONObject: headers)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        let attachmentsJSON = (try? JSONSerialization.data(withJSONObject: attachments)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+
+        let descriptor = FetchDescriptor<CachedEmailContent>(
+            predicate: #Predicate { $0.contentKey == key }
+        )
+        let existing = (try? modelContext.fetch(descriptor))?.first
+
+        if let existing {
+            existing.bodyHTML = bodyHTML
+            existing.headersJSON = headersJSON
+            existing.attachmentsJSON = attachmentsJSON
+            existing.cachedAt = Date()
+        } else {
+            modelContext.insert(CachedEmailContent(
+                contentKey: key, accountId: accountId, msgId: msgId,
+                bodyHTML: bodyHTML, headersJSON: headersJSON, attachmentsJSON: attachmentsJSON
+            ))
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to save content cache: \(error.localizedDescription)")
+        }
+    }
+
+    func loadContent(accountId: String, msgId: String) -> (bodyHTML: String, headers: [String: String], attachments: [[String: String]])? {
+        let key = "\(accountId)_\(msgId)"
+        let descriptor = FetchDescriptor<CachedEmailContent>(
+            predicate: #Predicate { $0.contentKey == key }
+        )
+        guard let cached = (try? modelContext.fetch(descriptor))?.first else { return nil }
+        let headers = (try? JSONSerialization.jsonObject(with: Data(cached.headersJSON.utf8))) as? [String: String] ?? [:]
+        let attachments = (try? JSONSerialization.jsonObject(with: Data(cached.attachmentsJSON.utf8))) as? [[String: String]] ?? []
+        return (cached.bodyHTML, headers, attachments)
+    }
+
+    func purgeOldContent(olderThanDays days: Int) {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        let descriptor = FetchDescriptor<CachedEmailContent>(
+            predicate: #Predicate { $0.cachedAt < cutoff }
+        )
+        let old = (try? modelContext.fetch(descriptor)) ?? []
+        guard !old.isEmpty else { return }
+        for item in old {
+            modelContext.delete(item)
+        }
+        do {
+            try modelContext.save()
+            logger.info("Purged \(old.count) old content cache entries")
+        } catch {
+            logger.error("Failed to purge old content: \(error.localizedDescription)")
+        }
+    }
+
+    func deleteContent(accountId: String, msgId: String) {
+        let key = "\(accountId)_\(msgId)"
+        let descriptor = FetchDescriptor<CachedEmailContent>(
+            predicate: #Predicate { $0.contentKey == key }
+        )
+        do {
+            let cached = try modelContext.fetch(descriptor)
+            for item in cached {
+                modelContext.delete(item)
+            }
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to delete content for \(key): \(error.localizedDescription)")
+        }
+    }
+
+    func clearContent() {
+        let descriptor = FetchDescriptor<CachedEmailContent>()
+        let all = (try? modelContext.fetch(descriptor)) ?? []
+        for item in all {
+            modelContext.delete(item)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to clear content cache: \(error.localizedDescription)")
+        }
+    }
+
+    var contentCacheCount: Int {
+        let descriptor = FetchDescriptor<CachedEmailContent>()
         return (try? modelContext.fetchCount(descriptor)) ?? 0
     }
 }

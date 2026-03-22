@@ -47,6 +47,7 @@ struct AgMailApp: App {
 
         Settings {
             SettingsView()
+                .environmentObject(appState.emailCache)
         }
     }
 }
@@ -116,6 +117,8 @@ final class AppState: ObservableObject {
     static let downloadsDirectoryKey = "downloadsDirectory"
     static let pollIntervalKey = "pollInterval"
     static let defaultPollInterval: Double = 45
+    static let cacheRetentionDaysKey = "cacheRetentionDays"
+    static let defaultCacheRetentionDays: Int = 30
 
     private static let logger = Logger(subsystem: "AgMail", category: "AppState")
 
@@ -142,9 +145,14 @@ final class AppState: ObservableObject {
 
         defaults.register(defaults: [
             AppState.showDockBadgeKey: true,
-            AppState.pollIntervalKey: AppState.defaultPollInterval
+            AppState.pollIntervalKey: AppState.defaultPollInterval,
+            AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays
         ])
         observeDockBadge()
+
+        // Purge expired cached message bodies
+        let retentionDays = defaults.integer(forKey: AppState.cacheRetentionDaysKey)
+        cache.purgeOldContent(olderThanDays: retentionDays > 0 ? retentionDays : AppState.defaultCacheRetentionDays)
 
         Task {
             await notifications.requestPermission()
@@ -165,7 +173,8 @@ final class AppState: ObservableObject {
 
         defaults.register(defaults: [
             AppState.showDockBadgeKey: true,
-            AppState.pollIntervalKey: AppState.defaultPollInterval
+            AppState.pollIntervalKey: AppState.defaultPollInterval,
+            AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays
         ])
         observeDockBadge()
     }

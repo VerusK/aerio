@@ -1,10 +1,13 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @EnvironmentObject private var emailCache: EmailCache
     @AppStorage(AppState.showDockBadgeKey) private var showDockBadge = true
     @AppStorage(AppState.downloadsDirectoryKey) private var downloadsDirectory = ""
     @AppStorage(AppState.pollIntervalKey) private var pollInterval = AppState.defaultPollInterval
+    @AppStorage(AppState.cacheRetentionDaysKey) private var cacheRetentionDays = AppState.defaultCacheRetentionDays
     @State private var cacheDetails: [(name: String, path: String, size: Int64)] = []
+    @State private var contentCacheCount: Int = 0
     @State private var cacheTotal: String = "Calculating…"
 
     private var shortcuts: [ShortcutAction] {
@@ -67,9 +70,26 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+
+                HStack {
+                    Text("Delete cached messages older than")
+                    TextField("", value: $cacheRetentionDays, format: .number)
+                        .frame(width: 50)
+                        .multilineTextAlignment(.trailing)
+                    Text("days")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Cache") {
+                if contentCacheCount > 0 {
+                    HStack {
+                        Text("Cached message bodies")
+                        Spacer()
+                        Text("\(contentCacheCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 ForEach(cacheDetails, id: \.path) { item in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -114,7 +134,10 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .navigationTitle("Settings")
         .frame(width: 400, height: 600)
-        .onAppear { calculateCacheSize() }
+        .onAppear {
+            calculateCacheSize()
+            contentCacheCount = emailCache.contentCacheCount
+        }
     }
 
     private func pickDownloadsDirectory() {
@@ -211,8 +234,11 @@ struct SettingsView: View {
             try? fm.removeItem(at: appCacheDir)
         }
 
+        emailCache.clearContent()
+
         cacheDetails = []
         cacheTotal = "0 bytes"
+        contentCacheCount = 0
     }
 
     static func resolvedDownloadsDirectory() -> URL {

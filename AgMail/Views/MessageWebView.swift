@@ -110,6 +110,79 @@ private func base64URLDecode(_ str: String) -> Data? {
     Data.fromBase64URL(str)
 }
 
+/// Download external images (https:// src) and replace with data: URIs for offline caching.
+/// Supports double/single quotes in img src and CSS background-image url().
+func inlineExternalImages(in html: String) async -> String {
+    // Match img src="https://..." (double or single quotes) and url('https://...') / url("https://...")
+    let patterns = [
+        #"<img\b[^>]*\bsrc\s*=\s*"(https?://[^"]+)"#,
+        #"<img\b[^>]*\bsrc\s*=\s*'(https?://[^']+)"#,
+        #"url\(\s*"(https?://[^"]+)"\s*\)"#,
+        #"url\(\s*'(https?://[^']+)'\s*\)"#,
+    ]
+    var regexes: [NSRegularExpression] = []
+    for p in patterns {
+        if let r = try? NSRegularExpression(pattern: p, options: .caseInsensitive) { regexes.append(r) }
+    }
+    guard !regexes.isEmpty else { return html }
+
+    let nsHTML = html as NSString
+    let fullRange = NSRange(location: 0, length: nsHTML.length)
+
+    // Collect unique URLs from all patterns
+    var urls: [String] = []
+    var seen: Set<String> = []
+    for regex in regexes {
+        for match in regex.matches(in: html, range: fullRange) {
+            let url = nsHTML.substring(with: match.range(at: 1))
+            if seen.insert(url).inserted {
+                urls.append(url)
+            }
+        }
+    }
+    guard !urls.isEmpty else { return html }
+
+    // Download images concurrently
+    var urlToDataURI: [String: String] = [:]
+
+    await withTaskGroup(of: (String, String?).self) { group in
+        for urlString in urls {
+            group.addTask {
+                guard let url = URL(string: urlString) else { return (urlString, nil) }
+                do {
+                    let (data, response) = try await URLSession.shared.data(from: url)
+                    guard let http = response as? HTTPURLResponse,
+                          http.statusCode == 200,
+                          data.count <= 5_000_000 else {
+                        return (urlString, nil)
+                    }
+                    let mime = http.mimeType ?? "image/png"
+                    guard mime.hasPrefix("image/") else { return (urlString, nil) }
+                    let base64 = data.base64EncodedString()
+                    return (urlString, "data:\(mime);base64,\(base64)")
+                } catch {
+                    return (urlString, nil)
+                }
+            }
+        }
+
+        for await (urlString, dataURI) in group {
+            if let dataURI {
+                urlToDataURI[urlString] = dataURI
+            }
+        }
+    }
+
+    guard !urlToDataURI.isEmpty else { return html }
+
+    // Simple string replacement — no NSRange offset issues
+    var result = html
+    for (url, dataURI) in urlToDataURI {
+        result = result.replacingOccurrences(of: url, with: dataURI)
+    }
+    return result
+}
+
 /// Native message detail: SwiftUI headers + WKWebView for HTML body
 struct NativeMessageDetail: View {
     let email: Email
@@ -375,6 +448,32 @@ struct NativeMessageDetail: View {
         errorMessage = nil
 
         Task {
+            // Try loading from content cache first
+            if let cached = apiManager.dataStore?.loadContent(accountId: email.accountId, msgId: email.msgId) {
+                let content = MessageContentData(
+                    from: cached.headers["from"] ?? email.from,
+                    to: cached.headers["to"] ?? "",
+                    cc: cached.headers["cc"] ?? "",
+                    subject: cached.headers["subject"] ?? email.subject,
+                    date: cached.headers["date"] ?? email.date.shortRelative,
+                    bodyHTML: cached.bodyHTML,
+                    attachments: cached.attachments.map { dict in
+                        MessageContentData.AttachmentInfo(
+                            name: dict["name"] ?? "",
+                            size: dict["size"] ?? "",
+                            attachmentId: dict["attachmentId"],
+                            messageId: dict["messageId"],
+                            mimeType: dict["mimeType"]
+                        )
+                    }
+                )
+                messageContent = content
+                let html = wrapHTML(cached.bodyHTML, subject: content.subject)
+                bodyWebViewStore.loadHTML(html)
+                isLoading = false
+                return
+            }
+
             do {
                 let message = try await apiManager.fetchMessageContent(msgId: email.msgId, accountId: email.accountId)
                 let headers = message.payload?.headers ?? []
@@ -443,15 +542,40 @@ struct NativeMessageDetail: View {
                     bodyHTML += imagesHTML
                 }
 
+                // Show content immediately — text + CID images ready, external images load via WKWebView
                 let content = MessageContentData(
                     from: from, to: to, cc: cc, subject: subject,
                     date: dateStr, bodyHTML: bodyHTML, attachments: attachments
                 )
                 messageContent = content
-
-                let html = wrapHTML(bodyHTML, subject: subject)
-                bodyWebViewStore.loadHTML(html)
+                let displayHTML = wrapHTML(bodyHTML, subject: subject)
+                bodyWebViewStore.loadHTML(displayHTML)
                 isLoading = false
+
+                // Background: inline external images and save to cache
+                let accountId = email.accountId
+                let msgId = email.msgId
+                let attDicts = attachments.map { att -> [String: String] in
+                    var dict: [String: String] = ["name": att.name, "size": att.size]
+                    if let id = att.attachmentId { dict["attachmentId"] = id }
+                    if let mid = att.messageId { dict["messageId"] = mid }
+                    if let mime = att.mimeType { dict["mimeType"] = mime }
+                    return dict
+                }
+                let headerDict = ["from": from, "to": to, "cc": cc, "subject": subject, "date": dateStr]
+
+                Task.detached { [bodyHTML] in
+                    let cachedHTML = await inlineExternalImages(in: bodyHTML)
+                    await MainActor.run {
+                        self.apiManager.dataStore?.saveContent(
+                            accountId: accountId,
+                            msgId: msgId,
+                            bodyHTML: cachedHTML,
+                            headers: headerDict,
+                            attachments: attDicts
+                        )
+                    }
+                }
             } catch {
                 logger.error("Failed to load message: \(error.localizedDescription)")
                 errorMessage = error.localizedDescription
