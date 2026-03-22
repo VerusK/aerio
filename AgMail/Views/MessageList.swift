@@ -19,19 +19,7 @@ struct MessageList: View {
 
     var body: some View {
         Group {
-            if filteredEmails.isEmpty && !hasMoreEmails {
-                VStack(spacing: 8) {
-                    Image(systemName: selectedFolder.iconName)
-                        .font(.system(size: 32))
-                        .foregroundStyle(.secondary)
-                    Text("No messages")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityIdentifier("empty-folder-placeholder")
-            } else {
-                List(selection: $selectedEmailId) {
+            List(selection: $selectedEmailId) {
                     ForEach(filteredEmails) { email in
                         let isProcessing = processingEmailId == email.id
                         MessageRow(
@@ -74,7 +62,6 @@ struct MessageList: View {
                     }
                 }
                 .listStyle(.inset)
-            }
         }
         .frame(minWidth: 250)
     }

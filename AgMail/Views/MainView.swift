@@ -278,6 +278,7 @@ struct MainView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
         } else if currentEmails.isEmpty {
             if apiManager.allClientsErrored {
                 VStack(spacing: 8) {
@@ -295,6 +296,7 @@ struct MainView: View {
                         .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.background)
             } else if apiManager.hasLoadedAny {
                 VStack(spacing: 8) {
                     Image(systemName: "tray")
@@ -304,9 +306,11 @@ struct MainView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.background)
             } else {
                 ProgressView("Loading emails…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.background)
             }
         }
     }

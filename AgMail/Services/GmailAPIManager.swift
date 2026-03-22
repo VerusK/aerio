@@ -250,9 +250,13 @@ final class GmailAPIManager: ObservableObject {
 
             // Update UI — replace folder emails with fetched batch (avoids blank flash)
             var current = emailsByAccount[accountId] ?? []
+            let oldFolderEmails = current.filter { $0.folder == folder }
             current.removeAll { $0.folder == folder }
             current.append(contentsOf: batchEmails)
-            emailsByAccount[accountId] = current
+            // Skip update if data unchanged (avoids unnecessary re-render after cache load)
+            if oldFolderEmails != batchEmails {
+                emailsByAccount[accountId] = current
+            }
 
             // Update historyId from messages in this batch
             if listHistoryId == nil {
