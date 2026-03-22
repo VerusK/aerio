@@ -20,7 +20,7 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 
 - `AgMail/Models/` — Data models: Account, Email, Folder (enum)
 - `AgMail/Services/` — Business logic: GmailAPIClient (REST HTTP client with auth/retry), GmailAPIManager (per-account orchestration via API with batched fetch and infinite scroll), OAuthManager (OAuth 2.0 PKCE via ASWebAuthenticationSession), OAuthConfig (OAuth constants/endpoints), KeychainHelper (secure token storage via KeychainStore protocol), AccountManager (add/remove/update accounts), UnifiedMailbox (merge all accounts), RFC2822Builder (email composition), ContactsCache (address autocomplete from synced contacts), NotificationManager (desktop notifications via UNUserNotificationCenter)
-- `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with action buttons), ComposeView (with address autocomplete and draft-on-close), AccountSetupView, SettingsView
+- `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with action buttons), ComposeView (with address autocomplete, draft editing, and draft-on-close), ComposeWindowManager (non-modal NSPanel windows for compose), AccountSetupView, SettingsView
 - `AgMail/Persistence/` — SwiftData cache (DataStore) for instant launch display
 - `AgMail/Utilities/` — KeyboardShortcuts (layout-independent hotkeys via keyCode + NSEvent local monitor), KeyEventMonitor (Go-To state machine with timer)
 - `AgMailTests/` — Unit tests (140+ tests)
@@ -32,14 +32,16 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - `GmailAPIManager` orchestrates per-account API clients; polls via incremental sync (History API) after initial full fetch, with 410 Gone fallback to full re-fetch; batched email loading (50 per page) with real-time UI updates; page token management for infinite scroll
 - `UnifiedMailbox` merges emails from all API clients, sorted by date; supports `hasMoreEmails()` for infinite scroll sentinel
 - SwiftData caches parsed emails for instant display before first poll completes; `GmailAPIManager` calls `EmailCache.replaceEmails()` after each poll and `EmailCache.loadEmails()` at startup
-- Email composition via `RFC2822Builder` (RFC 2047 Q-encoding for non-ASCII) sent through Gmail API; draft auto-save on compose window close via Gmail Drafts API
+- Email composition via `RFC2822Builder` (RFC 2047 Q-encoding for non-ASCII) sent through Gmail API; draft auto-save on compose window close via Gmail Drafts API; draft editing loads content via Drafts API and sends via `sendDraft`
+- `ComposeWindowManager` opens compose views in non-modal `NSPanel` windows (not `.sheet`); windows are resizable, persist size via `frameAutosaveName`, and don't block the main window; uses `NSHostingController` with `sizingOptions = []` to prevent SwiftUI from overriding window size
+- `ComposeBodyEditor` (NSTextView wrapper) replaces SwiftUI TextEditor for cursor-at-start on replies and Tab field navigation; `FromPickerView` (NSPopUpButton wrapper) for keyboard-accessible account picker
 - Message content extracted from Gmail API MIME payload (text/html preferred, text/plain fallback); rendered natively via WKWebView in `MessageWebView` (forced light theme)
 - `KeychainStore` protocol abstracts Keychain access; `MockKeychainStore` used in tests to avoid system Keychain prompts
 - `ContactsCache` extracts sender addresses during sync for address autocomplete in ComposeView
 - `NotificationManager` sends desktop notifications for new INBOX+UNREAD emails; click-to-navigate via userInfo
 - `SearchOverlay` provides Spotlight-style global search across all accounts in parallel with 300ms debounce
 - `UnifiedSidebar` replaces separate AccountSidebar + FolderList with a 3-panel layout: folder tree with per-account sub-items
-- Keyboard-only navigation: `FocusedPanel` enum tracks active panel (sidebar/messageList/detail); ←/→ switch panels, ↑/↓ and J/K navigate within panel, Escape = back; `KeyEventMonitor` handles Go-To state machine (G+I/S/A/T/D/P for instant folder switch with 1s timeout); Space expands/collapses sidebar folder accounts; all bare keys suppressed when text field focused
+- Keyboard-only navigation: `FocusedPanel` enum tracks active panel (sidebar/messageList/detail); ←/→ switch panels, ↑/↓ and J/K navigate within panel, Enter opens draft for editing or focuses detail, Escape = back; `KeyEventMonitor` handles Go-To state machine (G+I/S/A/T/D/P for instant folder switch with 1s timeout); Space expands/collapses sidebar folder accounts; all bare keys suppressed when text field focused; **KeyEventMonitor is scoped to main window only** — compose windows receive native keyboard events
 - Sidebar tree nav: `expandedFolders: Set<Folder>` controls DisclosureGroup expansion; ↑/↓ walks flat visible list of folders + expanded account rows; `SidebarItem` enum models cursor position
 - Folder enum includes: inbox, sent, archive, trash, spam, drafts
 - Dock badge count via `UNUserNotificationCenter.setBadgeCount()` (not `NSApp.dockTile.badgeLabel` — silently ignored on macOS 16+)
@@ -52,6 +54,7 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - **Email cache**: SwiftData `~/Library/Application Support/default.store`
 - **Window frame**: `UserDefaults` (key `mainWindowFrame`)
 - **Split positions**: `UserDefaults` (autosave key `AgMailMainSplit`)
+- **Compose window size**: `NSWindow.frameAutosaveName` (key `AgMailComposeWindow`)
 - **Dock badge toggle**: `UserDefaults` (key `showDockBadge`)
 - **Contacts cache**: `UserDefaults` (key `agmail_contacts_cache`)
 - **OAuth tokens**: macOS Keychain (per-account access/refresh tokens via KeychainHelper)

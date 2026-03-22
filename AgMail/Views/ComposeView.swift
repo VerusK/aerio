@@ -8,6 +8,7 @@ enum ComposeType: Sendable {
     case reply
     case replyAll
     case forward
+    case draft
 }
 
 struct ComposeView: View {
@@ -19,7 +20,6 @@ struct ComposeView: View {
     var preselectedAccountId: String?
     var onDismiss: (() -> Void)?
 
-    @Environment(\.dismiss) private var dismiss
     @State private var selectedAccountId: String = ""
     @State private var toField: String = ""
     @State private var ccField: String = ""
@@ -35,6 +35,13 @@ struct ComposeView: View {
     @State private var isDirty = false
     @State private var isInitialized = false
     @State private var isPopulatingHeaders = false
+    @State private var draftId: String?
+    @State private var isLoadingDraft = false
+    @FocusState private var focusedField: ComposeField?
+
+    enum ComposeField: Hashable {
+        case to, cc, subject
+    }
 
     enum AutocompleteField {
         case to, cc
@@ -42,53 +49,26 @@ struct ComposeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
             composeForm
             Divider()
             toolbar
         }
-        .frame(minWidth: 450, idealWidth: 600, minHeight: 350, idealHeight: 500)
+        .frame(minWidth: 450, maxWidth: .infinity, minHeight: 350, maxHeight: .infinity)
         .onAppear {
             setupInitialValues()
             // Defer so onChange handlers ignore initial setup
-            DispatchQueue.main.async { isInitialized = true }
+            DispatchQueue.main.async {
+                isInitialized = true
+                setInitialFocus()
+            }
+        }
+        .onDisappear {
+            saveDraftIfNeeded()
         }
         .onChange(of: toField) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
         .onChange(of: ccField) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
         .onChange(of: subjectField) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
         .onChange(of: bodyText) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
-    }
-
-    private var header: some View {
-        HStack {
-            Text(headerTitle)
-                .font(.headline)
-            Spacer()
-            if isSending {
-                ProgressView()
-                    .scaleEffect(0.7)
-                Text("Sending…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Button("Close") {
-                saveDraftIfNeeded()
-                onDismiss?()
-                dismiss()
-            }
-            .keyboardShortcut(.escape)
-        }
-        .padding()
-    }
-
-    private var headerTitle: String {
-        switch composeType {
-        case .new: return "New Message"
-        case .reply: return "Reply"
-        case .replyAll: return "Reply All"
-        case .forward: return "Forward"
-        }
     }
 
     private var composeForm: some View {
@@ -99,36 +79,37 @@ struct ComposeView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 50, alignment: .leading)
-                Picker("", selection: $selectedAccountId) {
-                    ForEach(accountManager.accounts) { account in
-                        Text(account.email).tag(account.id)
-                    }
-                }
-                .labelsHidden()
+                FromPickerView(accounts: accountManager.accounts, selectedAccountId: $selectedAccountId)
+                    .frame(height: 22)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             Divider()
 
             // To
-            autocompleteFieldRow("To:", text: $toField, suggestions: $toSuggestions, field: .to)
+            autocompleteFieldRow("To:", text: $toField, suggestions: $toSuggestions, field: .to, focusField: .to)
                 .disabled(isLoadingRecipients)
             Divider()
 
             // Cc
-            autocompleteFieldRow("Cc:", text: $ccField, suggestions: $ccSuggestions, field: .cc)
+            autocompleteFieldRow("Cc:", text: $ccField, suggestions: $ccSuggestions, field: .cc, focusField: .cc)
                 .disabled(isLoadingRecipients)
             Divider()
 
             // Subject
-            fieldRow("Subject:", text: $subjectField)
+            fieldRow("Subject:", text: $subjectField, focusField: .subject)
             Divider()
 
             // Body
-            TextEditor(text: $bodyText)
-                .font(.system(size: 13))
-                .padding(8)
-                .frame(maxHeight: .infinity)
+            ComposeBodyEditor(
+                text: $bodyText,
+                cursorAtStart: composeType == .reply || composeType == .replyAll || composeType == .forward,
+                onTab: { focusedField = .to },
+                onBackTab: { focusedField = .subject }
+            )
+            .frame(maxHeight: .infinity)
 
             if let replyAllWarning {
                 HStack {
@@ -158,7 +139,7 @@ struct ComposeView: View {
         }
     }
 
-    private func fieldRow(_ label: String, text: Binding<String>) -> some View {
+    private func fieldRow(_ label: String, text: Binding<String>, focusField: ComposeField) -> some View {
         HStack {
             Text(label)
                 .font(.system(size: 12, weight: .medium))
@@ -167,12 +148,13 @@ struct ComposeView: View {
             TextField("", text: text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
+                .focused($focusedField, equals: focusField)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
     }
 
-    private func autocompleteFieldRow(_ label: String, text: Binding<String>, suggestions: Binding<[CachedContact]>, field: AutocompleteField) -> some View {
+    private func autocompleteFieldRow(_ label: String, text: Binding<String>, suggestions: Binding<[CachedContact]>, field: AutocompleteField, focusField: ComposeField) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(label)
@@ -182,6 +164,7 @@ struct ComposeView: View {
                 TextField("", text: text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
+                    .focused($focusedField, equals: focusField)
                     .onChange(of: text.wrappedValue) { _, newValue in
                         updateSuggestions(for: field, query: newValue)
                     }
@@ -267,6 +250,28 @@ struct ComposeView: View {
 
     private var toolbar: some View {
         HStack {
+            if isLoadingRecipients {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Loading recipients…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if isLoadingDraft {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Loading draft…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if isSending {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Sending…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
             Button {
                 sendMessage()
             } label: {
@@ -276,19 +281,34 @@ struct ComposeView: View {
                 }
             }
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(isSending || isLoadingRecipients || toField.isEmpty)
-
-            if isLoadingRecipients {
-                ProgressView()
-                    .scaleEffect(0.7)
-                Text("Loading recipients…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
+            .disabled(isSending || isLoadingRecipients || isLoadingDraft || toField.isEmpty)
+            .help("Send message (⌘Return)")
         }
         .padding()
+    }
+
+    private func setInitialFocus() {
+        switch composeType {
+        case .new:
+            focusedField = .to
+        case .reply, .replyAll, .forward, .draft:
+            // Focus the NSTextView body editor directly
+            DispatchQueue.main.async {
+                if let window = NSApp.keyWindow,
+                   let textView = Self.findTextView(in: window.contentView) {
+                    window.makeFirstResponder(textView)
+                }
+            }
+        }
+    }
+
+    private static func findTextView(in view: NSView?) -> NSTextView? {
+        guard let view else { return nil }
+        if let tv = view as? TabAwareTextView { return tv }
+        for subview in view.subviews {
+            if let found = findTextView(in: subview) { return found }
+        }
+        return nil
     }
 
     private func setupInitialValues() {
@@ -313,11 +333,62 @@ struct ComposeView: View {
             case .forward:
                 subjectField = email.subject.hasPrefix("Fwd:") ? email.subject : "Fwd: \(email.subject)"
                 bodyText = "\n\n---\nForwarded message from \(email.from):\n\(email.snippet)"
+            case .draft:
+                selectedAccountId = email.accountId
+                loadDraftContent(email: email)
             case .new:
                 break
             }
-            selectedAccountId = email.accountId
+            if composeType != .draft {
+                selectedAccountId = email.accountId
+            }
         }
+    }
+
+    private func loadDraftContent(email: Email) {
+        isLoadingDraft = true
+        isPopulatingHeaders = true
+        Task {
+            do {
+                if let draft = try await apiManager.fetchDraftByMessageId(msgId: email.msgId, accountId: email.accountId) {
+                    draftId = draft.id
+                    if let message = draft.message, let payload = message.payload {
+                        let headers = payload.headers ?? []
+                        let to = headers.first { $0.name.lowercased() == "to" }?.value ?? ""
+                        let cc = headers.first { $0.name.lowercased() == "cc" }?.value ?? ""
+                        let subject = headers.first { $0.name.lowercased() == "subject" }?.value ?? ""
+
+                        toField = to
+                        ccField = cc
+                        subjectField = subject
+                        bodyText = extractPlainTextFromPayload(payload)
+                    }
+                }
+            } catch {
+                sendError = "Failed to load draft"
+                logger.error("Draft load failed: \(error.localizedDescription)")
+            }
+            DispatchQueue.main.async {
+                isLoadingDraft = false
+                isPopulatingHeaders = false
+            }
+        }
+    }
+
+    /// Extract plain text body from MIME payload for draft editing.
+    private func extractPlainTextFromPayload(_ payload: GmailPayload) -> String {
+        if let parts = payload.parts, !parts.isEmpty {
+            for part in parts {
+                let result = extractPlainTextFromPayload(part)
+                if !result.isEmpty { return result }
+            }
+            return ""
+        }
+        let mime = payload.mimeType?.lowercased() ?? ""
+        guard mime == "text/plain" else { return "" }
+        guard let bodyData = payload.body?.data, !bodyData.isEmpty else { return "" }
+        guard let decoded = RFC2822Builder.base64URLDecode(bodyData) else { return "" }
+        return String(data: decoded, encoding: .utf8) ?? ""
     }
 
     private func fetchReplyHeaders(email: Email, includeAllRecipients: Bool) {
@@ -423,6 +494,8 @@ struct ComposeView: View {
     }
 
     private func saveDraftIfNeeded() {
+        // Don't create a new draft when editing an existing one
+        guard composeType != .draft else { return }
         guard isDirty, hasContent else { return }
         guard let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email else { return }
 
@@ -457,23 +530,167 @@ struct ComposeView: View {
 
         Task {
             do {
-                try await apiManager.sendEmail(
-                    from: fromEmail,
-                    to: toField,
-                    cc: ccField.isEmpty ? nil : ccField,
-                    subject: subjectField,
-                    body: bodyText,
-                    accountId: selectedAccountId,
-                    inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
-                    references: replyToEmail?.messageId ?? fetchedMessageId
-                )
+                if let draftId, composeType == .draft {
+                    try await apiManager.sendDraft(draftId: draftId, accountId: selectedAccountId)
+                } else {
+                    try await apiManager.sendEmail(
+                        from: fromEmail,
+                        to: toField,
+                        cc: ccField.isEmpty ? nil : ccField,
+                        subject: subjectField,
+                        body: bodyText,
+                        accountId: selectedAccountId,
+                        inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
+                        references: replyToEmail?.messageId ?? fetchedMessageId
+                    )
+                }
                 onDismiss?()
-                dismiss()
                 Task { await apiManager.refreshAll() }
             } catch {
                 sendError = error.localizedDescription
             }
             isSending = false
+        }
+    }
+}
+
+// MARK: - Body text editor (NSTextView wrapper)
+
+/// NSTextView-based editor that:
+/// - Positions cursor at the start on initial focus
+/// - Handles Tab/Shift-Tab to move between fields instead of inserting whitespace
+struct ComposeBodyEditor: NSViewRepresentable {
+    @Binding var text: String
+    var cursorAtStart: Bool = false
+    var onTab: (() -> Void)?
+    var onBackTab: (() -> Void)?
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+
+        let textView = TabAwareTextView()
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.font = .systemFont(ofSize: 13)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.delegate = context.coordinator
+        textView.onTab = onTab
+        textView.onBackTab = onBackTab
+        textView.string = text
+
+        scrollView.documentView = textView
+
+        if cursorAtStart {
+            DispatchQueue.main.async {
+                textView.setSelectedRange(NSRange(location: 0, length: 0))
+            }
+        }
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            let selectedRange = textView.selectedRange()
+            textView.string = text
+            // Preserve cursor position if possible
+            let safeRange = NSRange(
+                location: min(selectedRange.location, text.utf16.count),
+                length: 0
+            )
+            textView.setSelectedRange(safeRange)
+        }
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: ComposeBodyEditor
+        init(_ parent: ComposeBodyEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+    }
+}
+
+/// NSTextView subclass that intercepts Tab/Shift-Tab for field navigation.
+class TabAwareTextView: NSTextView {
+    var onTab: (() -> Void)?
+    var onBackTab: (() -> Void)?
+
+    override func insertTab(_ sender: Any?) {
+        if let onTab {
+            onTab()
+        } else {
+            super.insertTab(sender)
+        }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        if let onBackTab {
+            onBackTab()
+        } else {
+            super.insertBacktab(sender)
+        }
+    }
+}
+
+// MARK: - From picker (NSPopUpButton wrapper)
+
+/// Keyboard-accessible NSPopUpButton that participates in Tab loop.
+struct FromPickerView: NSViewRepresentable {
+    let accounts: [Account]
+    @Binding var selectedAccountId: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.bezelStyle = .texturedRounded
+        popup.font = .systemFont(ofSize: 12)
+        popup.target = context.coordinator
+        popup.action = #selector(Coordinator.selectionChanged(_:))
+        popup.refusesFirstResponder = false
+        updateItems(popup)
+        return popup
+    }
+
+    func updateNSView(_ popup: NSPopUpButton, context: Context) {
+        updateItems(popup)
+    }
+
+    private func updateItems(_ popup: NSPopUpButton) {
+        let currentTitles = (0..<popup.numberOfItems).map { popup.item(at: $0)?.title ?? "" }
+        let newTitles = accounts.map(\.email)
+        if currentTitles != newTitles {
+            popup.removeAllItems()
+            for account in accounts {
+                popup.addItem(withTitle: account.email)
+                popup.lastItem?.representedObject = account.id
+            }
+        }
+        if let idx = accounts.firstIndex(where: { $0.id == selectedAccountId }) {
+            popup.selectItem(at: idx)
+        }
+    }
+
+    class Coordinator: NSObject {
+        var parent: FromPickerView
+        init(_ parent: FromPickerView) { self.parent = parent }
+
+        @objc func selectionChanged(_ sender: NSPopUpButton) {
+            if let id = sender.selectedItem?.representedObject as? String {
+                parent.selectedAccountId = id
+            }
         }
     }
 }

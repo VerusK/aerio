@@ -40,6 +40,7 @@ enum ShortcutAction: String, CaseIterable, Sendable {
     case search               // Cmd+Shift+F
     case refresh              // Cmd+Shift+E
     case openSettings         // Cmd+,
+    case openMessage           // Enter (bare)
     case nextMessageAlt       // Alt+Down
     case previousMessageAlt   // Alt+Up
 
@@ -69,6 +70,7 @@ enum ShortcutAction: String, CaseIterable, Sendable {
         case .search:            return "Search"
         case .refresh:           return "Refresh"
         case .openSettings:      return "Settings"
+        case .openMessage:       return "Open Message"
         case .nextMessageAlt:    return "Next Message"
         case .previousMessageAlt: return "Previous Message"
         }
@@ -89,6 +91,7 @@ enum ShortcutAction: String, CaseIterable, Sendable {
         case .goToTrash:     return "G T"
         case .goToDrafts:    return "G D"
         case .goToSpam:      return "G P"
+        case .openMessage:   return "↩"
         default: break
         }
         guard let binding = KeyboardShortcuts.eventBindings[self] else { return "" }
@@ -201,6 +204,7 @@ struct KeyboardShortcuts: Sendable {
             case "j":        return .navigateDown
             case "k":        return .navigateUp
             case " ":        return .toggleExpand
+            case "\r":       return .openMessage
             default: break
             }
         }

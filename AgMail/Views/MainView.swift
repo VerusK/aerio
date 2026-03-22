@@ -243,8 +243,18 @@ struct MainView: View {
             keyMonitor.uninstall()
             apiManager.stopPollingAll()
         }
-        .sheet(isPresented: $showingCompose) {
-            composeSheet
+        .onChange(of: showingCompose) { _, show in
+            if show {
+                ComposeWindowManager.shared.open(
+                    accountManager: accountManager,
+                    apiManager: apiManager,
+                    contactsCache: contactsCache,
+                    composeType: composeType,
+                    replyToEmail: composeTargetMsgId.flatMap { findEmail(byMsgId: $0) },
+                    preselectedAccountId: composeAccount?.id
+                )
+                showingCompose = false
+            }
         }
         .overlay {
             if showingSearch {
@@ -341,6 +351,7 @@ struct MainView: View {
                         onDelete: { executeActionOnEmail(email, action: .delete) },
                         onSpam: { executeActionOnEmail(email, action: .spam) },
                         onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
+                        onEditDraft: { openDraft(email) },
                         onRegisterScroll: { handler in detailScrollHandler = handler }
                     )
                     .id(email.id)
@@ -357,19 +368,6 @@ struct MainView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    @ViewBuilder
-    private var composeSheet: some View {
-        ComposeView(
-            accountManager: accountManager,
-            apiManager: apiManager,
-            contactsCache: contactsCache,
-            composeType: composeType,
-            replyToEmail: composeTargetMsgId.flatMap { findEmail(byMsgId: $0) },
-            preselectedAccountId: composeAccount?.id,
-            onDismiss: { showingCompose = false }
-        )
     }
 
     /// For reply/replyAll/forward, use the account that owns the selected email.
@@ -423,6 +421,9 @@ struct MainView: View {
 
     /// Handle an NSEvent keyDown. Returns `true` if the event was consumed.
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
+        // Only handle keys when the main window is key (not compose windows)
+        guard event.window === NSApp.mainWindow else { return false }
+
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         let isBareKey = flags.isEmpty
 
@@ -471,6 +472,9 @@ struct MainView: View {
             selectAdjacentEmail(offset: 1)
         case .previousMessageAlt:
             selectAdjacentEmail(offset: -1)
+        // Open message / edit draft
+        case .openMessage:
+            openSelectedDraftOrFocusDetail()
         // Compose
         case .compose:
             triggerCompose(.new, msgId: "")
@@ -639,6 +643,26 @@ struct MainView: View {
         composeType = type
         composeTargetMsgId = msgId
         showingCompose = true
+    }
+
+    private func openSelectedDraftOrFocusDetail() {
+        guard let selectedEmailId, let email = findEmail(by: selectedEmailId) else { return }
+        if selectedFolder == .drafts {
+            openDraft(email)
+        } else {
+            focusedPanel = .detail
+        }
+    }
+
+    private func openDraft(_ email: Email) {
+        ComposeWindowManager.shared.open(
+            accountManager: accountManager,
+            apiManager: apiManager,
+            contactsCache: contactsCache,
+            composeType: .draft,
+            replyToEmail: email,
+            preselectedAccountId: email.accountId
+        )
     }
 
     enum EmailAction: CustomStringConvertible {

@@ -85,7 +85,9 @@ struct UnifiedSidebar: View {
                 .lineLimit(1)
                 .fontWeight(isActive ? .semibold : .regular)
             Spacer()
-            let count = unifiedMailbox.unreadCount(for: folder)
+            let count = folder == .drafts
+                ? unifiedMailbox.totalCount(for: folder)
+                : unifiedMailbox.unreadCount(for: folder)
             if count > 0 {
                 Text("\(count)")
                     .font(.caption)
@@ -124,7 +126,9 @@ struct UnifiedSidebar: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
-            let count = unifiedMailbox.unreadCount(for: folder, accountId: account.id)
+            let count = folder == .drafts
+                ? unifiedMailbox.totalCount(for: folder, accountId: account.id)
+                : unifiedMailbox.unreadCount(for: folder, accountId: account.id)
             if count > 0 {
                 Text("\(count)")
                     .font(.caption2)

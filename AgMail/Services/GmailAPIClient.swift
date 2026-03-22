@@ -145,6 +145,29 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         return try await execute(request: request)
     }
 
+    func getDraft(draftId: String) async throws -> GmailDraft {
+        let request = try buildRequest(path: "/drafts/\(draftId)?format=full")
+        return try await execute(request: request)
+    }
+
+    func listDrafts() async throws -> GmailDraftsListResponse {
+        let request = try buildRequest(path: "/drafts?maxResults=500")
+        return try await execute(request: request)
+    }
+
+    func sendDraft(draftId: String) async throws -> GmailMessage {
+        let body = ["id": draftId]
+        var request = try buildRequest(path: "/drafts/send", method: "POST")
+        request.httpBody = try JSONEncoder().encode(body)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await execute(request: request)
+    }
+
+    func deleteDraft(draftId: String) async throws {
+        let request = try buildRequest(path: "/drafts/\(draftId)", method: "DELETE")
+        _ = try await session.data(for: request)
+    }
+
     func listLabels() async throws -> [GmailLabel] {
         let request = try buildRequest(path: "/labels")
         let response: GmailLabelsResponse = try await execute(request: request)

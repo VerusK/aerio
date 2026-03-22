@@ -31,6 +31,7 @@
 		AA0000000000000000000062 /* AccountSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000062 /* AccountSetupView.swift */; };
 		AA0000000000000000000063 /* MessageListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000063 /* MessageListTests.swift */; };
 		AA0000000000000000000072 /* ComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000072 /* ComposeView.swift */; };
+		AA0000000000000000000073 /* ComposeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* ComposeWindowManager.swift */; };
 		AA0000000000000000000080 /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000080 /* KeyboardShortcuts.swift */; };
 		AA0000000000000000000081 /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000081 /* DataStore.swift */; };
 		AA0000000000000000000082 /* KeyboardShortcutsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000082 /* KeyboardShortcutsTests.swift */; };
@@ -91,6 +92,7 @@
 		BB0000000000000000000062 /* AccountSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSetupView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000063 /* MessageListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageListTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000072 /* ComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000073 /* ComposeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeWindowManager.swift; sourceTree = "<group>"; };
 		BB0000000000000000000080 /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
 		BB0000000000000000000081 /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
 		BB0000000000000000000082 /* KeyboardShortcutsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutsTests.swift; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 				BB0000000000000000000061 /* MessageWebView.swift */,
 				BB0000000000000000000062 /* AccountSetupView.swift */,
 				BB0000000000000000000072 /* ComposeView.swift */,
+				BB0000000000000000000073 /* ComposeWindowManager.swift */,
 				BB0000000000000000000086 /* SettingsView.swift */,
 				DE0000000000000000000002 /* UnifiedSidebar.swift */,
 				EF0000000000000000000002 /* SearchOverlay.swift */,
@@ -353,6 +356,7 @@
 				AA0000000000000000000061 /* MessageWebView.swift in Sources */,
 				AA0000000000000000000062 /* AccountSetupView.swift in Sources */,
 				AA0000000000000000000072 /* ComposeView.swift in Sources */,
+				AA0000000000000000000073 /* ComposeWindowManager.swift in Sources */,
 				AA0000000000000000000080 /* KeyboardShortcuts.swift in Sources */,
 				AA0000000000000000000081 /* DataStore.swift in Sources */,
 				AA0000000000000000000086 /* SettingsView.swift in Sources */,

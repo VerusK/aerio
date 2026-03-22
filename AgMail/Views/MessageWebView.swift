@@ -94,6 +94,7 @@ struct NativeMessageDetail: View {
     var onDelete: (() -> Void)?
     var onSpam: (() -> Void)?
     var onMoveToInbox: (() -> Void)?
+    var onEditDraft: (() -> Void)?
     /// Called by parent to register a scroll handler for keyboard navigation.
     var onRegisterScroll: ((@escaping (Int) -> Void) -> Void)?
 
@@ -178,21 +179,28 @@ struct NativeMessageDetail: View {
 
     private var actionButtonBar: some View {
         HStack(spacing: 4) {
-            actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply (\(ShortcutAction.reply.shortcutLabel))", action: onReply)
-            actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All (\(ShortcutAction.replyAll.shortcutLabel))", action: onReplyAll)
-            actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))", action: onForward)
+            if folder == .drafts {
+                actionButton(icon: "square.and.pencil", tooltip: "Edit Draft (Enter)", action: onEditDraft)
 
-            Divider()
-                .frame(height: 16)
+                Divider()
+                    .frame(height: 16)
+            } else {
+                actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply (\(ShortcutAction.reply.shortcutLabel))", action: onReply)
+                actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All (\(ShortcutAction.replyAll.shortcutLabel))", action: onReplyAll)
+                actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))", action: onForward)
 
-            if folder == .inbox {
-                actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)
-            }
-            if folder != .inbox {
-                actionButton(icon: "tray.and.arrow.down", tooltip: "Move to Inbox (\(ShortcutAction.moveToInbox.shortcutLabel))", action: onMoveToInbox)
+                Divider()
+                    .frame(height: 16)
+
+                if folder == .inbox {
+                    actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)
+                }
+                if folder != .inbox {
+                    actionButton(icon: "tray.and.arrow.down", tooltip: "Move to Inbox (\(ShortcutAction.moveToInbox.shortcutLabel))", action: onMoveToInbox)
+                }
+                actionButton(icon: "exclamationmark.octagon", tooltip: "Spam (\(ShortcutAction.spamMessage.shortcutLabel))", action: onSpam)
             }
             actionButton(icon: "trash", tooltip: "Delete (\(ShortcutAction.deleteMessage.shortcutLabel))", action: onDelete)
-            actionButton(icon: "exclamationmark.octagon", tooltip: "Spam (\(ShortcutAction.spamMessage.shortcutLabel))", action: onSpam)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)

@@ -680,6 +680,27 @@ final class GmailAPIManager: ObservableObject {
         logger.info("[\(accountId)] draft saved")
     }
 
+    /// Find draft ID by message ID and return full draft content.
+    func fetchDraftByMessageId(msgId: String, accountId: String) async throws -> GmailDraft? {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let listResponse = try await client.listDrafts()
+        guard let drafts = listResponse.drafts else { return nil }
+        guard let match = drafts.first(where: { $0.message?.id == msgId }) else { return nil }
+        return try await client.getDraft(draftId: match.id)
+    }
+
+    func sendDraft(draftId: String, accountId: String) async throws {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        _ = try await client.sendDraft(draftId: draftId)
+        logger.info("[\(accountId)] draft sent: \(draftId)")
+    }
+
+    func deleteDraft(draftId: String, accountId: String) async throws {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        try await client.deleteDraft(draftId: draftId)
+        logger.info("[\(accountId)] draft deleted: \(draftId)")
+    }
+
     // MARK: - Conversion
 
     func convertGmailMessageToEmail(_ message: GmailMessage, accountId: String, folder: Folder, skipLabelCheck: Bool = false) -> Email? {

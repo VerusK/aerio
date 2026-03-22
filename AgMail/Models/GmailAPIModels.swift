@@ -92,6 +92,20 @@ struct GmailDraft: Codable {
     let message: GmailMessage?
 }
 
+struct GmailDraftsListResponse: Codable {
+    let drafts: [GmailDraftSummary]?
+}
+
+struct GmailDraftSummary: Codable {
+    let id: String
+    let message: GmailDraftMessageRef?
+}
+
+struct GmailDraftMessageRef: Codable {
+    let id: String
+    let threadId: String?
+}
+
 // MARK: - History
 
 struct GmailHistoryResponse: Codable {
