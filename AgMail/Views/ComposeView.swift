@@ -48,6 +48,7 @@ struct ComposeView: View {
     @State private var fetchedMessageId: String?
     @State private var toSuggestions: [CachedContact] = []
     @State private var ccSuggestions: [CachedContact] = []
+    @State private var selectedSuggestionIndex: Int = -1
     @State private var isDirty = false
     @State private var isInitialized = false
     @State private var isPopulatingHeaders = false
@@ -189,7 +190,8 @@ struct ComposeView: View {
     }
 
     private func autocompleteFieldRow(_ label: String, text: Binding<String>, suggestions: Binding<[CachedContact]>, field: AutocompleteField, focusField: ComposeField) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let items = Array(suggestions.wrappedValue.prefix(5))
+        return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(label)
                     .font(.system(size: 12, weight: .medium))
@@ -202,13 +204,33 @@ struct ComposeView: View {
                     .onChange(of: text.wrappedValue) { _, newValue in
                         updateSuggestions(for: field, query: newValue)
                     }
+                    .onKeyPress(.downArrow) {
+                        guard !items.isEmpty else { return .ignored }
+                        selectedSuggestionIndex = min(selectedSuggestionIndex + 1, items.count - 1)
+                        return .handled
+                    }
+                    .onKeyPress(.upArrow) {
+                        guard !items.isEmpty else { return .ignored }
+                        selectedSuggestionIndex = max(selectedSuggestionIndex - 1, 0)
+                        return .handled
+                    }
+                    .onKeyPress(.return) {
+                        guard !items.isEmpty, selectedSuggestionIndex >= 0, selectedSuggestionIndex < items.count else { return .ignored }
+                        insertContact(items[selectedSuggestionIndex], into: text, field: field)
+                        return .handled
+                    }
+                    .onKeyPress(.escape) {
+                        guard !items.isEmpty else { return .ignored }
+                        clearSuggestions(for: field)
+                        return .handled
+                    }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
 
-            if !suggestions.wrappedValue.isEmpty {
+            if !items.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(suggestions.wrappedValue.prefix(5), id: \.self) { contact in
+                    ForEach(Array(items.enumerated()), id: \.element) { index, contact in
                         Button {
                             insertContact(contact, into: text, field: field)
                         } label: {
@@ -224,11 +246,13 @@ struct ComposeView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
+                            .background(index == selectedSuggestionIndex ? Color.accentColor.opacity(0.2) : Color.clear)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .onHover { hovering in
                             if hovering {
+                                selectedSuggestionIndex = index
                                 NSCursor.pointingHand.push()
                             } else {
                                 NSCursor.pop()
@@ -254,11 +278,27 @@ struct ComposeView: View {
             clearSuggestions(for: field)
             return
         }
-        let results = cache.search(currentToken)
+        let alreadyAdded = Self.existingEmails(in: query)
+        let results = cache.search(currentToken).filter { !alreadyAdded.contains($0.email) }
+        selectedSuggestionIndex = -1
         switch field {
         case .to: toSuggestions = results
         case .cc: ccSuggestions = results
         }
+    }
+
+    private static func existingEmails(in field: String) -> Set<String> {
+        let parts = field.components(separatedBy: ",")
+        guard parts.count > 1 else { return [] }
+        var emails = Set<String>()
+        for part in parts.dropLast() {
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            let parsed = ContactsCache.parseFromHeader(trimmed)
+            if !parsed.email.isEmpty {
+                emails.insert(parsed.email.lowercased())
+            }
+        }
+        return emails
     }
 
     private func clearSuggestions(for field: AutocompleteField) {
@@ -274,6 +314,7 @@ struct ComposeView: View {
         var mutableParts = parts.dropLast().map { $0.trimmingCharacters(in: .whitespaces) }
         mutableParts.append(contact.formatted)
         text.wrappedValue = mutableParts.joined(separator: ", ") + ", "
+        selectedSuggestionIndex = -1
         clearSuggestions(for: field)
     }
 

@@ -17,6 +17,8 @@ struct MessageList: View {
     var hasMoreEmails: Bool = false
     var processingEmailId: String? = nil
 
+    @State private var knownEmailIds: Set<String> = []
+
     var body: some View {
         ScrollViewReader { proxy in
             List {
@@ -57,6 +59,7 @@ struct MessageList: View {
                     .contextMenu {
                         contextMenuItems(for: email)
                     }
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if hasMoreEmails {
@@ -74,10 +77,29 @@ struct MessageList: View {
             }
             .listStyle(.inset)
             .frame(minWidth: 250)
-            .onChange(of: filteredEmails.count) {
-                if let selectedEmailId {
-                    proxy.scrollTo(selectedEmailId, anchor: nil)
+            .onChange(of: selectedEmailId) { _, newValue in
+                if let newValue {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(newValue, anchor: nil)
+                    }
                 }
+            }
+            .onChange(of: filteredEmails.count) { oldCount, newCount in
+                let currentIds = Set(filteredEmails.map(\.id))
+                let newIds = currentIds.subtracting(knownEmailIds)
+                knownEmailIds = currentIds
+
+                if !newIds.isEmpty && oldCount > 0 {
+                    // New emails arrived — smoothly scroll to keep selected email visible
+                    if let selectedEmailId {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(selectedEmailId, anchor: nil)
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                knownEmailIds = Set(filteredEmails.map(\.id))
             }
         }
     }
