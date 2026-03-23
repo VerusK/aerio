@@ -9,9 +9,13 @@
 			<string>com.agmail.oauth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.451766587137-5chs7l3rup98dkpavmijkq1gm8mj365h</string>
+				<string>$(OAUTH_CALLBACK_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
+	<key>OAuthClientID</key>
+	<string>$(OAUTH_CLIENT_ID)</string>
+	<key>OAuthCallbackScheme</key>
+	<string>$(OAUTH_CALLBACK_SCHEME)</string>
 </dict>
 </plist>

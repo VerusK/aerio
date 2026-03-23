@@ -1,8 +1,21 @@
 import Foundation
 
 enum OAuthConfig {
-    static let clientId = "451766587137-5chs7l3rup98dkpavmijkq1gm8mj365h.apps.googleusercontent.com"
-    static let redirectURI = "com.googleusercontent.apps.451766587137-5chs7l3rup98dkpavmijkq1gm8mj365h:/oauth/callback"
+    static let clientId: String = {
+        guard let id = Bundle.main.infoDictionary?["OAuthClientID"] as? String,
+              id != "REPLACE_ME" else {
+            fatalError("OAuth Client ID not configured. See AgMail/Config/OAuth.local.xcconfig.example")
+        }
+        return id
+    }()
+
+    static let redirectURI: String = {
+        guard let scheme = Bundle.main.infoDictionary?["OAuthCallbackScheme"] as? String else {
+            fatalError("OAuth Callback Scheme not configured.")
+        }
+        return "\(scheme):/oauth/callback"
+    }()
+
     static let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
     static let tokenURL = "https://oauth2.googleapis.com/token"
     static let userinfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"

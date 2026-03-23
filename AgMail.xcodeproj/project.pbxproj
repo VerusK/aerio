@@ -112,6 +112,7 @@
 		FA0000000000000000000004 /* ContactsCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsCacheTests.swift; sourceTree = "<group>"; };
 		FB0000000000000000000002 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		FB0000000000000000000004 /* NotificationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManagerTests.swift; sourceTree = "<group>"; };
+		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -150,6 +151,7 @@
 				GG0000000000000000000008 /* Views */,
 				GG0000000000000000000009 /* Utilities */,
 				GG000000000000000000000A /* Persistence */,
+				GG000000000000000000000B /* Config */,
 				BB0000000000000000000090 /* Assets.xcassets */,
 			);
 			path = AgMail;
@@ -247,6 +249,14 @@
 				BB0000000000000000000081 /* DataStore.swift */,
 			);
 			path = Persistence;
+			sourceTree = "<group>";
+		};
+		GG000000000000000000000B /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000010 /* OAuth.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -512,6 +522,7 @@
 		};
 		KK0000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC0000000000000000000010 /* OAuth.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -535,6 +546,7 @@
 		};
 		KK0000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC0000000000000000000010 /* OAuth.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
