@@ -47,8 +47,12 @@ struct UnifiedSidebar: View {
                 isExpanded: Binding(
                     get: { expandedFolders.contains(folder) },
                     set: { newValue in
-                        if newValue { expandedFolders.insert(folder) }
-                        else { expandedFolders.remove(folder) }
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            if newValue { expandedFolders.insert(folder) }
+                            else { expandedFolders.remove(folder) }
+                        }
                     }
                 )
             ) {

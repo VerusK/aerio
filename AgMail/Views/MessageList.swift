@@ -218,25 +218,26 @@ struct MessageRow: View {
                 HStack {
                     Text(email.from)
                         .font(.system(size: 13, weight: email.isRead ? .regular : .semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Spacer()
                     Text(email.date.shortRelative)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
 
                 Text(email.subject)
                     .font(.system(size: 12, weight: email.isRead ? .regular : .medium))
+                    .foregroundStyle(email.isRead ? .secondary : .primary)
                     .lineLimit(1)
 
                 Text(email.snippet)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
         }
         .padding(.vertical, 4)
-        .opacity(email.isRead ? 0.75 : 1.0)
         .accessibilityIdentifier("message-\(email.msgId)")
     }
 }

@@ -513,7 +513,18 @@ struct NativeMessageDetail: View {
                     }
                 }
 
-                let attachments = message.payload.map { extractAttachments($0, messageId: message.id) } ?? []
+                // Collect all inline image attachment IDs (with Content-ID) to exclude from attachment chips
+                let allInlineAttachmentIds: Set<String> = {
+                    guard let payload = message.payload else { return [] }
+                    let inlines = extractInlineImages(payload)
+                    return Set(inlines.map { $0.attachmentId })
+                }()
+
+                let attachments = (message.payload.map { extractAttachments($0, messageId: message.id) } ?? [])
+                    .filter { att in
+                        guard let attId = att.attachmentId else { return true }
+                        return !allInlineAttachmentIds.contains(attId)
+                    }
 
                 // Embed remaining image attachments (not resolved via CID) at the end of the body
                 let unresolvedImages = attachments.filter {
