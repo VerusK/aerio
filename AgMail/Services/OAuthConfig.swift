@@ -10,8 +10,9 @@ enum OAuthConfig {
     }()
 
     static let redirectURI: String = {
-        guard let scheme = Bundle.main.infoDictionary?["OAuthCallbackScheme"] as? String else {
-            fatalError("OAuth Callback Scheme not configured.")
+        guard let scheme = Bundle.main.infoDictionary?["OAuthCallbackScheme"] as? String,
+              !scheme.contains("REPLACE_ME") else {
+            fatalError("OAuth Callback Scheme not configured. See AgMail/Config/OAuth.local.xcconfig.example")
         }
         return "\(scheme):/oauth/callback"
     }()
