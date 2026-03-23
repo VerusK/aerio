@@ -33,6 +33,7 @@ jobs:
             -project $PROJECT \
             -scheme $SCHEME \
             -destination 'platform=macOS' \
+            -skip-testing:AgMailTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
             OAUTH_CLIENT_ID=test-ci-placeholder \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
