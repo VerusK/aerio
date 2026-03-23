@@ -64,20 +64,27 @@ Distribute AgMail via Homebrew Cask so users can install with `brew install --ca
 | `APPLE_APP_PASSWORD` | App-specific password for notarytool |
 | `APPLE_TEAM_ID` | Developer team ID |
 | `GOOGLE_CLIENT_ID` | OAuth client ID for build injection |
+| `TAP_GITHUB_TOKEN` | PAT with repo access to `VerusK/homebrew-agmail` for Cask updates |
 
 ## OAuth Credentials
 
 ### Build-time Injection
 
-- OAuth constants passed as environment variables in CI
-- Xcode project uses `.xcconfig` or build settings with `$(OAUTH_CLIENT_ID)`
-- Code reads via `Bundle.main.infoDictionary` or generated Swift file
-- Secrets stored in GitHub Secrets
+Only `clientId` needs injection — `redirectURI` is derived from it, and `authURL`/`tokenURL`/`scopes` are public constants.
+
+**Approach:** `.xcconfig` files + Info.plist variable expansion.
+
+1. Create `OAuth.xcconfig` (committed, with placeholder): `OAUTH_CLIENT_ID = REPLACE_ME`
+2. Create `OAuth.local.xcconfig` (in `.gitignore`): `OAUTH_CLIENT_ID = 451766...` (real dev value)
+3. `OAuth.xcconfig` includes `OAuth.local.xcconfig` if it exists (via `#include?`)
+4. Add `OAUTH_CLIENT_ID` to Info.plist as `$(OAUTH_CLIENT_ID)`
+5. `OAuthConfig.swift` reads from `Bundle.main.infoDictionary["OAUTH_CLIENT_ID"]`
+6. CI sets the value via `xcodebuild` build setting override: `OAUTH_CLIENT_ID=...`
 
 ### Local Development
 
-- `.xcconfig.local` file (in `.gitignore`) with dev credentials
-- Or environment variables in Xcode scheme
+- `OAuth.local.xcconfig` file (in `.gitignore`) with dev client ID
+- Template `OAuth.local.xcconfig.example` committed for reference
 
 ### Google OAuth Verification
 
@@ -132,9 +139,12 @@ cask "agmail" do
 
   app "AgMail.app"
 
+  # TODO: verify actual bundle identifier and data paths before first release
   zap trash: [
-    "~/Library/Application Support/default.store",
-    "~/Library/Preferences/com.agmail.*",
+    "~/Library/Containers/com.verusk.AgMail",
+    "~/Library/Application Support/AgMail",
+    "~/Library/Preferences/com.verusk.AgMail.plist",
+    "~/Library/Caches/com.verusk.AgMail",
   ]
 end
 ```
