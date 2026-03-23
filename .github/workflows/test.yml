@@ -26,4 +26,7 @@ jobs:
             -scheme AgMail \
             -destination 'platform=macOS' \
             OAUTH_CLIENT_ID=test-ci-placeholder \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             || exit 1
