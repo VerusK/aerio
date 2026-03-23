@@ -139,12 +139,11 @@ cask "agmail" do
 
   app "AgMail.app"
 
-  # TODO: verify actual bundle identifier and data paths before first release
+  # Bundle ID: com.agmail.AgMail — verify data paths before first release
   zap trash: [
-    "~/Library/Containers/com.verusk.AgMail",
     "~/Library/Application Support/AgMail",
-    "~/Library/Preferences/com.verusk.AgMail.plist",
-    "~/Library/Caches/com.verusk.AgMail",
+    "~/Library/Preferences/com.agmail.AgMail.plist",
+    "~/Library/Caches/com.agmail.AgMail",
   ]
 end
 ```
