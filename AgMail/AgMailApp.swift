@@ -4,8 +4,21 @@ import CoreServices
 import UserNotifications
 import os.log
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Prevent WindowGroup from creating a new window when the app is reactivated
+    /// (e.g. clicking a notification or Dock icon when already running)
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            // Bring existing window back if it was closed/minimized
+            sender.windows.first { $0.className != "NSStatusBarWindow" }?.makeKeyAndOrderFront(nil)
+        }
+        return false
+    }
+}
+
 @main
 struct AgMailApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
 
     init() {
@@ -39,6 +52,7 @@ struct AgMailApp: App {
             .background(WindowAccessor())
             .navigationTitle("")
         }
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             // Suppress default Cmd+N "New Window" — KeyEventMonitor
             // handles it as "Compose new email"
