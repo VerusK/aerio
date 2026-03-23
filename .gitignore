@@ -1,7 +1,8 @@
 
 # ralphex progress logs
 .ralphex/progress/
-docs/
+docs/plans/
+docs/ralphex/
 
 .omc/
 .idea/
