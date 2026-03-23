@@ -514,7 +514,7 @@ struct ComposeView: View {
     private func loadDraftContent(email: Email) {
         isLoadingDraft = true
         isPopulatingHeaders = true
-        Task {
+        Task { @MainActor in
             do {
                 if let draft = try await apiManager.fetchDraftByMessageId(msgId: email.msgId, accountId: email.accountId) {
                     draftId = draft.id
@@ -534,10 +534,8 @@ struct ComposeView: View {
                 sendError = "Failed to load draft"
                 logger.error("Draft load failed: \(error.localizedDescription)")
             }
-            DispatchQueue.main.async {
-                isLoadingDraft = false
-                isPopulatingHeaders = false
-            }
+            isLoadingDraft = false
+            isPopulatingHeaders = false
         }
     }
 
@@ -560,7 +558,7 @@ struct ComposeView: View {
     private func fetchReplyHeaders(email: Email, includeAllRecipients: Bool) {
         isLoadingRecipients = true
         isPopulatingHeaders = true
-        Task {
+        Task { @MainActor in
             do {
                 let message = try await apiManager.fetchMessageContent(msgId: email.msgId, accountId: email.accountId)
                 let headers = message.payload?.headers ?? []
@@ -607,12 +605,8 @@ struct ComposeView: View {
                     replyAllWarning = "Could not verify Reply-To address — replying to sender. If this message uses a different reply address, check your connection and retry."
                 }
             }
-            // Defer flag reset to next run loop so SwiftUI .onChange handlers
-            // see isPopulatingHeaders == true during the coalesced update
-            DispatchQueue.main.async {
-                isLoadingRecipients = false
-                isPopulatingHeaders = false
-            }
+            isLoadingRecipients = false
+            isPopulatingHeaders = false
         }
     }
 

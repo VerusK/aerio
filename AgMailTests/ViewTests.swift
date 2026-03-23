@@ -297,8 +297,8 @@ final class ViewTests: XCTestCase {
 
     func testComposeTypeEnum() {
         // Verify all compose types exist and are distinct
-        let types: [ComposeType] = [.new, .reply, .replyAll, .forward]
-        XCTAssertEqual(types.count, 4)
+        let types: [ComposeType] = [.new, .reply, .replyAll, .forward, .draft]
+        XCTAssertEqual(types.count, 5)
     }
 
     func testComposeViewInitializesWithDefaults() {

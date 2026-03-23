@@ -580,7 +580,7 @@ final class GmailAPIManager: ObservableObject {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
         _ = try await client.modifyMessage(id: msgId, removeLabels: [GmailLabelId.inbox])
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: false)
+        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
         if let emailCopy {
             moveEmailToFolder(emailCopy, targetFolder: .archive, accountId: accountId)
         }
@@ -600,7 +600,7 @@ final class GmailAPIManager: ObservableObject {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
         _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.spam], removeLabels: [GmailLabelId.inbox])
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: false)
+        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
         if let emailCopy {
             moveEmailToFolder(emailCopy, targetFolder: .spam, accountId: accountId)
         }
@@ -643,28 +643,31 @@ final class GmailAPIManager: ObservableObject {
         logger.debug("[\(accountId)] moved email \(email.msgId) to \(targetFolder.displayName)")
     }
 
-    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
-        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
-        let raw: String
+    private func buildRawMessage(from: String, to: String, cc: String?, subject: String, body: String, inReplyTo: String?, references: String?, htmlBody: String?, attachments: [RFC2822Builder.Attachment], inlineImages: [RFC2822Builder.InlineImage]) -> String {
         if !attachments.isEmpty || !inlineImages.isEmpty {
-            raw = RFC2822Builder.buildRawHTMLMessageWithAttachments(
+            return RFC2822Builder.buildRawHTMLMessageWithAttachments(
                 from: from, to: to, cc: cc, subject: subject,
                 htmlBody: htmlBody ?? "", plainBody: body,
                 attachments: attachments, inlineImages: inlineImages,
                 inReplyTo: inReplyTo, references: references
             )
         } else if let htmlBody, !htmlBody.isEmpty {
-            raw = RFC2822Builder.buildRawHTMLMessage(
+            return RFC2822Builder.buildRawHTMLMessage(
                 from: from, to: to, cc: cc, subject: subject,
                 htmlBody: htmlBody, plainBody: body,
                 inReplyTo: inReplyTo, references: references
             )
         } else {
-            raw = RFC2822Builder.buildRawMessage(
+            return RFC2822Builder.buildRawMessage(
                 from: from, to: to, cc: cc, subject: subject, body: body,
                 inReplyTo: inReplyTo, references: references
             )
         }
+    }
+
+    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
+        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+        let raw = buildRawMessage(from: from, to: to, cc: cc, subject: subject, body: body, inReplyTo: inReplyTo, references: references, htmlBody: htmlBody, attachments: attachments, inlineImages: inlineImages)
         let sent = try await client.sendMessage(raw: raw)
         // Remove INBOX label from self-sent messages so they don't appear in inbox
         if (sent.labelIds ?? []).contains(GmailLabelId.inbox) {
@@ -715,26 +718,7 @@ final class GmailAPIManager: ObservableObject {
 
     func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
-        let raw: String
-        if !attachments.isEmpty || !inlineImages.isEmpty {
-            raw = RFC2822Builder.buildRawHTMLMessageWithAttachments(
-                from: from, to: to, cc: cc, subject: subject,
-                htmlBody: htmlBody ?? "", plainBody: body,
-                attachments: attachments, inlineImages: inlineImages,
-                inReplyTo: inReplyTo, references: references
-            )
-        } else if let htmlBody, !htmlBody.isEmpty {
-            raw = RFC2822Builder.buildRawHTMLMessage(
-                from: from, to: to, cc: cc, subject: subject,
-                htmlBody: htmlBody, plainBody: body,
-                inReplyTo: inReplyTo, references: references
-            )
-        } else {
-            raw = RFC2822Builder.buildRawMessage(
-                from: from, to: to, cc: cc, subject: subject, body: body,
-                inReplyTo: inReplyTo, references: references
-            )
-        }
+        let raw = buildRawMessage(from: from, to: to, cc: cc, subject: subject, body: body, inReplyTo: inReplyTo, references: references, htmlBody: htmlBody, attachments: attachments, inlineImages: inlineImages)
         let draft = try await client.createDraft(raw: raw)
         logger.info("[\(accountId)] draft saved")
 

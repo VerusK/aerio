@@ -40,7 +40,7 @@ struct AgMailApp: App {
             .navigationTitle("")
         }
         .commands {
-            // Suppress default Cmd+N "New Window" — our KeyEventInterceptor
+            // Suppress default Cmd+N "New Window" — KeyEventMonitor
             // handles it as "Compose new email"
             CommandGroup(replacing: .newItem) { }
         }

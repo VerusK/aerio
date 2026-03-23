@@ -18,13 +18,13 @@ struct SplitViewConfigurator: NSViewRepresentable {
     class Coordinator {
         var splitView: NSSplitView?
         var observer: NSObjectProtocol?
-        var saveTimer: Timer?
+        var windowObserver: NSObjectProtocol?
         var defaultsKey: String = ""
         private var lastPositions: [Double] = []
 
         deinit {
             if let obs = observer { NotificationCenter.default.removeObserver(obs) }
-            saveTimer?.invalidate()
+            if let obs = windowObserver { NotificationCenter.default.removeObserver(obs) }
         }
 
         func saveDividerPositions() {
@@ -70,28 +70,21 @@ struct SplitViewConfigurator: NSViewRepresentable {
         DispatchQueue.main.async {
             if let splitView = Self.findSplitViewUp(from: view) {
                 coordinator.splitView = splitView
-                // Listen for both resize and willResize notifications
                 coordinator.observer = NotificationCenter.default.addObserver(
                     forName: NSSplitView.didResizeSubviewsNotification,
                     object: splitView,
                     queue: .main
-                ) { _ in
-                    coordinator.saveDividerPositions()
+                ) { [weak coordinator] _ in
+                    coordinator?.saveDividerPositions()
                 }
-                // Also observe window resize which triggers split view layout
+                // Save divider positions on window close
                 if let window = splitView.window {
-                    NotificationCenter.default.addObserver(
+                    coordinator.windowObserver = NotificationCenter.default.addObserver(
                         forName: NSWindow.willCloseNotification,
                         object: window,
                         queue: .main
-                    ) { _ in
-                        coordinator.saveDividerPositions()
-                    }
-                }
-                // Save periodically via a timer to catch drag changes
-                coordinator.saveTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-                    DispatchQueue.main.async {
-                        coordinator.saveDividerPositions()
+                    ) { [weak coordinator] _ in
+                        coordinator?.saveDividerPositions()
                     }
                 }
                 logger.debug("SplitViewConfigurator: configured on attempt \(attempt)")

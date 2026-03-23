@@ -164,8 +164,17 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
     }
 
     func deleteDraft(draftId: String) async throws {
-        let request = try buildRequest(path: "/drafts/\(draftId)", method: "DELETE")
-        _ = try await session.data(for: request)
+        var request = try buildRequest(path: "/drafts/\(draftId)", method: "DELETE")
+        let token = try await getValidAccessToken()
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GmailAPIError.networkError("Invalid response")
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 404 { throw GmailAPIError.notFound }
+            throw GmailAPIError.networkError("Delete draft failed: \(httpResponse.statusCode)")
+        }
     }
 
     func listLabels() async throws -> [GmailLabel] {

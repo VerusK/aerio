@@ -24,8 +24,6 @@
 		AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000041 /* UnifiedMailbox.swift */; };
 		AA0000000000000000000043 /* UnifiedMailboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000043 /* UnifiedMailboxTests.swift */; };
 		AA0000000000000000000050 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000050 /* MainView.swift */; };
-		AA0000000000000000000051 /* AccountSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000051 /* AccountSidebar.swift */; };
-		AA0000000000000000000052 /* FolderList.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000052 /* FolderList.swift */; };
 		AA0000000000000000000053 /* ViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000053 /* ViewTests.swift */; };
 		AA0000000000000000000060 /* MessageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000060 /* MessageList.swift */; };
 		AA0000000000000000000061 /* MessageWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000061 /* MessageWebView.swift */; };
@@ -86,8 +84,6 @@
 		BB0000000000000000000041 /* UnifiedMailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedMailbox.swift; sourceTree = "<group>"; };
 		BB0000000000000000000043 /* UnifiedMailboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedMailboxTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000050 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
-		BB0000000000000000000051 /* AccountSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSidebar.swift; sourceTree = "<group>"; };
-		BB0000000000000000000052 /* FolderList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderList.swift; sourceTree = "<group>"; };
 		BB0000000000000000000053 /* ViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000060 /* MessageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageList.swift; sourceTree = "<group>"; };
 		BB0000000000000000000061 /* MessageWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWebView.swift; sourceTree = "<group>"; };
@@ -225,8 +221,6 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000050 /* MainView.swift */,
-				BB0000000000000000000051 /* AccountSidebar.swift */,
-				BB0000000000000000000052 /* FolderList.swift */,
 				BB0000000000000000000060 /* MessageList.swift */,
 				BB0000000000000000000061 /* MessageWebView.swift */,
 				BB0000000000000000000062 /* AccountSetupView.swift */,
@@ -353,8 +347,6 @@
 				AA0000000000000000000016 /* AccountManager.swift in Sources */,
 				AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */,
 				AA0000000000000000000050 /* MainView.swift in Sources */,
-				AA0000000000000000000051 /* AccountSidebar.swift in Sources */,
-				AA0000000000000000000052 /* FolderList.swift in Sources */,
 				AA0000000000000000000060 /* MessageList.swift in Sources */,
 				AA0000000000000000000061 /* MessageWebView.swift in Sources */,
 				AA0000000000000000000062 /* AccountSetupView.swift in Sources */,
