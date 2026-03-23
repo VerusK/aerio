@@ -1,0 +1,8 @@
+// OAuth.xcconfig — committed to repo
+// For local development, create OAuth.local.xcconfig (see .example)
+// CI overrides via xcodebuild build setting: OAUTH_CLIENT_ID=...
+
+#include? "OAuth.local.xcconfig"
+
+OAUTH_CLIENT_ID = REPLACE_ME
+OAUTH_CALLBACK_SCHEME = com.googleusercontent.apps.$(OAUTH_CLIENT_ID)

@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    env:
+      SCHEME: AgMail
+      PROJECT: AgMail.xcodeproj
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${VERSION}"
+
+      - name: Run tests
+        run: |
+          xcodebuild test \
+            -project $PROJECT \
+            -scheme $SCHEME \
+            -destination 'platform=macOS' \
+            -skip-testing:AgMailTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
+            OAUTH_CLIENT_ID=test-ci-placeholder \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            || exit 1
+
+      - name: Set version
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          agvtool new-marketing-version "$VERSION"
+          agvtool new-version -all "${VERSION//\.}"
+
+      - name: Build Release
+        run: |
+          xcodebuild -project $PROJECT \
+            -scheme $SCHEME \
+            -configuration Release \
+            -derivedDataPath $RUNNER_TEMP/build \
+            OAUTH_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Create DMG
+        run: |
+          ./scripts/create-dmg.sh \
+            "$RUNNER_TEMP/build/Build/Products/Release/AgMail.app" \
+            "${{ steps.version.outputs.version }}" \
+            "$RUNNER_TEMP"
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          DMG_PATH="$RUNNER_TEMP/AgMail-${{ steps.version.outputs.version }}.dmg"
+          SHA=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DMG_PATH="$RUNNER_TEMP/AgMail-${{ steps.version.outputs.version }}.dmg"
+          gh release create "$GITHUB_REF_NAME" "$DMG_PATH" \
+            --title "AgMail ${{ steps.version.outputs.version }}" \
+            --generate-notes
+
+      - name: Update Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          SHA=${{ steps.sha.outputs.sha256 }}
+
+          git clone https://x-access-token:${TAP_TOKEN}@github.com/VerusK/homebrew-agmail.git $RUNNER_TEMP/tap
+          cd $RUNNER_TEMP/tap
+
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/agmail.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/agmail.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/agmail.rb
+          git commit -m "Update AgMail to ${VERSION}"
+          git push

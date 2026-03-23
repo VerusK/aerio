@@ -21,6 +21,7 @@ final class OAuthManager: ObservableObject {
         case refreshFailed(String)
         case userInfoFailed
         case noTokensFound
+        case invalidConfiguration
 
         var errorDescription: String? {
             switch self {
@@ -36,6 +37,8 @@ final class OAuthManager: ObservableObject {
                 return "Failed to fetch user info"
             case .noTokensFound:
                 return "No tokens found for account"
+            case .invalidConfiguration:
+                return "Invalid OAuth configuration"
             }
         }
     }
@@ -57,7 +60,9 @@ final class OAuthManager: ObservableObject {
     func authorize() async throws -> (tokens: KeychainHelper.OAuthTokens, accountId: String) {
         let pkce = generatePKCE()
 
-        var components = URLComponents(string: OAuthConfig.authURL)!
+        guard var components = URLComponents(string: OAuthConfig.authURL) else {
+            throw OAuthError.invalidConfiguration
+        }
         components.queryItems = [
             URLQueryItem(name: "client_id", value: OAuthConfig.clientId),
             URLQueryItem(name: "redirect_uri", value: OAuthConfig.redirectURI),
@@ -69,8 +74,10 @@ final class OAuthManager: ObservableObject {
             URLQueryItem(name: "prompt", value: "consent")
         ]
 
-        let authURL = components.url!
-        let callbackScheme = "com.googleusercontent.apps.451766587137-5chs7l3rup98dkpavmijkq1gm8mj365h"
+        guard let authURL = components.url else {
+            throw OAuthError.invalidConfiguration
+        }
+        let callbackScheme = String(OAuthConfig.redirectURI.prefix(while: { $0 != ":" }))
 
         let code = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
             let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: callbackScheme) { [weak self] callbackURL, error in
@@ -108,7 +115,8 @@ final class OAuthManager: ObservableObject {
     }
 
     func exchangeCodeForTokens(code: String, pkceVerifier: String) async throws -> KeychainHelper.OAuthTokens {
-        var request = URLRequest(url: URL(string: OAuthConfig.tokenURL)!)
+        guard let tokenURL = URL(string: OAuthConfig.tokenURL) else { throw OAuthError.invalidConfiguration }
+        var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
@@ -124,7 +132,7 @@ final class OAuthManager: ObservableObject {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
+            let errorBody = String(data: data.prefix(200), encoding: .utf8) ?? "unknown"
             throw OAuthError.tokenExchangeFailed(errorBody)
         }
 
@@ -145,7 +153,8 @@ final class OAuthManager: ObservableObject {
             throw OAuthError.noTokensFound
         }
 
-        var request = URLRequest(url: URL(string: OAuthConfig.tokenURL)!)
+        guard let tokenURL = URL(string: OAuthConfig.tokenURL) else { throw OAuthError.invalidConfiguration }
+        var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
@@ -159,7 +168,7 @@ final class OAuthManager: ObservableObject {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
+            let errorBody = String(data: data.prefix(200), encoding: .utf8) ?? "unknown"
             throw OAuthError.refreshFailed(errorBody)
         }
 
@@ -179,7 +188,8 @@ final class OAuthManager: ObservableObject {
     }
 
     func fetchUserEmail(accessToken: String) async throws -> String {
-        var request = URLRequest(url: URL(string: OAuthConfig.userinfoURL)!)
+        guard let userinfoURL = URL(string: OAuthConfig.userinfoURL) else { throw OAuthError.invalidConfiguration }
+        var request = URLRequest(url: userinfoURL)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
         let (data, response) = try await URLSession.shared.data(for: request)

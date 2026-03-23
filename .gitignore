@@ -1,9 +1,11 @@
 
 # ralphex progress logs
 .ralphex/progress/
-docs/
+docs/plans/
+docs/ralphex/
 
 .omc/
 .idea/
 build
 default.profraw
+OAuth.local.xcconfig

@@ -51,16 +51,30 @@ AgMail/
 - WKWebView for HTML email rendering (forced light theme)
 - async/await + Structured Concurrency
 
-## Setup
+## Install
+
+### Homebrew (recommended)
+
+```bash
+brew tap VerusK/agmail
+brew install --cask agmail
+```
+
+On first launch macOS may block the app because it's not signed. To fix:
+
+```bash
+xattr -cr /Applications/AgMail.app
+```
+
+Or: right-click AgMail.app → Open → Open.
+
+### Build from source
 
 Requirements: macOS 15+, Xcode 16+
 
 1. Create a Google Cloud Console project with Gmail API enabled
 2. Create an OAuth 2.0 Client ID (Desktop app type)
-3. Replace the placeholder in `AgMail/Services/OAuthConfig.swift`:
-   ```swift
-   static let clientId = "YOUR_CLIENT_ID.apps.googleusercontent.com"
-   ```
+3. Copy `AgMail/Config/OAuth.local.xcconfig.example` to `AgMail/Config/OAuth.local.xcconfig` and fill in your Client ID
 
 ## Build & Run
 

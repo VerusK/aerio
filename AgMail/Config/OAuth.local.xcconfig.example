@@ -1,0 +1,3 @@
+// Copy this file to OAuth.local.xcconfig and fill in your credentials
+// OAuth.local.xcconfig is gitignored
+OAUTH_CLIENT_ID = your-client-id-here
