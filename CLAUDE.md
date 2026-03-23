@@ -23,7 +23,7 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search with ↑/↓ nav, → preview panel, pagination, ? help link), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with attachment download/open and inline image display), ComposeView (with address autocomplete, draft editing, drag-drop/paste inline images, file attachments via ⇧⌘A), ComposeWindowManager (non-modal NSPanel windows for compose), AccountSetupView, SettingsView (General: dock badge, downloads directory, poll interval; Cache: size breakdown + clear; Keyboard Shortcuts; Esc to close via app-level NSEvent monitor)
 - `AgMail/Persistence/` — SwiftData cache (DataStore) for instant launch display
 - `AgMail/Utilities/` — KeyboardShortcuts (layout-independent hotkeys via keyCode + NSEvent local monitor), KeyEventMonitor (Go-To state machine with timer)
-- `AgMailTests/` — Unit tests (140+ tests)
+- `AgMailTests/` — Unit tests (390+ tests)
 
 ## Key Patterns
 

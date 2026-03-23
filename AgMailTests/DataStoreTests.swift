@@ -186,6 +186,165 @@ final class EmailCacheTests: XCTestCase {
         XCTAssertEqual(loaded[1].msgId, "old")
     }
 
+    // MARK: - Replace Emails
+
+    func testReplaceEmailsReplacesForAccountAndFolder() {
+        let store = makeStore()
+        let old1 = makeEmail(msgId: "old1", accountId: "acc1", folder: .inbox)
+        let old2 = makeEmail(msgId: "old2", accountId: "acc1", folder: .inbox)
+        let other = makeEmail(msgId: "other1", accountId: "acc2", folder: .inbox)
+        store.saveEmails([old1, old2, other])
+
+        let fresh = makeEmail(msgId: "fresh1", accountId: "acc1", folder: .inbox)
+        store.replaceEmails(for: "acc1", folder: .inbox, with: [fresh])
+
+        let acc1Emails = store.loadEmails(for: "acc1")
+        XCTAssertEqual(acc1Emails.count, 1)
+        XCTAssertEqual(acc1Emails[0].msgId, "fresh1")
+
+        // Other account untouched
+        let acc2Emails = store.loadEmails(for: "acc2")
+        XCTAssertEqual(acc2Emails.count, 1)
+        XCTAssertEqual(acc2Emails[0].msgId, "other1")
+    }
+
+    func testReplaceEmailsPreservesOtherFolders() {
+        let store = makeStore()
+        let inboxEmail = makeEmail(msgId: "m1", accountId: "acc1", folder: .inbox)
+        let sentEmail = makeEmail(msgId: "m2", accountId: "acc1", folder: .sent)
+        store.saveEmails([inboxEmail, sentEmail])
+
+        let freshInbox = makeEmail(msgId: "m3", accountId: "acc1", folder: .inbox)
+        store.replaceEmails(for: "acc1", folder: .inbox, with: [freshInbox])
+
+        let all = store.loadEmails(for: "acc1")
+        XCTAssertEqual(all.count, 2)
+        let msgIds = Set(all.map(\.msgId))
+        XCTAssertTrue(msgIds.contains("m3"))
+        XCTAssertTrue(msgIds.contains("m2"))
+    }
+
+    // MARK: - Delete Email
+
+    func testDeleteEmailById() {
+        let store = makeStore()
+        let email1 = makeEmail(msgId: "m1", accountId: "acc1")
+        let email2 = makeEmail(msgId: "m2", accountId: "acc1")
+        store.saveEmails([email1, email2])
+
+        store.deleteEmail(id: email1.id)
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded[0].msgId, "m2")
+    }
+
+    func testDeleteEmailsByMsgIdAndAccountId() {
+        let store = makeStore()
+        // Same msgId in two folders
+        let inboxEmail = makeEmail(msgId: "m1", accountId: "acc1", folder: .inbox)
+        let sentEmail = makeEmail(msgId: "m1", accountId: "acc1", folder: .sent)
+        let otherEmail = makeEmail(msgId: "m1", accountId: "acc2", folder: .inbox)
+        store.saveEmails([inboxEmail, sentEmail, otherEmail])
+
+        store.deleteEmails(msgId: "m1", accountId: "acc1")
+
+        let acc1 = store.loadEmails(for: "acc1")
+        XCTAssertEqual(acc1.count, 0)
+
+        // Other account untouched
+        let acc2 = store.loadEmails(for: "acc2")
+        XCTAssertEqual(acc2.count, 1)
+    }
+
+    // MARK: - Content Cache
+
+    func testSaveAndLoadContentRoundTrip() {
+        let store = makeStore()
+        let headers = ["from": "alice@test.com", "subject": "Hello"]
+        let attachments: [[String: String]] = [["filename": "doc.pdf", "mimeType": "application/pdf"]]
+
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "<p>Hello</p>", headers: headers, attachments: attachments)
+
+        let result = store.loadContent(accountId: "acc1", msgId: "msg1")
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.bodyHTML, "<p>Hello</p>")
+        XCTAssertEqual(result?.headers["from"], "alice@test.com")
+        XCTAssertEqual(result?.headers["subject"], "Hello")
+        XCTAssertEqual(result?.attachments.count, 1)
+        XCTAssertEqual(result?.attachments[0]["filename"], "doc.pdf")
+    }
+
+    func testLoadContentReturnsNilForNonExistentId() {
+        let store = makeStore()
+        let result = store.loadContent(accountId: "acc1", msgId: "nonexistent")
+        XCTAssertNil(result)
+    }
+
+    func testPurgeOldContentLargeThresholdKeepsAll() {
+        let store = makeStore()
+
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "<p>One</p>", headers: [:], attachments: [])
+        store.saveContent(accountId: "acc1", msgId: "msg2", bodyHTML: "<p>Two</p>", headers: [:], attachments: [])
+
+        XCTAssertEqual(store.contentCacheCount, 2)
+
+        // Purge with large threshold — nothing removed (all items are recent)
+        store.purgeOldContent(olderThanDays: 365)
+        XCTAssertEqual(store.contentCacheCount, 2)
+    }
+
+    func testPurgeOldContentNegativeDaysRemovesAll() {
+        let store = makeStore()
+
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "<p>One</p>", headers: [:], attachments: [])
+        store.saveContent(accountId: "acc1", msgId: "msg2", bodyHTML: "<p>Two</p>", headers: [:], attachments: [])
+
+        XCTAssertEqual(store.contentCacheCount, 2)
+
+        // Use -1 days (cutoff = tomorrow) so all entries are strictly older
+        store.purgeOldContent(olderThanDays: -1)
+        XCTAssertEqual(store.contentCacheCount, 0)
+    }
+
+    func testDeleteContentRemovesSpecificEntry() {
+        let store = makeStore()
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "<p>1</p>", headers: [:], attachments: [])
+        store.saveContent(accountId: "acc1", msgId: "msg2", bodyHTML: "<p>2</p>", headers: [:], attachments: [])
+
+        store.deleteContent(accountId: "acc1", msgId: "msg1")
+
+        XCTAssertNil(store.loadContent(accountId: "acc1", msgId: "msg1"))
+        XCTAssertNotNil(store.loadContent(accountId: "acc1", msgId: "msg2"))
+    }
+
+    func testClearContentRemovesAllEntries() {
+        let store = makeStore()
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "<p>1</p>", headers: [:], attachments: [])
+        store.saveContent(accountId: "acc2", msgId: "msg2", bodyHTML: "<p>2</p>", headers: [:], attachments: [])
+
+        XCTAssertEqual(store.contentCacheCount, 2)
+
+        store.clearContent()
+
+        XCTAssertEqual(store.contentCacheCount, 0)
+    }
+
+    func testContentCacheCountReturnsCorrectCount() {
+        let store = makeStore()
+        XCTAssertEqual(store.contentCacheCount, 0)
+
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "", headers: [:], attachments: [])
+        XCTAssertEqual(store.contentCacheCount, 1)
+
+        store.saveContent(accountId: "acc1", msgId: "msg2", bodyHTML: "", headers: [:], attachments: [])
+        XCTAssertEqual(store.contentCacheCount, 2)
+
+        // Overwriting same key doesn't increase count
+        store.saveContent(accountId: "acc1", msgId: "msg1", bodyHTML: "<p>updated</p>", headers: [:], attachments: [])
+        XCTAssertEqual(store.contentCacheCount, 2)
+    }
+
     // MARK: - All folders
 
     func testAllFoldersRoundTrip() {

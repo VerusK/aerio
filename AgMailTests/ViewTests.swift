@@ -209,7 +209,7 @@ final class ViewTests: XCTestCase {
     // MARK: - SplitViewConfigurator tests
 
     func testSplitViewConfiguratorConstants() {
-        XCTAssertEqual(SplitViewConfigurator.maxRetries, 3, "Should retry up to 3 times")
+        XCTAssertEqual(SplitViewConfigurator.maxRetries, 20, "Should retry up to 20 times")
         XCTAssertEqual(SplitViewConfigurator.retryInterval, 0.1, accuracy: 0.001, "Retry interval should be 0.1s")
     }
 
@@ -247,10 +247,12 @@ final class ViewTests: XCTestCase {
         let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
         let appState = AppState(accountManager: accountManager, apiManager: apiManager, defaults: defaults)
 
+        var capturedBadgeCount: Int?
+        appState.badgeCountHandler = { capturedBadgeCount = $0 }
+
         let counts = ["acc1": 3, "acc2": 5]
         appState.updateDockBadge(counts: counts)
-
-        XCTAssertEqual(NSApp?.dockTile.badgeLabel, "8")
+        XCTAssertEqual(capturedBadgeCount, 8, "Badge should show sum of unread counts across accounts")
     }
 
     func testDockBadgeClearsWhenZeroUnread() {
@@ -262,8 +264,11 @@ final class ViewTests: XCTestCase {
         let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
         let appState = AppState(accountManager: accountManager, apiManager: apiManager, defaults: defaults)
 
+        var capturedBadgeCount: Int?
+        appState.badgeCountHandler = { capturedBadgeCount = $0 }
+
         appState.updateDockBadge(counts: [:])
-        XCTAssertNil(NSApp?.dockTile.badgeLabel)
+        XCTAssertEqual(capturedBadgeCount, 0, "Badge should be zero when there are no unread emails")
     }
 
     func testDockBadgeDisabledClearsBadge() {
@@ -275,8 +280,11 @@ final class ViewTests: XCTestCase {
         let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
         let appState = AppState(accountManager: accountManager, apiManager: apiManager, defaults: defaults)
 
+        var capturedBadgeCount: Int?
+        appState.badgeCountHandler = { capturedBadgeCount = $0 }
+
         appState.updateDockBadge(counts: ["acc1": 10])
-        XCTAssertNil(NSApp?.dockTile.badgeLabel)
+        XCTAssertEqual(capturedBadgeCount, 0, "Badge should be cleared (0) when dock badge is disabled")
     }
 
     func testDockBadgeDefaultIsEnabled() {
