@@ -71,14 +71,20 @@ jobs:
           SHA=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release
+      - name: Upload DMG to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           DMG_PATH="$RUNNER_TEMP/AgMail-${{ steps.version.outputs.version }}.dmg"
-          gh release create "$GITHUB_REF_NAME" "$DMG_PATH" \
-            --title "AgMail ${{ steps.version.outputs.version }}" \
-            --generate-notes
+          # Use existing release if already created (e.g. via gh release create locally),
+          # otherwise create a new one
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$DMG_PATH" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$DMG_PATH" \
+              --title "AgMail ${{ steps.version.outputs.version }}" \
+              --generate-notes
+          fi
 
       - name: Update Homebrew tap
         env:
