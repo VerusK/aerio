@@ -15,7 +15,6 @@ struct MessageList: View {
     var onMoveToInbox: ((Email) -> Void)?
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
-    var processingEmailId: String? = nil
 
     @State private var knownEmailIds: Set<String> = []
 
@@ -23,7 +22,6 @@ struct MessageList: View {
         ScrollViewReader { proxy in
             List {
                 ForEach(filteredEmails) { email in
-                    let isProcessing = processingEmailId == email.id
                     let isSelected = selectedEmailId == email.id
                     MessageRow(
                         email: email,
@@ -38,24 +36,8 @@ struct MessageList: View {
                     )
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if !isProcessing {
-                            selectedEmailId = email.id
-                        }
+                        selectedEmailId = email.id
                     }
-                    .overlay {
-                        if isProcessing {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Processing…")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(.background.opacity(0.8))
-                        }
-                    }
-                    .opacity(isProcessing ? 0.6 : 1.0)
                     .contextMenu {
                         contextMenuItems(for: email)
                     }

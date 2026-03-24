@@ -150,7 +150,6 @@ struct MainView: View {
     @State private var isNavigatingProgrammatically = false
     @StateObject private var searchViewModel: SearchViewModel
     @State private var keyMonitor = KeyEventMonitor()
-    @State private var processingEmailId: String?
     @State private var focusedPanel: FocusedPanel = .messageList
     @State private var detailScrollHandler: ((Int) -> Void)?
     @State private var expandedFolders: Set<Folder> = []
@@ -200,8 +199,7 @@ struct MainView: View {
                     onSpam: { email in executeActionOnEmail(email, action: .spam) },
                     onMoveToInbox: { email in executeActionOnEmail(email, action: .moveToInbox) },
                     onLoadMore: { loadMoreEmails() },
-                    hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId),
-                    processingEmailId: processingEmailId
+                    hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId)
                 )
                 .overlay {
                     messageListOverlay
@@ -696,8 +694,10 @@ struct MainView: View {
             return nil
         }()
 
-        processingEmailId = email.id
         Task {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedEmailId = nextEmailId
+            }
             do {
                 switch action {
                 case .archive:
@@ -709,12 +709,7 @@ struct MainView: View {
                 case .moveToInbox:
                     try await apiManager.moveToInbox(msgId: msgId, accountId: accountId, folder: folder)
                 }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    processingEmailId = nil
-                    selectedEmailId = nextEmailId
-                }
             } catch {
-                processingEmailId = nil
                 logger.error("Action '\(action)' failed: \(error.localizedDescription)")
             }
         }

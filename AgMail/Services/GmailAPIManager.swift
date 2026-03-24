@@ -576,57 +576,112 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
+    // MARK: - Optimistic Email Actions
+
     func archiveEmail(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
-        _ = try await client.modifyMessage(id: msgId, removeLabels: [GmailLabelId.inbox])
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
-        if let emailCopy {
-            moveEmailToFolder(emailCopy, targetFolder: .archive, accountId: accountId)
+
+        let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
+        let movedEmail = emailCopy.map { moveEmailInMemory($0, targetFolder: .archive, accountId: accountId) }
+
+        do {
+            _ = try await client.modifyMessage(id: msgId, removeLabels: [GmailLabelId.inbox])
+        } catch {
+            revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
+            throw error
         }
+
+        persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
+        if let movedEmail { persistMove(movedEmail) }
     }
 
     func deleteEmail(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
-        _ = try await client.trashMessage(id: msgId)
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
-        if let emailCopy {
-            moveEmailToFolder(emailCopy, targetFolder: .trash, accountId: accountId)
+
+        let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
+        let movedEmail = emailCopy.map { moveEmailInMemory($0, targetFolder: .trash, accountId: accountId) }
+
+        do {
+            _ = try await client.trashMessage(id: msgId)
+        } catch {
+            revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
+            throw error
         }
+
+        persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
+        if let movedEmail { persistMove(movedEmail) }
     }
 
     func spamEmail(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
-        _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.spam], removeLabels: [GmailLabelId.inbox])
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: true)
-        if let emailCopy {
-            moveEmailToFolder(emailCopy, targetFolder: .spam, accountId: accountId)
+
+        let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
+        let movedEmail = emailCopy.map { moveEmailInMemory($0, targetFolder: .spam, accountId: accountId) }
+
+        do {
+            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.spam], removeLabels: [GmailLabelId.inbox])
+        } catch {
+            revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
+            throw error
         }
+
+        persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
+        if let movedEmail { persistMove(movedEmail) }
     }
 
     func moveToInbox(msgId: String, accountId: String, folder: Folder) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
-        switch folder {
-        case .trash:
-            _ = try await client.untrashMessage(id: msgId)
-            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
-        case .spam:
-            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox], removeLabels: [GmailLabelId.spam])
-        case .archive:
-            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
-        default:
-            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+
+        let allFolders = folder == .trash
+        let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: allFolders)
+        let movedEmail = emailCopy.map { moveEmailInMemory($0, targetFolder: .inbox, accountId: accountId) }
+
+        do {
+            switch folder {
+            case .trash:
+                _ = try await client.untrashMessage(id: msgId)
+                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+            case .spam:
+                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox], removeLabels: [GmailLabelId.spam])
+            case .archive:
+                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+            default:
+                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+            }
+        } catch {
+            revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
+            throw error
         }
-        removeEmail(id: "\(accountId)_\(folder.rawValue)_\(msgId)", accountId: accountId, msgId: msgId, allFolders: folder == .trash)
-        if let emailCopy {
-            moveEmailToFolder(emailCopy, targetFolder: .inbox, accountId: accountId)
-        }
+
+        persistRemoval(accountId: accountId, msgId: msgId, allFolders: allFolders)
+        if let movedEmail { persistMove(movedEmail) }
     }
 
-    private func moveEmailToFolder(_ email: Email, targetFolder: Folder, accountId: String) {
+    // MARK: - Optimistic Update Helpers
+
+    private func removeEmailFromMemory(accountId: String, msgId: String, allFolders: Bool) -> (emails: [Email], unreadInboxCount: Int) {
+        let removed: [Email]
+        let unreadInboxRemoved: Int
+        if allFolders {
+            removed = emailsByAccount[accountId]?.filter { $0.msgId == msgId } ?? []
+            unreadInboxRemoved = removed.filter { $0.folder == .inbox && !$0.isRead }.count
+            emailsByAccount[accountId]?.removeAll { $0.msgId == msgId }
+        } else {
+            removed = emailsByAccount[accountId]?.filter { $0.msgId == msgId } ?? []
+            unreadInboxRemoved = removed.filter { $0.folder == .inbox && !$0.isRead }.count
+            emailsByAccount[accountId]?.removeAll { $0.msgId == msgId }
+        }
+        if unreadInboxRemoved > 0, let current = unreadCountsByAccount[accountId], current >= unreadInboxRemoved {
+            unreadCountsByAccount[accountId] = current - unreadInboxRemoved
+        }
+        return (removed, unreadInboxRemoved)
+    }
+
+    private func moveEmailInMemory(_ email: Email, targetFolder: Folder, accountId: String) -> Email {
         let movedEmail = Email(
             msgId: email.msgId,
             from: email.from,
@@ -639,8 +694,36 @@ final class GmailAPIManager: ObservableObject {
             messageId: email.messageId
         )
         emailsByAccount[accountId, default: []].append(movedEmail)
-        dataStore?.saveEmails([movedEmail])
         logger.debug("[\(accountId)] moved email \(email.msgId) to \(targetFolder.displayName)")
+        return movedEmail
+    }
+
+    private func revertOptimisticUpdate(removal: (emails: [Email], unreadInboxCount: Int), movedEmail: Email?, accountId: String) {
+        if let movedEmail {
+            emailsByAccount[accountId]?.removeAll { $0.id == movedEmail.id }
+        }
+        emailsByAccount[accountId, default: []].append(contentsOf: removal.emails)
+        if removal.unreadInboxCount > 0 {
+            unreadCountsByAccount[accountId, default: 0] += removal.unreadInboxCount
+        }
+        logger.debug("[\(accountId)] reverted optimistic update, restored \(removal.emails.count) emails")
+    }
+
+    private func persistRemoval(accountId: String, msgId: String, allFolders: Bool) {
+        Task { @MainActor [dataStore] in
+            if allFolders {
+                dataStore?.deleteEmails(msgId: msgId, accountId: accountId)
+                dataStore?.deleteContent(accountId: accountId, msgId: msgId)
+            } else {
+                dataStore?.deleteEmails(msgId: msgId, accountId: accountId)
+            }
+        }
+    }
+
+    private func persistMove(_ email: Email) {
+        Task { @MainActor [dataStore] in
+            dataStore?.saveEmails([email])
+        }
     }
 
     private func buildRawMessage(from: String, to: String, cc: String?, subject: String, body: String, inReplyTo: String?, references: String?, htmlBody: String?, attachments: [RFC2822Builder.Attachment], inlineImages: [RFC2822Builder.InlineImage]) -> String {
