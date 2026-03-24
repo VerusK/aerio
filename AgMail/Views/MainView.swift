@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 import os.log
 
 private let logger = Logger(subsystem: "AgMail", category: "MainView")
@@ -408,9 +409,20 @@ struct MainView: View {
     }
 
     /// Returns true when the user is typing in a text field (TextField, TextEditor, NSTextField).
+    /// Excludes WKWebView's internal NSTextView — that's a read-only email display, not a text input.
     private var isTextFieldFocused: Bool {
         guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        if let view = responder as? NSView, Self.isInsideWebView(view) { return false }
         return responder is NSTextView || responder is NSTextField
+    }
+
+    private static func isInsideWebView(_ view: NSView) -> Bool {
+        var current: NSView? = view
+        while let v = current {
+            if v is WKWebView { return true }
+            current = v.superview
+        }
+        return false
     }
 
     /// Handle an NSEvent keyDown. Returns `true` if the event was consumed.

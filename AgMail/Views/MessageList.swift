@@ -41,7 +41,6 @@ struct MessageList: View {
                     .contextMenu {
                         contextMenuItems(for: email)
                     }
-                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if hasMoreEmails {
@@ -72,10 +71,18 @@ struct MessageList: View {
                 knownEmailIds = currentIds
 
                 if !newIds.isEmpty && oldCount > 0 {
-                    // New emails arrived — smoothly scroll to keep selected email visible
+                    // New emails arrived — scroll to keep current view stable
                     if let selectedEmailId {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             proxy.scrollTo(selectedEmailId, anchor: nil)
+                        }
+                    } else {
+                        // No selection — scroll to first previously-known email
+                        // to prevent new items at top from pushing view down
+                        if let firstKnown = filteredEmails.first(where: { !newIds.contains($0.id) }) {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(firstKnown.id, anchor: .top)
+                            }
                         }
                     }
                 }
