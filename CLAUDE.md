@@ -63,6 +63,27 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - **Contacts cache**: `UserDefaults` (key `agmail_contacts_cache`)
 - **OAuth tokens**: macOS Keychain (per-account access/refresh tokens via KeychainHelper)
 
+## Release Process
+
+```bash
+# 1. Commit changes
+git add <files> && git commit -m "fix: description"
+
+# 2. Tag (semver: patch for fixes, minor for features)
+git tag v1.X.Y
+
+# 3. Push branch + tag (tag push triggers CI release workflow → builds DMG)
+git push origin main && git push origin v1.X.Y
+
+# 4. Create GitHub release with human-readable notes
+gh release create v1.X.Y --repo VerusK/agapp --title "AgMail 1.X.Y" --notes "..."
+```
+
+- CI builds DMG and attaches it to the GitHub release automatically on tag push
+- Release notes should describe **what was broken and how it's fixed** in user-facing language, not commit messages
+- Include Homebrew install/upgrade instructions in notes
+- Homebrew tap: `VerusK/tap/agmail`
+
 ## Memory & Knowledge Management
 
 - Memory files stored in `.claude/memory/` — see `MEMORY.md` there for index
