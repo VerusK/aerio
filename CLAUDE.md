@@ -1,29 +1,29 @@
-# AgMail — Development Guide
+# Aerio — Development Guide
 
 ## Build & Test Commands
 
 ```bash
 # Build & Run (always run after changes so the user sees results immediately)
-xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Release -derivedDataPath build build && open build/Build/Products/Release/AgMail.app
+xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derivedDataPath build build && open build/Build/Products/Release/Aerio.app
 
 # Build only (debug)
-xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Debug build
+xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Debug build
 
 # Run all tests
-xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=macOS'
+xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS'
 
 # Run specific test class
-xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=macOS' -only-testing:AgMailTests/GmailAPIClientTests
+xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS' -only-testing:AerioTests/GmailAPIClientTests
 ```
 
 ## Project Structure
 
-- `AgMail/Models/` — Data models: Account, Email, Folder (enum)
-- `AgMail/Services/` — Business logic: GmailAPIClient (REST HTTP client with auth/retry, attachment download), GmailAPIManager (per-account orchestration via API with batched fetch and infinite scroll), OAuthManager (OAuth 2.0 PKCE via ASWebAuthenticationSession), OAuthConfig (OAuth constants/endpoints), KeychainHelper (secure token storage via KeychainStore protocol), AccountManager (add/remove/update accounts), UnifiedMailbox (merge all accounts), RFC2822Builder (email composition with multipart/related inline images), ContactsCache (address autocomplete from synced contacts), NotificationManager (desktop notifications via UNUserNotificationCenter)
-- `AgMail/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search with ↑/↓ nav, → preview panel, pagination, ? help link), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with attachment download/open and inline image display), ComposeView (with address autocomplete, draft editing, drag-drop/paste inline images, file attachments via ⇧⌘A), ComposeWindowManager (non-modal NSPanel windows for compose), AccountSetupView, SettingsView (General: dock badge, downloads directory, poll interval; Cache: size breakdown + clear; Keyboard Shortcuts; Esc to close via app-level NSEvent monitor)
-- `AgMail/Persistence/` — SwiftData cache (DataStore) for instant launch display
-- `AgMail/Utilities/` — KeyboardShortcuts (layout-independent hotkeys via keyCode + NSEvent local monitor), KeyEventMonitor (Go-To state machine with timer)
-- `AgMailTests/` — Unit tests (390+ tests)
+- `Aerio/Models/` — Data models: Account, Email, Folder (enum)
+- `Aerio/Services/` — Business logic: GmailAPIClient (REST HTTP client with auth/retry, attachment download), GmailAPIManager (per-account orchestration via API with batched fetch and infinite scroll), OAuthManager (OAuth 2.0 PKCE via ASWebAuthenticationSession), OAuthConfig (OAuth constants/endpoints), KeychainHelper (secure token storage via KeychainStore protocol), AccountManager (add/remove/update accounts), UnifiedMailbox (merge all accounts), RFC2822Builder (email composition with multipart/related inline images), ContactsCache (address autocomplete from synced contacts), NotificationManager (desktop notifications via UNUserNotificationCenter)
+- `Aerio/Views/` — SwiftUI views: 3-panel MainView (UnifiedSidebar + MessageList + Detail), UnifiedSidebar (merged folder/account tree), SearchOverlay (Spotlight-style global search with ↑/↓ nav, → preview panel, pagination, ? help link), MessageList (with infinite scroll), MessageWebView (includes NativeMessageDetail with attachment download/open and inline image display), ComposeView (with address autocomplete, draft editing, drag-drop/paste inline images, file attachments via ⇧⌘A), ComposeWindowManager (non-modal NSPanel windows for compose), AccountSetupView, SettingsView (General: dock badge, downloads directory, poll interval; Cache: size breakdown + clear; Keyboard Shortcuts; Esc to close via app-level NSEvent monitor)
+- `Aerio/Persistence/` — SwiftData cache (DataStore) for instant launch display
+- `Aerio/Utilities/` — KeyboardShortcuts (layout-independent hotkeys via keyCode + NSEvent local monitor), KeyEventMonitor (Go-To state machine with timer)
+- `AerioTests/` — Unit tests (390+ tests)
 
 ## Key Patterns
 
@@ -47,20 +47,20 @@ xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=
 - `MessageList` uses plain `List` (no `selection:`) with manual `onTapGesture` + `listRowBackground` for custom selection highlight; `ScrollViewReader` maintains scroll position when new emails arrive; focus indicator bar lives in `MainView` above the overlay
 - Folder enum includes: inbox, sent, archive, trash, spam, drafts
 - Dock badge count via `UNUserNotificationCenter.setBadgeCount()` (not `NSApp.dockTile.badgeLabel` — silently ignored on macOS 16+)
-- Debug logging via `os.log` (subsystem: "AgMail", categories: GmailAPIClient, GmailAPIManager, etc.) — view in Console.app or `log stream --predicate 'process == "AgMail"' --debug`; note: `.debug`/`.info` levels invisible in Release builds, use `NSLog` for quick debugging
+- Debug logging via `os.log` (subsystem: "Aerio", categories: GmailAPIClient, GmailAPIManager, etc.) — view in Console.app or `log stream --predicate 'process == "Aerio"' --debug`; note: `.debug`/`.info` levels invisible in Release builds, use `NSLog` for quick debugging
 - No external dependencies — only macOS SDK (AuthenticationServices, Security, CryptoKit, SwiftUI, SwiftData, UserNotifications)
 
 ## Data Storage
 
-- **Accounts**: `UserDefaults` (key `agmail_accounts`)
+- **Accounts**: `UserDefaults` (key `aerio_accounts`)
 - **Email cache**: SwiftData `~/Library/Application Support/default.store`
 - **Window frame**: `UserDefaults` (key `mainWindowFrame`)
-- **Split positions**: `UserDefaults` (autosave key `AgMailMainSplit`)
-- **Compose window size**: `NSWindow.frameAutosaveName` (key `AgMailComposeWindow`)
+- **Split positions**: `UserDefaults` (autosave key `AerioMainSplit`)
+- **Compose window size**: `NSWindow.frameAutosaveName` (key `AerioComposeWindow`)
 - **Dock badge toggle**: `UserDefaults` (key `showDockBadge`)
 - **Downloads directory**: `UserDefaults` (key `downloadsDirectory`, empty = ~/Downloads)
 - **Poll interval**: `UserDefaults` (key `pollInterval`, default 45 seconds)
-- **Contacts cache**: `UserDefaults` (key `agmail_contacts_cache`)
+- **Contacts cache**: `UserDefaults` (key `aerio_contacts_cache`)
 - **OAuth tokens**: macOS Keychain (per-account access/refresh tokens via KeychainHelper)
 
 ## Release Process
@@ -76,13 +76,13 @@ git tag v1.X.Y
 git push origin main && git push origin v1.X.Y
 
 # 4. Create GitHub release with human-readable notes
-gh release create v1.X.Y --repo VerusK/agapp --title "AgMail 1.X.Y" --notes "..."
+gh release create v1.X.Y --repo VerusK/aerio --title "Aerio 1.X.Y" --notes "..."
 ```
 
 - CI builds DMG and attaches it to the GitHub release automatically on tag push
 - Release notes should describe **what was broken and how it's fixed** in user-facing language, not commit messages
 - Include Homebrew install/upgrade instructions in notes
-- Homebrew tap: `VerusK/tap/agmail`
+- Homebrew tap: `VerusK/tap/aerio`
 
 ## Memory & Knowledge Management
 

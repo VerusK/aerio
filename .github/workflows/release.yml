@@ -12,8 +12,8 @@ jobs:
   release:
     runs-on: macos-14
     env:
-      SCHEME: AgMail
-      PROJECT: AgMail.xcodeproj
+      SCHEME: Aerio
+      PROJECT: Aerio.xcodeproj
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +33,7 @@ jobs:
             -project $PROJECT \
             -scheme $SCHEME \
             -destination 'platform=macOS' \
-            -skip-testing:AgMailTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
+            -skip-testing:AerioTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
             OAUTH_CLIENT_ID=test-ci-placeholder \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
@@ -60,14 +60,14 @@ jobs:
       - name: Create DMG
         run: |
           ./scripts/create-dmg.sh \
-            "$RUNNER_TEMP/build/Build/Products/Release/AgMail.app" \
+            "$RUNNER_TEMP/build/Build/Products/Release/Aerio.app" \
             "${{ steps.version.outputs.version }}" \
             "$RUNNER_TEMP"
 
       - name: Compute SHA256
         id: sha
         run: |
-          DMG_PATH="$RUNNER_TEMP/AgMail-${{ steps.version.outputs.version }}.dmg"
+          DMG_PATH="$RUNNER_TEMP/Aerio-${{ steps.version.outputs.version }}.dmg"
           SHA=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
 
@@ -75,14 +75,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DMG_PATH="$RUNNER_TEMP/AgMail-${{ steps.version.outputs.version }}.dmg"
+          DMG_PATH="$RUNNER_TEMP/Aerio-${{ steps.version.outputs.version }}.dmg"
           # Use existing release if already created (e.g. via gh release create locally),
           # otherwise create a new one
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$DMG_PATH" --clobber
           else
             gh release create "$GITHUB_REF_NAME" "$DMG_PATH" \
-              --title "AgMail ${{ steps.version.outputs.version }}" \
+              --title "Aerio ${{ steps.version.outputs.version }}" \
               --generate-notes
           fi
 
@@ -93,14 +93,14 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           SHA=${{ steps.sha.outputs.sha256 }}
 
-          git clone https://x-access-token:${TAP_TOKEN}@github.com/VerusK/homebrew-agmail.git $RUNNER_TEMP/tap
+          git clone https://x-access-token:${TAP_TOKEN}@github.com/VerusK/homebrew-aerio.git $RUNNER_TEMP/tap
           cd $RUNNER_TEMP/tap
 
-          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/agmail.rb
-          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/agmail.rb
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/aerio.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/aerio.rb
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Casks/agmail.rb
-          git commit -m "Update AgMail to ${VERSION}"
+          git add Casks/aerio.rb
+          git commit -m "Update Aerio to ${VERSION}"
           git push

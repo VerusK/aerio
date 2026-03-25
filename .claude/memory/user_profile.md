@@ -1,10 +1,10 @@
 ---
 name: User profile
-description: Developer building AgMail macOS email client — experienced Swift/macOS developer
+description: Developer building Aerio macOS email client — experienced Swift/macOS developer
 type: user
 ---
 
-- Experienced macOS/Swift developer building AgMail — a native Gmail client for macOS
+- Experienced macOS/Swift developer building Aerio — a native Gmail client for macOS
 - Communicates in Russian
 - Prefers concise, direct communication
 - Wants results immediately — build & run after changes

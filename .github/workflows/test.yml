@@ -24,10 +24,10 @@ jobs:
       - name: Build and Test
         run: |
           xcodebuild test \
-            -project AgMail.xcodeproj \
-            -scheme AgMail \
+            -project Aerio.xcodeproj \
+            -scheme Aerio \
             -destination 'platform=macOS' \
-            -skip-testing:AgMailTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
+            -skip-testing:AerioTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
             OAUTH_CLIENT_ID=test-ci-placeholder \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \

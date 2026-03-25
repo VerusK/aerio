@@ -1,14 +1,14 @@
-# AgMail: Homebrew Distribution & CI/CD
+# Aerio: Homebrew Distribution & CI/CD
 
 ## Goal
 
-Distribute AgMail via Homebrew Cask so users can install with `brew install --cask agmail` without needing to configure Google Console credentials themselves. Set up CI/CD that builds, signs, notarizes, and publishes releases automatically on git tag push.
+Distribute Aerio via Homebrew Cask so users can install with `brew install --cask aerio` without needing to configure Google Console credentials themselves. Set up CI/CD that builds, signs, notarizes, and publishes releases automatically on git tag push.
 
 ## Decisions
 
 - **Distribution format:** Homebrew Cask (`.dmg` with signed `.app`)
 - **Versioning:** Git tags (`v1.x.x`) trigger releases; CI injects version into build
-- **Tap:** Own repository `VerusK/homebrew-agmail` (can migrate to main homebrew-cask later)
+- **Tap:** Own repository `VerusK/homebrew-aerio` (can migrate to main homebrew-cask later)
 - **OAuth:** Credentials injected at build time via CI secrets, not hardcoded in source
 - **Signing:** Developer ID Application certificate + Apple notarization
 
@@ -23,17 +23,17 @@ Distribute AgMail via Homebrew Cask so users can install with `brew install --ca
    - Signs with Developer ID certificate + notarizes with Apple
    - Packages into `.dmg`
    - Creates GitHub Release with `.dmg` asset
-   - Updates Cask formula in `VerusK/homebrew-agmail`
+   - Updates Cask formula in `VerusK/homebrew-aerio`
 3. User installs:
    ```bash
-   brew tap VerusK/agmail
-   brew install --cask agmail
+   brew tap VerusK/aerio
+   brew install --cask aerio
    ```
 
 ### Components
 
-- **GitHub Actions workflows** — in `VerusK/agapp` repo
-- **Homebrew tap repo** — `VerusK/homebrew-agmail` with Cask formula
+- **GitHub Actions workflows** — in `VerusK/aerio` repo
+- **Homebrew tap repo** — `VerusK/homebrew-aerio` with Cask formula
 - **Apple Developer certificates** — stored in GitHub Secrets
 - **Google OAuth credentials** — injected at build time from GitHub Secrets
 
@@ -64,7 +64,7 @@ Distribute AgMail via Homebrew Cask so users can install with `brew install --ca
 | `APPLE_APP_PASSWORD` | App-specific password for notarytool |
 | `APPLE_TEAM_ID` | Developer team ID |
 | `GOOGLE_CLIENT_ID` | OAuth client ID for build injection |
-| `TAP_GITHUB_TOKEN` | PAT with repo access to `VerusK/homebrew-agmail` for Cask updates |
+| `TAP_GITHUB_TOKEN` | PAT with repo access to `VerusK/homebrew-aerio` for Cask updates |
 
 ## OAuth Credentials
 
@@ -112,38 +112,38 @@ Steps:
 7. Package into `.dmg`
 8. Create GitHub Release, attach `.dmg`
 9. Compute SHA256 of `.dmg`
-10. Update Cask formula in `VerusK/homebrew-agmail` (SHA + version)
+10. Update Cask formula in `VerusK/homebrew-aerio` (SHA + version)
 
 ## Homebrew Tap
 
-### Repository: `VerusK/homebrew-agmail`
+### Repository: `VerusK/homebrew-aerio`
 
 Structure:
 ```
-homebrew-agmail/
+homebrew-aerio/
   Casks/
-    agmail.rb
+    aerio.rb
 ```
 
-### Cask Formula (`agmail.rb`)
+### Cask Formula (`aerio.rb`)
 
 ```ruby
-cask "agmail" do
+cask "aerio" do
   version "1.0.0"
   sha256 "abc123..."
 
-  url "https://github.com/VerusK/agapp/releases/download/v#{version}/AgMail-#{version}.dmg"
-  name "AgMail"
+  url "https://github.com/VerusK/aerio/releases/download/v#{version}/Aerio-#{version}.dmg"
+  name "Aerio"
   desc "Gmail client for macOS"
-  homepage "https://github.com/VerusK/agapp"
+  homepage "https://github.com/VerusK/aerio"
 
-  app "AgMail.app"
+  app "Aerio.app"
 
-  # Bundle ID: com.agmail.AgMail — verify data paths before first release
+  # Bundle ID: com.aerio.Aerio — verify data paths before first release
   zap trash: [
-    "~/Library/Application Support/AgMail",
-    "~/Library/Preferences/com.agmail.AgMail.plist",
-    "~/Library/Caches/com.agmail.AgMail",
+    "~/Library/Application Support/Aerio",
+    "~/Library/Preferences/com.aerio.Aerio.plist",
+    "~/Library/Caches/com.aerio.Aerio",
   ]
 end
 ```

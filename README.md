@@ -1,4 +1,4 @@
-# AgMail — Gmail Multi-Account Client for macOS
+# Aerio — Gmail Multi-Account Client for macOS
 
 Native macOS application (Swift/SwiftUI) for managing multiple Gmail accounts. Uses the Gmail REST API with OAuth 2.0 PKCE authentication — no IMAP, no SMTP, no web scraping. Designed for keyboard-first workflow.
 
@@ -26,8 +26,8 @@ Native macOS application (Swift/SwiftUI) for managing multiple Gmail accounts. U
 ## Architecture
 
 ```
-AgMail/
-├── AgMailApp.swift              # Entry point, AppState
+Aerio/
+├── AerioApp.swift               # Entry point, AppState
 ├── Models/                      # Account, Email, Folder, GmailAPIModels
 ├── Services/                    # GmailAPIClient, GmailAPIManager, OAuthManager,
 │                                # OAuthConfig, KeychainHelper, AccountManager,
@@ -56,17 +56,17 @@ AgMail/
 ### Homebrew (recommended)
 
 ```bash
-brew tap VerusK/agmail
-brew install --cask agmail
+brew tap VerusK/aerio
+brew install --cask aerio
 ```
 
 On first launch macOS may block the app because it's not signed. To fix:
 
 ```bash
-xattr -cr /Applications/AgMail.app
+xattr -cr /Applications/Aerio.app
 ```
 
-Or: right-click AgMail.app → Open → Open.
+Or: right-click Aerio.app → Open → Open.
 
 ### Build from source
 
@@ -74,26 +74,26 @@ Requirements: macOS 15+, Xcode 16+
 
 1. Create a Google Cloud Console project with Gmail API enabled
 2. Create an OAuth 2.0 Client ID (Desktop app type)
-3. Copy `AgMail/Config/OAuth.local.xcconfig.example` to `AgMail/Config/OAuth.local.xcconfig` and fill in your Client ID
+3. Copy `Aerio/Config/OAuth.local.xcconfig.example` to `Aerio/Config/OAuth.local.xcconfig` and fill in your Client ID
 
 ## Build & Run
 
 ```bash
 # Build & Run (Release)
-xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Release -derivedDataPath build build && open build/Build/Products/Release/AgMail.app
+xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derivedDataPath build build && open build/Build/Products/Release/Aerio.app
 
 # Debug build
-xcodebuild -project AgMail.xcodeproj -scheme AgMail -configuration Debug build
+xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Debug build
 
 # Run tests
-xcodebuild test -project AgMail.xcodeproj -scheme AgMail -destination 'platform=macOS'
+xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS'
 ```
 
-Or open `AgMail.xcodeproj` in Xcode and press Cmd+R to run, Cmd+U to test.
+Or open `Aerio.xcodeproj` in Xcode and press Cmd+R to run, Cmd+U to test.
 
 ## Usage
 
-1. Launch AgMail
+1. Launch Aerio
 2. Click "+" to add a Gmail account — authenticate via the system browser OAuth sheet (supports 2FA and passkeys)
 3. Repeat for additional accounts
 4. Navigate with keyboard: arrows to move between panels and items, G+I to jump to Inbox, etc.
@@ -146,32 +146,32 @@ Press `G` then one of:
 
 | Data | Location |
 |------|----------|
-| Accounts | UserDefaults (key `agmail_accounts`) |
+| Accounts | UserDefaults (key `aerio_accounts`) |
 | Email cache | SwiftData `~/Library/Application Support/default.store` |
 | Window frame | UserDefaults (key `mainWindowFrame`) |
-| Split positions | UserDefaults (autosave key `AgMailMainSplit`) |
+| Split positions | UserDefaults (autosave key `AerioMainSplit`) |
 | Dock badge toggle | UserDefaults (key `showDockBadge`) |
 | Downloads directory | UserDefaults (key `downloadsDirectory`) |
-| Contacts cache | UserDefaults (key `agmail_contacts_cache`) |
+| Contacts cache | UserDefaults (key `aerio_contacts_cache`) |
 | OAuth tokens | macOS Keychain (per-account access/refresh tokens) |
 
 ## Uninstall
 
-To completely remove AgMail and all its data:
+To completely remove Aerio and all its data:
 
 ```bash
 # Remove the app
-rm -rf /path/to/AgMail.app
+rm -rf /path/to/Aerio.app
 
 # Remove preferences
-defaults delete AgMail 2>/dev/null
+defaults delete Aerio 2>/dev/null
 
 # Remove email cache (SwiftData)
 rm -rf ~/Library/Application\ Support/default.store
 
 # Remove OAuth tokens from Keychain
-security delete-generic-password -s com.agmail.oauth 2>/dev/null
+security delete-generic-password -s com.aerio.oauth 2>/dev/null
 
 # Remove Containers (if sandboxed)
-rm -rf ~/Library/Containers/AgMail
+rm -rf ~/Library/Containers/Aerio
 ```

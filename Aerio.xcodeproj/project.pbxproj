@@ -1,0 +1,641 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		11AABB0000000000000000CC /* GmailAPIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */; };
+		15394663B46D55AFCAA687BE /* GmailAPIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127E4AF5BF43102B2B0C38EC /* GmailAPIModels.swift */; };
+		1EEB4BD08DFA461F588C8CDC /* RFC2822BuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */; };
+		218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */; };
+		42D3493B9B3AFC047D437EA0 /* GmailAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */; };
+		5E594F81A3A04AC3B3F165FD /* RFC2822Builder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */; };
+		A118A8598CE5BB54C26422EC /* GmailAPIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */; };
+		AA0000000000000000000010 /* AerioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000010 /* AerioApp.swift */; };
+		AA0000000000000000000012 /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000012 /* Account.swift */; };
+		AA0000000000000000000013 /* Email.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000013 /* Email.swift */; };
+		AA0000000000000000000014 /* Folder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000014 /* Folder.swift */; };
+		AA0000000000000000000015 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000015 /* ModelTests.swift */; };
+		AA0000000000000000000016 /* AccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000016 /* AccountManager.swift */; };
+		AA0000000000000000000018 /* AccountManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000018 /* AccountManagerTests.swift */; };
+		AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000041 /* UnifiedMailbox.swift */; };
+		AA0000000000000000000043 /* UnifiedMailboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000043 /* UnifiedMailboxTests.swift */; };
+		AA0000000000000000000050 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000050 /* MainView.swift */; };
+		AA0000000000000000000053 /* ViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000053 /* ViewTests.swift */; };
+		AA0000000000000000000060 /* MessageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000060 /* MessageList.swift */; };
+		AA0000000000000000000061 /* MessageWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000061 /* MessageWebView.swift */; };
+		AA0000000000000000000062 /* AccountSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000062 /* AccountSetupView.swift */; };
+		AA0000000000000000000063 /* MessageListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000063 /* MessageListTests.swift */; };
+		AA0000000000000000000072 /* ComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000072 /* ComposeView.swift */; };
+		AA0000000000000000000073 /* ComposeWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* ComposeWindowManager.swift */; };
+		AA0000000000000000000080 /* KeyboardShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000080 /* KeyboardShortcuts.swift */; };
+		AA0000000000000000000081 /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000081 /* DataStore.swift */; };
+		AA0000000000000000000082 /* KeyboardShortcutsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000082 /* KeyboardShortcutsTests.swift */; };
+		AA0000000000000000000083 /* DataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000083 /* DataStoreTests.swift */; };
+		AA0000000000000000000086 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000086 /* SettingsView.swift */; };
+		AA0000000000000000000090 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000090 /* Assets.xcassets */; };
+		AA0000000000000000000100 /* OAuthConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000100 /* OAuthConfig.swift */; };
+		AA0000000000000000000101 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* KeychainHelper.swift */; };
+		AA0000000000000000000102 /* OAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* OAuthManager.swift */; };
+		AA0000000000000000000103 /* KeychainHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000103 /* KeychainHelperTests.swift */; };
+		AA0000000000000000000104 /* OAuthManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000104 /* OAuthManagerTests.swift */; };
+		AA0000000000000000000105 /* MockKeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000105 /* MockKeychainStore.swift */; };
+		CD0000000000000000000001 /* ComposeDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0000000000000000000002 /* ComposeDraftTests.swift */; };
+		DE0000000000000000000001 /* UnifiedSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE0000000000000000000002 /* UnifiedSidebar.swift */; };
+		EF0000000000000000000001 /* SearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000002 /* SearchOverlay.swift */; };
+		EF0000000000000000000003 /* SearchOverlayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000004 /* SearchOverlayTests.swift */; };
+		FA0000000000000000000001 /* ContactsCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* ContactsCache.swift */; };
+		FA0000000000000000000003 /* ContactsCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* ContactsCacheTests.swift */; };
+		FB0000000000000000000001 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000002 /* NotificationManager.swift */; };
+		FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000004 /* NotificationManagerTests.swift */; };
+		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CC0000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EE0000000000000000000001;
+			remoteInfo = Aerio;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		127E4AF5BF43102B2B0C38EC /* GmailAPIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GmailAPIModels.swift; path = Aerio/Models/GmailAPIModels.swift; sourceTree = SOURCE_ROOT; };
+		15C440ADA83895F815072C69 /* GmailAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GmailAPIClient.swift; path = Aerio/Services/GmailAPIClient.swift; sourceTree = SOURCE_ROOT; };
+		20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManager.swift; sourceTree = "<group>"; };
+		5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822Builder.swift; path = Aerio/Services/RFC2822Builder.swift; sourceTree = SOURCE_ROOT; };
+		22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIModelsTests.swift; sourceTree = "<group>"; };
+		8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManagerTests.swift; sourceTree = "<group>"; };
+		A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822BuilderTests.swift; path = AerioTests/RFC2822BuilderTests.swift; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000010 /* AerioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerioApp.swift; sourceTree = "<group>"; };
+		BB0000000000000000000012 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
+		BB0000000000000000000013 /* Email.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Email.swift; sourceTree = "<group>"; };
+		BB0000000000000000000014 /* Folder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Folder.swift; sourceTree = "<group>"; };
+		BB0000000000000000000015 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000016 /* AccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManager.swift; sourceTree = "<group>"; };
+		BB0000000000000000000018 /* AccountManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagerTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000020 /* Aerio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aerio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000021 /* AerioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AerioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000041 /* UnifiedMailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedMailbox.swift; sourceTree = "<group>"; };
+		BB0000000000000000000043 /* UnifiedMailboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedMailboxTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000050 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000053 /* ViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000060 /* MessageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageList.swift; sourceTree = "<group>"; };
+		BB0000000000000000000061 /* MessageWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWebView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000062 /* AccountSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSetupView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000063 /* MessageListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageListTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000072 /* ComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000073 /* ComposeWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeWindowManager.swift; sourceTree = "<group>"; };
+		BB0000000000000000000080 /* KeyboardShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcuts.swift; sourceTree = "<group>"; };
+		BB0000000000000000000081 /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
+		BB0000000000000000000082 /* KeyboardShortcutsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutsTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000083 /* DataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStoreTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000086 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000090 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB0000000000000000000100 /* OAuthConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthConfig.swift; sourceTree = "<group>"; };
+		BB0000000000000000000101 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		BB0000000000000000000102 /* OAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthManager.swift; sourceTree = "<group>"; };
+		BB0000000000000000000103 /* KeychainHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelperTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000104 /* OAuthManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthManagerTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000105 /* MockKeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockKeychainStore.swift; sourceTree = "<group>"; };
+		C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GmailAPIClientTests.swift; path = AerioTests/GmailAPIClientTests.swift; sourceTree = SOURCE_ROOT; };
+		CD0000000000000000000002 /* ComposeDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeDraftTests.swift; sourceTree = "<group>"; };
+		DE0000000000000000000002 /* UnifiedSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSidebar.swift; sourceTree = "<group>"; };
+		EF0000000000000000000002 /* SearchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchOverlay.swift; sourceTree = "<group>"; };
+		EF0000000000000000000004 /* SearchOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchOverlayTests.swift; sourceTree = "<group>"; };
+		FA0000000000000000000002 /* ContactsCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsCache.swift; sourceTree = "<group>"; };
+		FA0000000000000000000004 /* ContactsCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsCacheTests.swift; sourceTree = "<group>"; };
+		FB0000000000000000000002 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		FB0000000000000000000004 /* NotificationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManagerTests.swift; sourceTree = "<group>"; };
+		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FF0000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF0000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		GG0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				GG0000000000000000000002 /* Aerio */,
+				GG0000000000000000000003 /* AerioTests */,
+				GG0000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000002 /* Aerio */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000010 /* AerioApp.swift */,
+				GG0000000000000000000005 /* Models */,
+				GG0000000000000000000006 /* Services */,
+				GG0000000000000000000008 /* Views */,
+				GG0000000000000000000009 /* Utilities */,
+				GG000000000000000000000A /* Persistence */,
+				GG000000000000000000000B /* Config */,
+				BB0000000000000000000090 /* Assets.xcassets */,
+			);
+			path = Aerio;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000003 /* AerioTests */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000015 /* ModelTests.swift */,
+				BB0000000000000000000018 /* AccountManagerTests.swift */,
+				BB0000000000000000000043 /* UnifiedMailboxTests.swift */,
+				BB0000000000000000000053 /* ViewTests.swift */,
+				BB0000000000000000000063 /* MessageListTests.swift */,
+				BB0000000000000000000082 /* KeyboardShortcutsTests.swift */,
+				BB0000000000000000000083 /* DataStoreTests.swift */,
+				BB0000000000000000000103 /* KeychainHelperTests.swift */,
+				BB0000000000000000000105 /* MockKeychainStore.swift */,
+				BB0000000000000000000104 /* OAuthManagerTests.swift */,
+				C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */,
+				8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */,
+				A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */,
+				22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */,
+				CD0000000000000000000002 /* ComposeDraftTests.swift */,
+				EF0000000000000000000004 /* SearchOverlayTests.swift */,
+				FA0000000000000000000004 /* ContactsCacheTests.swift */,
+				FB0000000000000000000004 /* NotificationManagerTests.swift */,
+			);
+			path = AerioTests;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000020 /* Aerio.app */,
+				BB0000000000000000000021 /* AerioTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000005 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000012 /* Account.swift */,
+				BB0000000000000000000013 /* Email.swift */,
+				BB0000000000000000000014 /* Folder.swift */,
+				127E4AF5BF43102B2B0C38EC /* GmailAPIModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000006 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000016 /* AccountManager.swift */,
+				BB0000000000000000000041 /* UnifiedMailbox.swift */,
+				BB0000000000000000000100 /* OAuthConfig.swift */,
+				BB0000000000000000000101 /* KeychainHelper.swift */,
+				BB0000000000000000000102 /* OAuthManager.swift */,
+				15C440ADA83895F815072C69 /* GmailAPIClient.swift */,
+				20E0C83236AE0C6930D581EB /* GmailAPIManager.swift */,
+				5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */,
+				FA0000000000000000000002 /* ContactsCache.swift */,
+				FB0000000000000000000002 /* NotificationManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000008 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000050 /* MainView.swift */,
+				BB0000000000000000000060 /* MessageList.swift */,
+				BB0000000000000000000061 /* MessageWebView.swift */,
+				BB0000000000000000000062 /* AccountSetupView.swift */,
+				BB0000000000000000000072 /* ComposeView.swift */,
+				BB0000000000000000000073 /* ComposeWindowManager.swift */,
+				BB0000000000000000000086 /* SettingsView.swift */,
+				DE0000000000000000000002 /* UnifiedSidebar.swift */,
+				EF0000000000000000000002 /* SearchOverlay.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		GG0000000000000000000009 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000080 /* KeyboardShortcuts.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		GG000000000000000000000A /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000081 /* DataStore.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		GG000000000000000000000B /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000010 /* OAuth.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EE0000000000000000000001 /* Aerio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = LL0000000000000000000002 /* Build configuration list for PBXNativeTarget "Aerio" */;
+			buildPhases = (
+				FF0000000000000000000001 /* Sources */,
+				FF0000000000000000000002 /* Frameworks */,
+				FF0000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Aerio;
+			productName = Aerio;
+			productReference = BB0000000000000000000020 /* Aerio.app */;
+			productType = "com.apple.product-type.application";
+		};
+		EE0000000000000000000002 /* AerioTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = LL0000000000000000000003 /* Build configuration list for PBXNativeTarget "AerioTests" */;
+			buildPhases = (
+				FF0000000000000000000005 /* Sources */,
+				FF0000000000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				HH0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = AerioTests;
+			productName = AerioTests;
+			productReference = BB0000000000000000000021 /* AerioTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DD0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					EE0000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					EE0000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = EE0000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = LL0000000000000000000001 /* Build configuration list for PBXProject "Aerio" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = GG0000000000000000000001;
+			productRefGroup = GG0000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EE0000000000000000000001 /* Aerio */,
+				EE0000000000000000000002 /* AerioTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FF0000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000090 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FF0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000010 /* AerioApp.swift in Sources */,
+				AA0000000000000000000012 /* Account.swift in Sources */,
+				AA0000000000000000000013 /* Email.swift in Sources */,
+				AA0000000000000000000014 /* Folder.swift in Sources */,
+				AA0000000000000000000016 /* AccountManager.swift in Sources */,
+				AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */,
+				AA0000000000000000000050 /* MainView.swift in Sources */,
+				AA0000000000000000000060 /* MessageList.swift in Sources */,
+				AA0000000000000000000061 /* MessageWebView.swift in Sources */,
+				AA0000000000000000000062 /* AccountSetupView.swift in Sources */,
+				AA0000000000000000000072 /* ComposeView.swift in Sources */,
+				AA0000000000000000000073 /* ComposeWindowManager.swift in Sources */,
+				AA0000000000000000000080 /* KeyboardShortcuts.swift in Sources */,
+				AA0000000000000000000081 /* DataStore.swift in Sources */,
+				AA0000000000000000000086 /* SettingsView.swift in Sources */,
+				AA0000000000000000000100 /* OAuthConfig.swift in Sources */,
+				AA0000000000000000000101 /* KeychainHelper.swift in Sources */,
+				AA0000000000000000000102 /* OAuthManager.swift in Sources */,
+				15394663B46D55AFCAA687BE /* GmailAPIModels.swift in Sources */,
+				FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */,
+				A118A8598CE5BB54C26422EC /* GmailAPIManager.swift in Sources */,
+				5E594F81A3A04AC3B3F165FD /* RFC2822Builder.swift in Sources */,
+				DE0000000000000000000001 /* UnifiedSidebar.swift in Sources */,
+				EF0000000000000000000001 /* SearchOverlay.swift in Sources */,
+				FA0000000000000000000001 /* ContactsCache.swift in Sources */,
+				FB0000000000000000000001 /* NotificationManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF0000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000015 /* ModelTests.swift in Sources */,
+				AA0000000000000000000018 /* AccountManagerTests.swift in Sources */,
+				AA0000000000000000000043 /* UnifiedMailboxTests.swift in Sources */,
+				AA0000000000000000000053 /* ViewTests.swift in Sources */,
+				AA0000000000000000000063 /* MessageListTests.swift in Sources */,
+				AA0000000000000000000082 /* KeyboardShortcutsTests.swift in Sources */,
+				AA0000000000000000000083 /* DataStoreTests.swift in Sources */,
+				AA0000000000000000000103 /* KeychainHelperTests.swift in Sources */,
+				AA0000000000000000000105 /* MockKeychainStore.swift in Sources */,
+				AA0000000000000000000104 /* OAuthManagerTests.swift in Sources */,
+				42D3493B9B3AFC047D437EA0 /* GmailAPIClientTests.swift in Sources */,
+				218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */,
+				1EEB4BD08DFA461F588C8CDC /* RFC2822BuilderTests.swift in Sources */,
+				11AABB0000000000000000CC /* GmailAPIModelsTests.swift in Sources */,
+				CD0000000000000000000001 /* ComposeDraftTests.swift in Sources */,
+				EF0000000000000000000003 /* SearchOverlayTests.swift in Sources */,
+				FA0000000000000000000003 /* ContactsCacheTests.swift in Sources */,
+				FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		HH0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = EE0000000000000000000001 /* Aerio */;
+			targetProxy = CC0000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		KK0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		KK0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		KK0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC0000000000000000000010 /* OAuth.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = YP8Y455729;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Aerio/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Aerio Dev";
+				INFOPLIST_KEY_NSMainStoryboardFile = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aerio.Aerio.dev;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		KK0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC0000000000000000000010 /* OAuth.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = YP8Y455729;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Aerio/Info.plist;
+				INFOPLIST_KEY_NSMainStoryboardFile = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aerio.Aerio;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		KK0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aerio.AerioTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aerio.app/Contents/MacOS/Aerio";
+			};
+			name = Debug;
+		};
+		KK0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aerio.AerioTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aerio.app/Contents/MacOS/Aerio";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		LL0000000000000000000001 /* Build configuration list for PBXProject "Aerio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KK0000000000000000000001 /* Debug */,
+				KK0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		LL0000000000000000000002 /* Build configuration list for PBXNativeTarget "Aerio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KK0000000000000000000003 /* Debug */,
+				KK0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		LL0000000000000000000003 /* Build configuration list for PBXNativeTarget "AerioTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				KK0000000000000000000005 /* Debug */,
+				KK0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = DD0000000000000000000001 /* Project object */;
+}
