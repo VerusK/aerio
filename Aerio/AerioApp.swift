@@ -134,6 +134,7 @@ final class AppState: ObservableObject {
     static let defaultPollInterval: Double = 45
     static let cacheRetentionDaysKey = "cacheRetentionDays"
     static let defaultCacheRetentionDays: Int = 30
+    static let archiveOnReplyKey = "archiveOnReply"
 
     private static let logger = Logger(subsystem: "Aerio", category: "AppState")
 
@@ -161,7 +162,8 @@ final class AppState: ObservableObject {
         defaults.register(defaults: [
             AppState.showDockBadgeKey: true,
             AppState.pollIntervalKey: AppState.defaultPollInterval,
-            AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays
+            AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays,
+            AppState.archiveOnReplyKey: true
         ])
         observeDockBadge()
 
@@ -189,7 +191,8 @@ final class AppState: ObservableObject {
         defaults.register(defaults: [
             AppState.showDockBadgeKey: true,
             AppState.pollIntervalKey: AppState.defaultPollInterval,
-            AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays
+            AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays,
+            AppState.archiveOnReplyKey: true
         ])
         observeDockBadge()
     }

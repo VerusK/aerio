@@ -759,6 +759,11 @@ struct ComposeView: View {
                     )
                 }
                 hasSent = true
+                if (composeType == .reply || composeType == .replyAll),
+                   let email = replyToEmail, email.folder == .inbox,
+                   UserDefaults.standard.bool(forKey: AppState.archiveOnReplyKey) {
+                    try? await apiManager.archiveEmail(msgId: email.msgId, accountId: email.accountId, folder: .inbox)
+                }
                 onDismiss?()
                 Task { await apiManager.refreshAll() }
             } catch {

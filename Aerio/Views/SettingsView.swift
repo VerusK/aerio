@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(AppState.downloadsDirectoryKey) private var downloadsDirectory = ""
     @AppStorage(AppState.pollIntervalKey) private var pollInterval = AppState.defaultPollInterval
     @AppStorage(AppState.cacheRetentionDaysKey) private var cacheRetentionDays = AppState.defaultCacheRetentionDays
+    @AppStorage(AppState.archiveOnReplyKey) private var archiveOnReply = true
     @State private var cacheDetails: [(name: String, path: String, size: Int64)] = []
     @State private var contentCacheCount: Int = 0
     @State private var cacheTotal: String = "Calculating…"
@@ -38,6 +39,7 @@ struct SettingsView: View {
         Form {
             Section("General") {
                 Toggle("Show unread count on dock icon", isOn: $showDockBadge)
+                Toggle("Archive messages after replying from Inbox", isOn: $archiveOnReply)
 
                 HStack {
                     Text("Save attachments to:")
