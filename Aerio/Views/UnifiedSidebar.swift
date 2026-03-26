@@ -65,7 +65,7 @@ struct UnifiedSidebar: View {
             .listRowBackground(
                 selectedFolder == folder && selectedAccountId == nil
                     ? Color.accentColor.opacity(0.18)
-                    : Color.clear
+                    : nil
             )
             .accessibilityIdentifier("folder-\(folder.rawValue)")
         } else {
@@ -73,7 +73,7 @@ struct UnifiedSidebar: View {
                 .listRowBackground(
                     selectedFolder == folder && selectedAccountId == nil
                         ? Color.accentColor.opacity(0.18)
-                        : Color.clear
+                        : nil
                 )
                 .accessibilityIdentifier("folder-\(folder.rawValue)")
         }
@@ -145,7 +145,7 @@ struct UnifiedSidebar: View {
             selectedAccountId = account.id
         }
         .listRowBackground(
-            isSelected ? Color.accentColor.opacity(0.15) : Color.clear
+            isSelected ? Color.accentColor.opacity(0.15) : nil
         )
         .accessibilityIdentifier("folder-\(folder.rawValue)-account-\(account.id)")
         .contextMenu {

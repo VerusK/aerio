@@ -60,8 +60,11 @@ struct MessageList: View {
             .frame(minWidth: 250)
             .onChange(of: selectedEmailId) { _, newValue in
                 if let newValue {
+                    // Use .center so the selected row is always clearly visible.
+                    // anchor: nil on macOS List often fails to scroll when the row
+                    // is technically "partially visible" or just off-screen.
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(newValue, anchor: nil)
+                        proxy.scrollTo(newValue, anchor: .center)
                     }
                 }
             }
@@ -85,6 +88,17 @@ struct MessageList: View {
                             }
                         }
                     }
+                }
+            }
+            .onChange(of: selectedFolder) { _, _ in
+                // Scroll to top when switching folders
+                if let first = filteredEmails.first {
+                    proxy.scrollTo(first.id, anchor: .top)
+                }
+            }
+            .onChange(of: selectedAccountId) { _, _ in
+                if let first = filteredEmails.first {
+                    proxy.scrollTo(first.id, anchor: .top)
                 }
             }
             .onAppear {
