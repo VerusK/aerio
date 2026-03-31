@@ -444,6 +444,35 @@ struct NativeMessageDetail: View {
     }
 
     private func loadContent() {
+        // Check in-memory HTML cache first (fastest path)
+        if let cachedHTML = bodyWebViewStore.cachedHTML(for: email.id) {
+            bodyWebViewStore.loadHTML(cachedHTML)
+            isLoading = false
+            // Load headers from SwiftData for display if not already set
+            if messageContent == nil {
+                if let cached = apiManager.dataStore?.loadContent(accountId: email.accountId, msgId: email.msgId) {
+                    messageContent = MessageContentData(
+                        from: cached.headers["from"] ?? email.from,
+                        to: cached.headers["to"] ?? email.to,
+                        cc: cached.headers["cc"] ?? email.cc,
+                        subject: cached.headers["subject"] ?? email.subject,
+                        date: cached.headers["date"] ?? email.date.shortRelative,
+                        bodyHTML: cached.bodyHTML,
+                        attachments: cached.attachments.map { dict in
+                            MessageContentData.AttachmentInfo(
+                                name: dict["name"] ?? "",
+                                size: dict["size"] ?? "",
+                                attachmentId: dict["attachmentId"],
+                                messageId: dict["messageId"],
+                                mimeType: dict["mimeType"]
+                            )
+                        }
+                    )
+                }
+            }
+            return
+        }
+
         isLoading = true
         errorMessage = nil
 
@@ -469,7 +498,7 @@ struct NativeMessageDetail: View {
                 )
                 messageContent = content
                 let html = wrapHTML(cached.bodyHTML, subject: content.subject)
-                bodyWebViewStore.loadHTML(html)
+                bodyWebViewStore.loadHTML(html, emailId: email.id)
                 isLoading = false
                 return
             }
@@ -560,7 +589,7 @@ struct NativeMessageDetail: View {
                 )
                 messageContent = content
                 let displayHTML = wrapHTML(bodyHTML, subject: subject)
-                bodyWebViewStore.loadHTML(displayHTML)
+                bodyWebViewStore.loadHTML(displayHTML, emailId: email.id)
                 isLoading = false
 
                 // Background: inline external images and save to cache
@@ -648,6 +677,10 @@ final class BodyWebViewStore: ObservableObject {
     let webView: WKWebView
     private let navigationDelegate = BodyWebViewNavigationDelegate()
 
+    // In-memory HTML cache: email ID → rendered HTML
+    private static var htmlCache: [String: String] = [:]
+    private static let cacheLimit = 50
+
     init() {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
@@ -658,8 +691,18 @@ final class BodyWebViewStore: ObservableObject {
         self.webView.navigationDelegate = navigationDelegate
     }
 
-    func loadHTML(_ html: String) {
+    func loadHTML(_ html: String, emailId: String? = nil) {
+        if let emailId {
+            if Self.htmlCache.count >= Self.cacheLimit {
+                Self.htmlCache.removeValue(forKey: Self.htmlCache.keys.first!)
+            }
+            Self.htmlCache[emailId] = html
+        }
         webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func cachedHTML(for emailId: String) -> String? {
+        Self.htmlCache[emailId]
     }
 
     /// Scroll the web view content by a fixed amount.
