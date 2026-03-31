@@ -158,6 +158,36 @@ final class EmailTests: XCTestCase {
         let decoded = try JSONDecoder().decode(Email.self, from: data)
         XCTAssertEqual(email, decoded)
     }
+
+    func testEmailToCcFields() {
+        let email = Email(
+            msgId: "msg1",
+            from: "me@test.com",
+            subject: "Test",
+            date: Date(),
+            snippet: "preview",
+            accountId: "acc1",
+            folder: .sent,
+            to: "recipient@test.com",
+            cc: "cc@test.com"
+        )
+        XCTAssertEqual(email.to, "recipient@test.com")
+        XCTAssertEqual(email.cc, "cc@test.com")
+    }
+
+    func testEmailToCcDefaultsToEmpty() {
+        let email = Email(
+            msgId: "msg1",
+            from: "me@test.com",
+            subject: "Test",
+            date: Date(),
+            snippet: "preview",
+            accountId: "acc1",
+            folder: .inbox
+        )
+        XCTAssertEqual(email.to, "")
+        XCTAssertEqual(email.cc, "")
+    }
 }
 
 final class AccountTests: XCTestCase {

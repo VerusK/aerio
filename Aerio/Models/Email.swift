@@ -4,6 +4,8 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
     let id: String
     let msgId: String
     let from: String
+    let to: String
+    let cc: String
     let subject: String
     let date: Date
     let snippet: String
@@ -21,11 +23,15 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
         isRead: Bool = false,
         accountId: String,
         folder: Folder,
-        messageId: String? = nil
+        messageId: String? = nil,
+        to: String = "",
+        cc: String = ""
     ) {
         self.id = "\(accountId)_\(folder.rawValue)_\(msgId)"
         self.msgId = msgId
         self.from = from
+        self.to = to
+        self.cc = cc
         self.subject = subject
         self.date = date
         self.snippet = snippet
