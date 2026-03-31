@@ -44,8 +44,8 @@ final class GmailAPIManager: ObservableObject {
 
     private func loadCachedEmails(from dataStore: EmailCache) {
         for account in accountManager.accounts {
-            let emails = dataStore.loadEmails(for: account.id)
-            logger.debug("Cache: loaded \(emails.count) emails for account \(account.id)")
+            let emails = dataStore.loadEmails(for: account.id, folder: currentFolder, limit: 200)
+            logger.debug("Cache: loaded \(emails.count) emails for account \(account.id), folder=\(self.currentFolder.displayName)")
             if !emails.isEmpty {
                 emailsByAccount[account.id] = emails
             }
@@ -433,6 +433,7 @@ final class GmailAPIManager: ObservableObject {
             for folder in allAffectedFolders {
                 dataStore?.replaceEmails(for: accountId, folder: folder, with: currentEmails.filter { $0.folder == folder })
             }
+            dataStore?.purgeOldEmails(keepLast: 1000)
         } catch let apiError as GmailAPIError {
             switch apiError {
             case .historyExpired:
