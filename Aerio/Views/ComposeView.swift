@@ -487,15 +487,27 @@ struct ComposeView: View {
         if let email = replyToEmail {
             switch composeType {
             case .reply:
-                toField = email.from
+                if email.folder == .sent {
+                    toField = email.to
+                } else {
+                    toField = email.from
+                }
                 subjectField = email.subject.hasPrefix("Re:") ? email.subject : "Re: \(email.subject)"
                 bodyText = "\n\n---\nOn \(email.date.formatted()), \(email.from) wrote:\n> \(email.snippet)"
                 fetchReplyHeaders(email: email, includeAllRecipients: false)
             case .replyAll:
-                toField = email.from
+                if email.folder == .sent {
+                    toField = email.to
+                    // Remove self from CC
+                    let myEmail = accountManager.accounts.first { $0.id == email.accountId }?.email.lowercased() ?? ""
+                    let ccAddresses = email.cc.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                    ccField = ccAddresses.filter { extractEmail(from: $0).lowercased() != myEmail }.joined(separator: ", ")
+                } else {
+                    toField = email.from
+                }
                 subjectField = email.subject.hasPrefix("Re:") ? email.subject : "Re: \(email.subject)"
                 bodyText = "\n\n---\nOn \(email.date.formatted()), \(email.from) wrote:\n> \(email.snippet)"
-                fetchReplyHeaders(email: email, includeAllRecipients: true)
+                fetchReplyHeaders(email: email, includeAllRecipients: email.folder != .sent)
             case .forward:
                 subjectField = email.subject.hasPrefix("Fwd:") ? email.subject : "Fwd: \(email.subject)"
                 bodyText = "\n\n---\nForwarded message from \(email.from):\n\(email.snippet)"
@@ -569,10 +581,12 @@ struct ComposeView: View {
                     fetchedMessageId = msgIdHeader
                 }
 
-                // Use Reply-To header if present, otherwise keep From
-                if let replyToHeader = headers.first(where: { $0.name.lowercased() == "reply-to" })?.value,
-                   !replyToHeader.isEmpty {
-                    toField = replyToHeader
+                // Use Reply-To header if present (only for non-sent emails)
+                if email.folder != .sent {
+                    if let replyToHeader = headers.first(where: { $0.name.lowercased() == "reply-to" })?.value,
+                       !replyToHeader.isEmpty {
+                        toField = replyToHeader
+                    }
                 }
 
                 if includeAllRecipients {
