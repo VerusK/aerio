@@ -34,14 +34,54 @@ final class UnifiedMailbox: ObservableObject {
     }
 
     private func rebuildEmails(from emailsByAccount: [String: [Email]], folder: Folder, accountId: String?) {
-        var allEmails: [Email]
+        // Collect source emails for current view
+        var sourceEmails: [Email]
         if let accountId {
-            allEmails = emailsByAccount[accountId] ?? []
+            sourceEmails = emailsByAccount[accountId] ?? []
         } else {
-            allEmails = emailsByAccount.values.flatMap { $0 }
+            sourceEmails = emailsByAccount.values.flatMap { $0 }
         }
-        allEmails = allEmails.filter { $0.folder == folder }
-        emails = Email.sortedByDate(allEmails)
+        sourceEmails = sourceEmails.filter { $0.folder == folder }
+
+        // Incremental merge: compute diff by ID
+        let newIds = Set(sourceEmails.map(\.id))
+        let oldIds = Set(emails.map(\.id))
+
+        let removedIds = oldIds.subtracting(newIds)
+        let addedIds = newIds.subtracting(oldIds)
+
+        // If nothing changed, check for in-place updates (e.g. isRead changed)
+        if removedIds.isEmpty && addedIds.isEmpty {
+            let oldById = Dictionary(uniqueKeysWithValues: emails.map { ($0.id, $0) })
+            var needsUpdate = false
+            for email in sourceEmails {
+                if let old = oldById[email.id], old != email {
+                    needsUpdate = true
+                    break
+                }
+            }
+            if !needsUpdate { return }
+        }
+
+        // Remove deleted
+        if !removedIds.isEmpty {
+            emails.removeAll { removedIds.contains($0.id) }
+        }
+
+        // Update existing emails in-place (e.g. isRead change)
+        let sourceById = Dictionary(uniqueKeysWithValues: sourceEmails.map { ($0.id, $0) })
+        for i in emails.indices {
+            if let updated = sourceById[emails[i].id], updated != emails[i] {
+                emails[i] = updated
+            }
+        }
+
+        // Insert new emails at correct sorted position (date descending)
+        let added = sourceEmails.filter { addedIds.contains($0.id) }
+        for email in added {
+            let insertIndex = emails.firstIndex { $0.date < email.date } ?? emails.endIndex
+            emails.insert(email, at: insertIndex)
+        }
     }
 
     private func rebuildUnreadCounts(from emailsByAccount: [String: [Email]]) {
@@ -90,6 +130,11 @@ final class UnifiedMailbox: ObservableObject {
     }
 
     func emails(for folder: Folder, accountId: String? = nil) -> [Email] {
+        // Fast path: if requesting the current view, return cached sorted array
+        if folder == selectedFolder && accountId == selectedAccountId {
+            return emails
+        }
+        // Slow path: filter and sort from source
         let source: [Email]
         if let accountId {
             source = apiManager.emailsByAccount[accountId] ?? []

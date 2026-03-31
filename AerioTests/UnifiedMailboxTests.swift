@@ -203,4 +203,65 @@ final class UnifiedMailboxTests: XCTestCase {
         XCTAssertEqual(mailbox.emails(for: .inbox).count, 0)
         XCTAssertEqual(mailbox.unreadCount(for: .inbox), 0)
     }
+
+    // MARK: - Incremental merge
+
+    func testMergeEmailsInsertsNewAtCorrectPosition() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        let now = Date()
+        let email1 = makeEmail(msgId: "m1", date: now.addingTimeInterval(-200), accountId: "acc1", folder: .inbox)
+        let email3 = makeEmail(msgId: "m3", date: now, accountId: "acc1", folder: .inbox)
+
+        api.emailsByAccount["acc1"] = [email1, email3]
+        mailbox.selectedFolder = .inbox
+
+        let expectation = XCTestExpectation(description: "emails rebuild")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(mailbox.emails.count, 2)
+            XCTAssertEqual(mailbox.emails[0].msgId, "m3")
+            XCTAssertEqual(mailbox.emails[1].msgId, "m1")
+
+            // Now add a new email between the two
+            let email2 = self.makeEmail(msgId: "m2", date: now.addingTimeInterval(-100), accountId: "acc1", folder: .inbox)
+            api.emailsByAccount["acc1"] = [email1, email2, email3]
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                XCTAssertEqual(mailbox.emails.count, 3)
+                XCTAssertEqual(mailbox.emails[0].msgId, "m3")
+                XCTAssertEqual(mailbox.emails[1].msgId, "m2")
+                XCTAssertEqual(mailbox.emails[2].msgId, "m1")
+                expectation.fulfill()
+            }
+        }
+        wait(for: [expectation], timeout: 2)
+    }
+
+    func testMergeEmailsRemovesDeleted() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        let now = Date()
+        let email1 = makeEmail(msgId: "m1", date: now.addingTimeInterval(-100), accountId: "acc1", folder: .inbox)
+        let email2 = makeEmail(msgId: "m2", date: now, accountId: "acc1", folder: .inbox)
+
+        api.emailsByAccount["acc1"] = [email1, email2]
+        mailbox.selectedFolder = .inbox
+
+        let expectation = XCTestExpectation(description: "emails rebuild")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(mailbox.emails.count, 2)
+
+            // Remove email1
+            api.emailsByAccount["acc1"] = [email2]
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                XCTAssertEqual(mailbox.emails.count, 1)
+                XCTAssertEqual(mailbox.emails[0].msgId, "m2")
+                expectation.fulfill()
+            }
+        }
+        wait(for: [expectation], timeout: 2)
+    }
 }
