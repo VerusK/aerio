@@ -63,6 +63,15 @@ final class UnifiedMailbox: ObservableObject {
             if !needsUpdate { return }
         }
 
+        // Large change (e.g. folder switch): full sort is O(n log n) vs O(n²) for incremental insert
+        let changedCount = removedIds.count + addedIds.count
+        let totalCount = max(oldIds.count, newIds.count, 1)
+        if changedCount > totalCount / 2 {
+            emails = Email.sortedByDate(sourceEmails)
+            return
+        }
+
+        // Small change (e.g. new emails arrived): incremental merge
         // Remove deleted
         if !removedIds.isEmpty {
             emails.removeAll { removedIds.contains($0.id) }
