@@ -44,8 +44,8 @@ final class GmailAPIManager: ObservableObject {
 
     private func loadCachedEmails(from dataStore: EmailCache) {
         for account in accountManager.accounts {
-            let emails = dataStore.loadEmails(for: account.id, folder: currentFolder, limit: 200)
-            logger.debug("Cache: loaded \(emails.count) emails for account \(account.id), folder=\(self.currentFolder.displayName)")
+            let emails = dataStore.loadEmails(for: account.id)
+            logger.debug("Cache: loaded \(emails.count) emails for account \(account.id)")
             if !emails.isEmpty {
                 emailsByAccount[account.id] = emails
             }
