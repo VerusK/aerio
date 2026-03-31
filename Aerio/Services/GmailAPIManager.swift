@@ -244,7 +244,7 @@ final class GmailAPIManager: ObservableObject {
             }
 
             // Fetch full metadata for this batch
-            let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
+            let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"])
             let batchEmails = messages.compactMap { convertGmailMessageToEmail($0, accountId: accountId, folder: folder) }
             allFetchedEmails.append(contentsOf: batchEmails)
 
@@ -386,7 +386,7 @@ final class GmailAPIManager: ObservableObject {
                 let messages = try await client.getMessages(
                     ids: Array(messageIdsToFetch),
                     format: "metadata",
-                    metadataHeaders: ["From", "Subject", "Date", "Message-ID"]
+                    metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"]
                 )
 
                 // Update historyId from fetched messages
@@ -478,7 +478,7 @@ final class GmailAPIManager: ObservableObject {
 
             guard !messageIds.isEmpty else { return }
 
-            let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
+            let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"])
             let newEmails = messages.compactMap { convertGmailMessageToEmail($0, accountId: accountId, folder: folder) }
 
             // Append to existing emails, avoiding duplicates
@@ -774,7 +774,7 @@ final class GmailAPIManager: ObservableObject {
                         let listResponse = try await client.listMessages(query: query, maxResults: 20, pageToken: token)
                         let messageIds = listResponse.messages?.map(\.id) ?? []
                         guard !messageIds.isEmpty else { return (accountId, [], nil) }
-                        let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "Subject", "Date", "Message-ID"])
+                        let messages = try await client.getMessages(ids: messageIds, format: "metadata", metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"])
                         let emails = messages.compactMap { msg -> Email? in
                             let labelIds = msg.labelIds ?? []
                             let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
@@ -874,6 +874,8 @@ final class GmailAPIManager: ObservableObject {
         let isRead = !(labelIds.contains(GmailLabelId.unread))
         let snippet = message.snippet ?? ""
         let messageId = headers.first(where: { $0.name.lowercased() == "message-id" })?.value
+        let to = headers.first(where: { $0.name.lowercased() == "to" })?.value ?? ""
+        let cc = headers.first(where: { $0.name.lowercased() == "cc" })?.value ?? ""
 
         return Email(
             msgId: message.id,
@@ -884,7 +886,9 @@ final class GmailAPIManager: ObservableObject {
             isRead: isRead,
             accountId: accountId,
             folder: folder,
-            messageId: messageId
+            messageId: messageId,
+            to: to,
+            cc: cc
         )
     }
 

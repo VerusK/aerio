@@ -338,6 +338,35 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertTrue(email?.isRead ?? false)
     }
 
+    func testConvertGmailMessageIncludesToCc() {
+        let message = GmailMessage(
+            id: "msg1",
+            threadId: "thread1",
+            labelIds: ["INBOX", "UNREAD"],
+            snippet: "Hello",
+            payload: GmailPayload(
+                mimeType: "text/plain",
+                headers: [
+                    GmailHeader(name: "From", value: "sender@test.com"),
+                    GmailHeader(name: "To", value: "recipient@test.com"),
+                    GmailHeader(name: "Cc", value: "cc1@test.com, cc2@test.com"),
+                    GmailHeader(name: "Subject", value: "Test Subject"),
+                    GmailHeader(name: "Date", value: "Mon, 31 Mar 2026 10:00:00 +0000"),
+                ],
+                body: nil,
+                parts: nil,
+                filename: nil
+            ),
+            internalDate: String(Int(Date().timeIntervalSince1970 * 1000)),
+            historyId: nil,
+            sizeEstimate: nil
+        )
+        let email = manager.convertGmailMessageToEmail(message, accountId: testAccountId, folder: .inbox)
+        XCTAssertNotNil(email)
+        XCTAssertEqual(email?.to, "recipient@test.com")
+        XCTAssertEqual(email?.cc, "cc1@test.com, cc2@test.com")
+    }
+
     // MARK: - Navigate to Folder
 
     // MARK: - Incremental Sync
