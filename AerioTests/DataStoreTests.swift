@@ -345,6 +345,83 @@ final class EmailCacheTests: XCTestCase {
         XCTAssertEqual(store.contentCacheCount, 2)
     }
 
+    // MARK: - To/Cc persistence
+
+    func testSaveAndLoadPreservesToCc() {
+        let store = makeStore()
+        let email = Email(
+            msgId: "msg1",
+            from: "me@test.com",
+            subject: "Test",
+            date: Date(),
+            snippet: "preview",
+            accountId: "acc1",
+            folder: .sent,
+            to: "recipient@test.com",
+            cc: "cc@test.com"
+        )
+        store.saveEmails([email])
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded[0].to, "recipient@test.com")
+        XCTAssertEqual(loaded[0].cc, "cc@test.com")
+    }
+
+    func testLoadEmailsScopedByFolderWithLimit() {
+        let store = makeStore()
+        var emails: [Email] = []
+        for i in 0..<10 {
+            emails.append(Email(
+                msgId: "msg\(i)",
+                from: "sender@test.com",
+                subject: "Subject \(i)",
+                date: Date().addingTimeInterval(Double(-i * 60)),
+                snippet: "snippet",
+                accountId: "acc1",
+                folder: .inbox
+            ))
+        }
+        emails.append(Email(
+            msgId: "sent1",
+            from: "me@test.com",
+            subject: "Sent",
+            date: Date(),
+            snippet: "snippet",
+            accountId: "acc1",
+            folder: .sent
+        ))
+        store.saveEmails(emails)
+
+        let loaded = store.loadEmails(for: "acc1", folder: .inbox, limit: 5)
+        XCTAssertEqual(loaded.count, 5)
+        XCTAssertEqual(loaded[0].msgId, "msg0")
+    }
+
+    func testPurgeOldEmails() {
+        let store = makeStore()
+        var emails: [Email] = []
+        for i in 0..<5 {
+            emails.append(Email(
+                msgId: "msg\(i)",
+                from: "sender@test.com",
+                subject: "Subject \(i)",
+                date: Date().addingTimeInterval(Double(-i * 3600)),
+                snippet: "snippet",
+                accountId: "acc1",
+                folder: .inbox
+            ))
+        }
+        store.saveEmails(emails)
+        XCTAssertEqual(store.emailCount, 5)
+
+        store.purgeOldEmails(keepLast: 3)
+        XCTAssertEqual(store.emailCount, 3)
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded[0].msgId, "msg0")
+        XCTAssertEqual(loaded[2].msgId, "msg2")
+    }
+
     // MARK: - All folders
 
     func testAllFoldersRoundTrip() {

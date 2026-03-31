@@ -16,6 +16,8 @@ final class CachedEmail {
     var accountId: String
     var folderRaw: String
     var messageId: String?
+    var to: String?
+    var cc: String?
 
     init(from email: Email) {
         self.id = email.id
@@ -28,6 +30,8 @@ final class CachedEmail {
         self.accountId = email.accountId
         self.folderRaw = email.folder.rawValue
         self.messageId = email.messageId
+        self.to = email.to
+        self.cc = email.cc
     }
 
     func toEmail() -> Email? {
@@ -41,7 +45,9 @@ final class CachedEmail {
             isRead: isRead,
             accountId: accountId,
             folder: folder,
-            messageId: messageId
+            messageId: messageId,
+            to: to ?? "",
+            cc: cc ?? ""
         )
     }
 }
@@ -110,6 +116,8 @@ final class EmailCache: ObservableObject {
                 existing.isRead = email.isRead
                 existing.folderRaw = email.folder.rawValue
                 existing.messageId = email.messageId
+                existing.to = email.to
+                existing.cc = email.cc
             } else {
                 modelContext.insert(CachedEmail(from: email))
             }
@@ -149,6 +157,35 @@ final class EmailCache: ObservableObject {
 
         let cached = (try? modelContext.fetch(descriptor)) ?? []
         return cached.compactMap { $0.toEmail() }
+    }
+
+    func loadEmails(for accountId: String, folder: Folder, limit: Int = 200) -> [Email] {
+        let folderRaw = folder.rawValue
+        var descriptor = FetchDescriptor<CachedEmail>(
+            predicate: #Predicate { $0.accountId == accountId && $0.folderRaw == folderRaw },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        let cached = (try? modelContext.fetch(descriptor)) ?? []
+        return cached.compactMap { $0.toEmail() }
+    }
+
+    func purgeOldEmails(keepLast: Int) {
+        let descriptor = FetchDescriptor<CachedEmail>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        let all = (try? modelContext.fetch(descriptor)) ?? []
+        guard all.count > keepLast else { return }
+        let toDelete = all.dropFirst(keepLast)
+        for item in toDelete {
+            modelContext.delete(item)
+        }
+        do {
+            try modelContext.save()
+            logger.info("Purged \(toDelete.count) old cached emails, keeping \(keepLast)")
+        } catch {
+            logger.error("Failed to purge old emails: \(error.localizedDescription)")
+        }
     }
 
     func deleteEmail(id: String) {
