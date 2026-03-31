@@ -221,7 +221,8 @@ struct MainView: View {
                 apiManager.markAsRead(emailId: email.id, accountId: email.accountId)
             }
         }
-        .onChange(of: selectedFolder) { _, newValue in
+        .onChange(of: selectedFolder) { oldValue, newValue in
+            guard oldValue != newValue else { return }
             unifiedMailbox.selectedFolder = newValue
             if !isNavigatingProgrammatically { selectedEmailId = nil }
             Task { await apiManager.navigateAllToFolder(newValue) }

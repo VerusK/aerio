@@ -16,8 +16,6 @@ struct MessageList: View {
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
 
-    @State private var knownEmailIds: Set<String> = []
-
     var body: some View {
         ScrollViewReader { proxy in
             List {
@@ -68,28 +66,6 @@ struct MessageList: View {
                     }
                 }
             }
-            .onChange(of: filteredEmails.count) { oldCount, newCount in
-                let currentIds = Set(filteredEmails.map(\.id))
-                let newIds = currentIds.subtracting(knownEmailIds)
-                knownEmailIds = currentIds
-
-                if !newIds.isEmpty && oldCount > 0 {
-                    // New emails arrived — scroll to keep current view stable
-                    if let selectedEmailId {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            proxy.scrollTo(selectedEmailId, anchor: nil)
-                        }
-                    } else {
-                        // No selection — scroll to first previously-known email
-                        // to prevent new items at top from pushing view down
-                        if let firstKnown = filteredEmails.first(where: { !newIds.contains($0.id) }) {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(firstKnown.id, anchor: .top)
-                            }
-                        }
-                    }
-                }
-            }
             .onChange(of: selectedFolder) { _, _ in
                 // Scroll to top when switching folders
                 if let first = filteredEmails.first {
@@ -100,9 +76,6 @@ struct MessageList: View {
                 if let first = filteredEmails.first {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
-            }
-            .onAppear {
-                knownEmailIds = Set(filteredEmails.map(\.id))
             }
         }
     }
