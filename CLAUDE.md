@@ -5,13 +5,13 @@
 ```bash
 # Build & Run (always run after changes so the user sees results immediately)
 # Copies to /Applications to avoid duplicate LaunchServices registrations (notifications opening wrong copy)
-xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derivedDataPath build build && cp -R build/Build/Products/Release/Aerio.app /Applications/Aerio.app && open /Applications/Aerio.app
+xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derivedDataPath build build && cp -R build/Build/Products/Release/Aerio.app /Applications/Aerio.app && rm -rf build/Build/Products/Release/Aerio.app && open /Applications/Aerio.app
 
 # Build only (debug)
 xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Debug build
 
-# Run all tests
-xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS'
+# Run all tests (removes Debug .app after to avoid LaunchServices conflicts)
+xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS' && rm -rf ~/Library/Developer/Xcode/DerivedData/Aerio-*/Build/Products/Debug/Aerio.app
 
 # Run specific test class
 xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS' -only-testing:AerioTests/GmailAPIClientTests
