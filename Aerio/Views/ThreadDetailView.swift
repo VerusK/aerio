@@ -154,6 +154,21 @@ struct ThreadDetailView: View {
             let toLine = message.to.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:2px;\">To: \(escapeHTML(message.to))</div>"
             let ccLine = message.cc.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:1px;\">Cc: \(escapeHTML(message.cc))</div>"
 
+            // Build attachment chips HTML
+            var attachmentsHTML = ""
+            if !message.attachments.isEmpty {
+                var chips: [String] = []
+                for att in message.attachments {
+                    let sizeStr = att.size.isEmpty ? "" : " <span style=\"color:#999;font-size:10px;\">(\(escapeHTML(att.size)))</span>"
+                    chips.append("""
+                    <span style="display:inline-block;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:3px 8px;margin:2px 4px 2px 0;font-size:11px;">
+                        📎 \(escapeHTML(att.name))\(sizeStr)
+                    </span>
+                    """)
+                }
+                attachmentsHTML = "<div style=\"padding-left:42px;padding-top:6px;\">\(chips.joined())</div>"
+            }
+
             let section = """
             <div style="border-bottom: 4px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
                 <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 0 8px 0;">
@@ -167,9 +182,10 @@ struct ThreadDetailView: View {
                         \(ccLine)
                     </div>
                 </div>
-                <div style="padding-left:42px;">
+                <div style="padding-left:42px;background:#fff;color:#1d1d1f;border-radius:6px;padding:12px;margin-top:4px;">
                     \(bodyHTML)
                 </div>
+                \(attachmentsHTML)
             </div>
             """
             sections.append(section)
