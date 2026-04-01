@@ -553,16 +553,16 @@ struct ComposeView: View {
     }
 
     /// Extract plain text body from MIME payload.
-    /// Checks both text/plain and text/html, returns whichever is more complete.
+    /// Prefers text/plain (preserves `>` quoting structure for nested replies).
+    /// Falls back to text/html with tags stripped only when text/plain is absent.
     private func extractPlainTextFromPayload(_ payload: GmailPayload) -> String {
-        let plain = findLeaf(payload, mimeType: "text/plain") ?? ""
-        let html = findLeaf(payload, mimeType: "text/html").map { stripHTML($0) } ?? ""
-        // Use whichever is longer — HTML often has the full conversation history
-        // while text/plain may be truncated
-        if html.count > plain.count {
-            return html
+        if let plain = findLeaf(payload, mimeType: "text/plain"), !plain.isEmpty {
+            return plain
         }
-        return plain.isEmpty ? html : plain
+        if let html = findLeaf(payload, mimeType: "text/html") {
+            return stripHTML(html)
+        }
+        return ""
     }
 
     /// Strip HTML tags and decode common entities to produce plain text.
