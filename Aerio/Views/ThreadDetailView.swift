@@ -81,13 +81,13 @@ struct ThreadDetailView: View {
     private var threadActionBar: some View {
         HStack(spacing: 4) {
             if folder == .inbox {
-                actionButton(icon: "archivebox", tooltip: "Archive", action: onArchive)
+                actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)
             }
             if folder != .inbox {
-                actionButton(icon: "tray.and.arrow.down", tooltip: "Move to Inbox", action: onMoveToInbox)
+                actionButton(icon: "tray.and.arrow.down", tooltip: "Move to Inbox (\(ShortcutAction.moveToInbox.shortcutLabel))", action: onMoveToInbox)
             }
-            actionButton(icon: "exclamationmark.octagon", tooltip: "Spam", action: onSpam)
-            actionButton(icon: "trash", tooltip: "Delete", action: onDelete)
+            actionButton(icon: "exclamationmark.octagon", tooltip: "Spam (\(ShortcutAction.spamMessage.shortcutLabel))", action: onSpam)
+            actionButton(icon: "trash", tooltip: "Delete (\(ShortcutAction.deleteMessage.shortcutLabel))", action: onDelete)
 
             Spacer()
 

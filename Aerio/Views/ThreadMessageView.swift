@@ -72,9 +72,9 @@ struct ThreadMessageView: View {
                         Spacer()
                         // Per-message actions
                         HStack(spacing: 4) {
-                            actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply", action: onReply)
-                            actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All", action: onReplyAll)
-                            actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward", action: onForward)
+                            actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply (\(ShortcutAction.reply.shortcutLabel))", action: onReply)
+                            actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All (\(ShortcutAction.replyAll.shortcutLabel))", action: onReplyAll)
+                            actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))", action: onForward)
                         }
                         Text(message.date.shortRelative)
                             .font(.system(size: 11))
