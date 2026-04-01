@@ -336,7 +336,7 @@ struct MainView: View {
             ZStack {
                 if let selectedEmailId,
                    let email = findEmail(by: selectedEmailId) {
-                    if !email.threadId.isEmpty && hasMultipleThreadMessages(email) {
+                    if !email.threadId.isEmpty && selectedFolder != .drafts {
                         ThreadDetailView(
                             email: email,
                             apiManager: apiManager,

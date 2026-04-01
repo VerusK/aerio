@@ -11,6 +11,7 @@ struct ThreadMessageView: View {
 
     @StateObject private var bodyWebViewStore = BodyWebViewStore()
     @State private var isLoading = true
+    @State private var contentHeight: CGFloat = 100
     @State private var downloadingAttachment: String?
 
     var body: some View {
@@ -52,7 +53,7 @@ struct ThreadMessageView: View {
                     .frame(maxWidth: .infinity, minHeight: 60)
             } else {
                 BodyWebView(webView: bodyWebViewStore.webView)
-                    .frame(minHeight: 60, maxHeight: 400)
+                    .frame(height: contentHeight)
             }
 
             // Attachments
@@ -163,9 +164,58 @@ struct ThreadMessageView: View {
                     html = html.replacingOccurrences(of: "cid:\(inline.cid)", with: dataURI)
                 } catch {}
             }
+            html = stripQuotedContent(html)
             let wrapped = wrapEmailHTML(html, subject: message.subject)
             bodyWebViewStore.loadHTML(wrapped, emailId: message.id)
+            // Disable WKWebView internal scrolling — parent ScrollView handles it
+            DispatchQueue.main.async {
+                bodyWebViewStore.webView.enclosingScrollView?.hasVerticalScroller = false
+                bodyWebViewStore.webView.enclosingScrollView?.verticalScrollElasticity = .none
+            }
             isLoading = false
+            // Give WebView time to render, then measure content height
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                updateContentHeight()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                updateContentHeight()
+            }
+        }
+    }
+
+    /// Strip quoted previous messages from HTML body.
+    /// Gmail wraps quotes in <div class="gmail_quote"> or <blockquote>.
+    /// Also strips "On ... wrote:" plain-text patterns.
+    private func stripQuotedContent(_ html: String) -> String {
+        var result = html
+        // Remove Gmail-style quoted blocks: <div class="gmail_quote">...</div>
+        let gmailQuotePattern = #"<div\s+class\s*=\s*"gmail_quote"[\s\S]*$"#
+        if let regex = try? NSRegularExpression(pattern: gmailQuotePattern, options: .caseInsensitive) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        // Remove <blockquote> blocks (common in non-Gmail replies)
+        let blockquotePattern = #"<blockquote[\s\S]*?</blockquote>"#
+        if let regex = try? NSRegularExpression(pattern: blockquotePattern, options: .caseInsensitive) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        // Remove "On <date>, <name> wrote:" lines (plain text emails)
+        let onWrotePattern = #"(?m)^On .+wrote:\s*$"#
+        if let regex = try? NSRegularExpression(pattern: onWrotePattern, options: []) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        // Remove lines starting with > (plain text quoting)
+        let quotedLinePattern = #"(?m)^&gt;.*$"#
+        if let regex = try? NSRegularExpression(pattern: quotedLinePattern, options: []) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        return result
+    }
+
+    private func updateContentHeight() {
+        bodyWebViewStore.webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
+            if let height = result as? CGFloat, height > 0 {
+                self.contentHeight = height + 32 // padding
+            }
         }
     }
 
