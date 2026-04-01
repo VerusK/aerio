@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 struct ThreadDetailView: View {
     let email: Email
@@ -17,7 +18,7 @@ struct ThreadDetailView: View {
     @State private var threadMessages: [ThreadMessage] = []
     @State private var isLoading = true
     @State private var loadError: String?
-    @State private var scrollOffset: CGFloat = 0
+    @StateObject private var webViewStore = BodyWebViewStore()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -40,43 +41,29 @@ struct ThreadDetailView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(threadMessages) { message in
-                                ThreadMessageView(
-                                    message: message,
-                                    apiManager: apiManager,
-                                    onReply: { onReply?(message) },
-                                    onReplyAll: { onReplyAll?(message) },
-                                    onForward: { onForward?(message) }
-                                )
-                                .id(message.id)
-                            }
-                        }
-                    }
-                    .onAppear {
-                        onRegisterScroll? { direction in
-                            // Keyboard arrow scroll: find visible message and scroll to next/prev
-                            guard !threadMessages.isEmpty else { return }
-                            let step = direction > 0 ? 1 : -1
-                            // Use scrollOffset to track approximate position
-                            scrollOffset += CGFloat(step)
-                            let index = max(0, min(threadMessages.count - 1, Int(scrollOffset)))
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo(threadMessages[index].id, anchor: .top)
-                            }
-                        }
-                    }
-                }
+                BodyWebView(webView: webViewStore.webView)
             }
         }
-        .onAppear { loadThread() }
+        .onAppear {
+            loadThread()
+            onRegisterScroll? { direction in
+                webViewStore.scrollContent(direction: direction)
+            }
+        }
         .onChange(of: email.threadId) { _, _ in loadThread() }
     }
 
     private var threadActionBar: some View {
         HStack(spacing: 4) {
+            // Per-message reply buttons for the newest message
+            if let newest = threadMessages.first {
+                actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply (\(ShortcutAction.reply.shortcutLabel))") { onReply?(newest) }
+                actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All (\(ShortcutAction.replyAll.shortcutLabel))") { onReplyAll?(newest) }
+                actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))") { onForward?(newest) }
+
+                Divider().frame(height: 16)
+            }
+
             if folder == .inbox {
                 actionButton(icon: "archivebox", tooltip: "Archive (\(ShortcutAction.archiveMessage.shortcutLabel))", action: onArchive)
             }
@@ -118,23 +105,146 @@ struct ThreadDetailView: View {
         .disabled(action == nil)
     }
 
+    // MARK: - Thread loading
+
+    private static var threadHTMLCache: [String: String] = [:]
+
     private func loadThread() {
-        // Only show loading spinner on first load, not on cache hits
         if threadMessages.isEmpty {
             isLoading = true
         }
         loadError = nil
         Task {
             do {
-                threadMessages = try await apiManager.fetchThread(
+                let messages = try await apiManager.fetchThread(
                     threadId: email.threadId,
                     accountId: email.accountId
                 )
+                threadMessages = messages
+
+                let cacheKey = "\(email.accountId)_\(email.threadId)"
+                if let cachedHTML = Self.threadHTMLCache[cacheKey] {
+                    webViewStore.loadHTML(cachedHTML)
+                    isLoading = false
+                    return
+                }
+
+                // Build single HTML document for entire thread
+                let html = buildThreadHTML(messages: messages)
+                Self.threadHTMLCache[cacheKey] = html
+                webViewStore.loadHTML(html)
                 isLoading = false
             } catch {
                 loadError = error.localizedDescription
                 isLoading = false
             }
         }
+    }
+
+    private func buildThreadHTML(messages: [ThreadMessage]) -> String {
+        var sections: [String] = []
+
+        for message in messages {
+            var bodyHTML = message.bodyHTML
+            bodyHTML = stripQuotedContent(bodyHTML)
+
+            let initial = String(message.from.prefix(1)).uppercased()
+            let color = avatarColor(for: message.from)
+            let dateStr = message.date.shortRelative
+            let toLine = message.to.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:2px;\">To: \(escapeHTML(message.to))</div>"
+            let ccLine = message.cc.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:1px;\">Cc: \(escapeHTML(message.cc))</div>"
+
+            let section = """
+            <div style="border-bottom: 4px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 0 8px 0;">
+                    <div style="width:32px;height:32px;border-radius:50%;background:\(color);display:flex;align-items:center;justify-content:center;font-size:13px;color:white;flex-shrink:0;">\(initial)</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                            <span style="font-size:13px;font-weight:600;">\(escapeHTML(message.from))</span>
+                            <span style="font-size:11px;color:#666;">\(dateStr)</span>
+                        </div>
+                        \(toLine)
+                        \(ccLine)
+                    </div>
+                </div>
+                <div style="padding-left:42px;">
+                    \(bodyHTML)
+                </div>
+            </div>
+            """
+            sections.append(section)
+        }
+
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                font-size: 14px;
+                line-height: 1.5;
+                color: #e0e0e0;
+                background: #1a1a1a;
+                padding: 0 16px;
+                margin: 0;
+                word-wrap: break-word;
+            }
+            img { max-width: 100%; height: auto; }
+            blockquote {
+                border-left: 3px solid #444;
+                margin: 8px 0;
+                padding-left: 12px;
+                color: #888;
+            }
+            a { color: #6cb4ff; }
+            pre, code {
+                background: #2a2a2a;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 13px;
+            }
+        </style>
+        </head>
+        <body>
+        \(sections.joined(separator: "\n"))
+        </body>
+        </html>
+        """
+    }
+
+    private func stripQuotedContent(_ html: String) -> String {
+        var result = html
+        let gmailQuotePattern = #"<div\s+class\s*=\s*"gmail_quote"[\s\S]*$"#
+        if let regex = try? NSRegularExpression(pattern: gmailQuotePattern, options: .caseInsensitive) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        let blockquotePattern = #"<blockquote[\s\S]*?</blockquote>"#
+        if let regex = try? NSRegularExpression(pattern: blockquotePattern, options: .caseInsensitive) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        let onWrotePattern = #"(?m)^On .+wrote:\s*$"#
+        if let regex = try? NSRegularExpression(pattern: onWrotePattern, options: []) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        let quotedLinePattern = #"(?m)^&gt;.*$"#
+        if let regex = try? NSRegularExpression(pattern: quotedLinePattern, options: []) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        return result
+    }
+
+    private func avatarColor(for email: String) -> String {
+        let hash = abs(email.hashValue)
+        let colors = ["#4a7aff", "#7c3aed", "#e67e22", "#27ae60", "#e84393", "#00b894", "#4b0082", "#00cec9"]
+        return colors[hash % colors.count]
+    }
+
+    private func escapeHTML(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 }
