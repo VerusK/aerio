@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "Aerio", category: "ThreadDetail")
 /// Navigation delegate that intercepts aerio:// attachment URLs and opens external links in browser.
 final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
     weak var apiManager: GmailAPIManager?
+    weak var webView: WKWebView?
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else {
@@ -38,8 +39,16 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
         let attachmentId = parts[3]
         let filename = parts.count > 4 ? parts[4].removingPercentEncoding ?? parts[4] : "attachment"
 
+        let chipId = "att-\(attachmentId)"
         Task { @MainActor in
             guard let apiManager else { return }
+            // Show downloading state
+            webView?.evaluateJavaScript("""
+                (function() {
+                    var el = document.getElementById('\(chipId)');
+                    if (el) { el.dataset.originalText = el.innerHTML; el.innerHTML = '⏳ Downloading...'; el.style.opacity = '0.6'; }
+                })()
+            """, completionHandler: nil)
             do {
                 let data = try await apiManager.downloadAttachment(
                     messageId: messageId,
@@ -63,8 +72,21 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
                 } else {
                     NSApp.requestUserAttention(.informationalRequest)
                 }
+                // Show done state, then restore
+                webView?.evaluateJavaScript("""
+                    (function() {
+                        var el = document.getElementById('\(chipId)');
+                        if (el) { el.innerHTML = '✅ Done'; el.style.opacity = '1'; setTimeout(function() { el.innerHTML = el.dataset.originalText; }, 2000); }
+                    })()
+                """, completionHandler: nil)
             } catch {
                 logger.error("Failed to download attachment: \(error.localizedDescription)")
+                webView?.evaluateJavaScript("""
+                    (function() {
+                        var el = document.getElementById('\(chipId)');
+                        if (el) { el.innerHTML = '❌ Failed'; el.style.opacity = '1'; setTimeout(function() { el.innerHTML = el.dataset.originalText; }, 2000); }
+                    })()
+                """, completionHandler: nil)
             }
         }
     }
@@ -116,6 +138,7 @@ struct ThreadDetailView: View {
         }
         .onAppear {
             threadNavDelegate.apiManager = apiManager
+            threadNavDelegate.webView = webViewStore.webView
             webViewStore.webView.navigationDelegate = threadNavDelegate
             loadThread()
             onRegisterScroll? { direction in
@@ -237,7 +260,7 @@ struct ThreadDetailView: View {
                     let openURL = "aerio://attachment/open/\(message.accountId)/\(msgId)/\(attId)/\(att.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? att.name)"
                     let saveURL = "aerio://attachment/save/\(message.accountId)/\(msgId)/\(attId)/\(att.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? att.name)"
                     chips.append("""
-                    <span style="display:inline-flex;align-items:center;background:#2a2a2a;border:1px solid #444;border-radius:6px;margin:2px 4px 2px 0;font-size:11px;">
+                    <span id="att-\(attId)" style="display:inline-flex;align-items:center;background:#2a2a2a;border:1px solid #444;border-radius:6px;margin:2px 4px 2px 0;font-size:11px;transition:opacity 0.2s;">
                         <a href="\(openURL)" style="color:#ddd;text-decoration:none;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;">📎 \(escapeHTML(att.name))\(sizeStr)</a>
                         <span style="border-left:1px solid #444;padding:3px 6px;">
                             <a href="\(saveURL)" style="color:#888;text-decoration:none;font-size:10px;" title="Save to Downloads">⬇</a>
