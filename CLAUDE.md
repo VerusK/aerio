@@ -11,7 +11,7 @@ xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derive
 xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Debug build
 
 # Run all tests (removes Debug .app after to avoid LaunchServices conflicts)
-xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS' && rm -rf ~/Library/Developer/Xcode/DerivedData/Aerio-*/Build/Products/Debug/Aerio.app
+xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS'; rm -rf ~/Library/Developer/Xcode/DerivedData/Aerio-*/Build/Products/Debug/Aerio.app
 
 # Run specific test class
 xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS' -only-testing:AerioTests/GmailAPIClientTests
