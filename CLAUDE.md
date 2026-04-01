@@ -5,7 +5,7 @@
 ```bash
 # Build & Run (always run after changes so the user sees results immediately)
 # Copies to /Applications to avoid duplicate LaunchServices registrations (notifications opening wrong copy)
-xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derivedDataPath build build && cp -R build/Build/Products/Release/Aerio.app /Applications/Aerio.app && rm -rf build/Build/Products/Release/Aerio.app && open /Applications/Aerio.app
+xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release -derivedDataPath build build && rm -rf /Applications/Aerio.app && cp -R build/Build/Products/Release/Aerio.app /Applications/Aerio.app && rm -rf build/Build/Products/Release/Aerio.app && open /Applications/Aerio.app
 
 # Build only (debug)
 xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Debug build
