@@ -318,7 +318,7 @@ struct ThreadDetailView: View {
                 <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 0 8px 0;">
                     <div style="width:32px;height:32px;border-radius:50%;background:\(color);display:flex;align-items:center;justify-content:center;font-size:13px;color:white;flex-shrink:0;">\(initial)</div>
                     <div style="flex:1;min-width:0;">
-                        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
                             <span style="font-size:13px;font-weight:600;">\(escapeHTML(message.from))</span>
                             \(msgActions)<span style="font-size:11px;color:#666;">\(dateStr)</span>
                         </div>
