@@ -119,7 +119,10 @@ struct ThreadDetailView: View {
     }
 
     private func loadThread() {
-        isLoading = true
+        // Only show loading spinner on first load, not on cache hits
+        if threadMessages.isEmpty {
+            isLoading = true
+        }
         loadError = nil
         Task {
             do {

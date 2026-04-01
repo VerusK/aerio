@@ -190,7 +190,20 @@ struct ThreadMessageView: View {
         }
     }
 
+    // Static cache: message ID → rendered HTML (with inline images resolved, quotes stripped)
+    private static var renderedHTMLCache: [String: String] = [:]
+
     private func loadBody() {
+        // Check rendered HTML cache first
+        if let cachedHTML = Self.renderedHTMLCache[message.id] {
+            bodyWebViewStore.loadHTML(cachedHTML)
+            isLoading = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                updateContentHeight()
+            }
+            return
+        }
+
         var html = message.bodyHTML
         Task {
             for inline in message.inlineImages {
@@ -208,9 +221,9 @@ struct ThreadMessageView: View {
             }
             html = stripQuotedContent(html)
             let wrapped = wrapEmailHTML(html, subject: message.subject)
+            Self.renderedHTMLCache[message.id] = wrapped
             bodyWebViewStore.loadHTML(wrapped)
             isLoading = false
-            // Give WebView time to render, then measure content height
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 updateContentHeight()
             }
