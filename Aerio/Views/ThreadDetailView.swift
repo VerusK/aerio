@@ -368,29 +368,32 @@ struct ThreadDetailView: View {
     private func stripQuotedContent(_ html: String) -> String {
         var result = html
 
-        // 1. Gmail HTML quote blocks
-        let gmailQuotePattern = #"<div\s+class\s*=\s*"gmail_quote"[\s\S]*$"#
-        if let regex = try? NSRegularExpression(pattern: gmailQuotePattern, options: .caseInsensitive) {
-            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        // 1. Gmail HTML quote blocks: <div class="gmail_quote">...</div>
+        if let range = result.range(of: "<div class=\"gmail_quote\"", options: .caseInsensitive) {
+            result = String(result[result.startIndex..<range.lowerBound])
         }
 
         // 2. HTML blockquotes
-        let blockquotePattern = #"<blockquote[\s\S]*?</blockquote>"#
-        if let regex = try? NSRegularExpression(pattern: blockquotePattern, options: .caseInsensitive) {
+        if let regex = try? NSRegularExpression(pattern: #"<blockquote[\s\S]*?</blockquote>"#, options: .caseInsensitive) {
             result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
         }
 
-        // 3. Plain text reply separator: "---" followed by "On ... wrote:" — strip everything from "---" onwards
-        //    Handles both literal and inside <pre> tags
-        let separatorPattern = #"\n---\s*\n[\s\S]*$"#
-        if let regex = try? NSRegularExpression(pattern: separatorPattern, options: []) {
-            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        // 3. Plain text reply separator: "\n---\n" or "\n\n---\n" — truncate everything from there
+        if let range = result.range(of: "\n---\n") {
+            let before = String(result[result.startIndex..<range.lowerBound])
+            // Preserve closing </pre> if present
+            let closingTag = result.contains("</pre>") ? "</pre>" : ""
+            result = before + closingTag
         }
 
-        // 4. "On ... wrote:" with quoted lines after (no separator)
-        let onWroteBlockPattern = #"\n*On .+wrote:\s*\n(&gt;[\s\S]*|>[\s\S]*)$"#
-        if let regex = try? NSRegularExpression(pattern: onWroteBlockPattern, options: []) {
-            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        // 4. "On <date> wrote:" followed by quoted lines (no --- separator)
+        if let range = result.range(of: "\nOn ", options: .caseInsensitive) {
+            let after = result[range.upperBound...]
+            if after.contains("wrote:") {
+                let before = String(result[result.startIndex..<range.lowerBound])
+                let closingTag = result.contains("</pre>") ? "</pre>" : ""
+                result = before + closingTag
+            }
         }
 
         return result
