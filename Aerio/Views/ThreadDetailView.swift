@@ -8,6 +8,10 @@ private let logger = Logger(subsystem: "Aerio", category: "ThreadDetail")
 final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
     weak var apiManager: GmailAPIManager?
     weak var webView: WKWebView?
+    var threadMessages: [ThreadMessage] = []
+    var onReply: ((ThreadMessage) -> Void)?
+    var onReplyAll: ((ThreadMessage) -> Void)?
+    var onForward: ((ThreadMessage) -> Void)?
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else {
@@ -21,11 +25,34 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
             return
         }
 
+        if url.scheme == "aerio", url.host == "action" {
+            decisionHandler(.cancel)
+            handleActionURL(url)
+            return
+        }
+
         if navigationAction.navigationType == .linkActivated {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
         } else {
             decisionHandler(.allow)
+        }
+    }
+
+    private func handleActionURL(_ url: URL) {
+        // aerio://action/{reply|replyall|forward}/{msgId}
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 2 else { return }
+        let action = parts[0]
+        let msgId = parts[1]
+        guard let message = threadMessages.first(where: { $0.id == msgId }) else { return }
+        Task { @MainActor in
+            switch action {
+            case "reply": onReply?(message)
+            case "replyall": onReplyAll?(message)
+            case "forward": onForward?(message)
+            default: break
+            }
         }
     }
 
@@ -139,6 +166,9 @@ struct ThreadDetailView: View {
         .onAppear {
             threadNavDelegate.apiManager = apiManager
             threadNavDelegate.webView = webViewStore.webView
+            threadNavDelegate.onReply = { msg in onReply?(msg) }
+            threadNavDelegate.onReplyAll = { msg in onReplyAll?(msg) }
+            threadNavDelegate.onForward = { msg in onForward?(msg) }
             webViewStore.webView.navigationDelegate = threadNavDelegate
             loadThread()
             onRegisterScroll? { direction in
@@ -216,6 +246,7 @@ struct ThreadDetailView: View {
                     accountId: email.accountId
                 )
                 threadMessages = messages
+                threadNavDelegate.threadMessages = messages
 
                 let cacheKey = "\(email.accountId)_\(email.threadId)"
                 if let cachedHTML = Self.threadHTMLCache[cacheKey] {
@@ -246,6 +277,13 @@ struct ThreadDetailView: View {
             let initial = String(message.from.prefix(1)).uppercased()
             let color = avatarColor(for: message.from)
             let dateStr = message.date.shortRelative
+            let msgActions = """
+            <span style="display:inline-flex;gap:2px;margin-right:8px;">
+                <a href="aerio://action/reply/\(message.id)" style="color:#888;text-decoration:none;font-size:14px;" title="Reply">↩</a>
+                <a href="aerio://action/replyall/\(message.id)" style="color:#888;text-decoration:none;font-size:14px;" title="Reply All">↩↩</a>
+                <a href="aerio://action/forward/\(message.id)" style="color:#888;text-decoration:none;font-size:14px;" title="Forward">↪</a>
+            </span>
+            """
             let toLine = message.to.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:2px;\">To: \(escapeHTML(message.to))</div>"
             let ccLine = message.cc.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:1px;\">Cc: \(escapeHTML(message.cc))</div>"
 
@@ -278,7 +316,7 @@ struct ThreadDetailView: View {
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;justify-content:space-between;align-items:baseline;">
                             <span style="font-size:13px;font-weight:600;">\(escapeHTML(message.from))</span>
-                            <span style="font-size:11px;color:#666;">\(dateStr)</span>
+                            \(msgActions)<span style="font-size:11px;color:#666;">\(dateStr)</span>
                         </div>
                         \(toLine)
                         \(ccLine)
