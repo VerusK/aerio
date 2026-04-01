@@ -232,8 +232,6 @@ struct ThreadDetailView: View {
 
     // MARK: - Thread loading
 
-    private static var threadHTMLCache: [String: String] = [:]
-
     private func loadThread() {
         if threadMessages.isEmpty {
             isLoading = true
@@ -248,16 +246,8 @@ struct ThreadDetailView: View {
                 threadMessages = messages
                 threadNavDelegate.threadMessages = messages
 
-                let cacheKey = "\(email.accountId)_\(email.threadId)"
-                if let cachedHTML = Self.threadHTMLCache[cacheKey] {
-                    webViewStore.loadHTML(cachedHTML)
-                    isLoading = false
-                    return
-                }
-
-                // Build single HTML document for entire thread
+                // Build single HTML document for entire thread (no HTML cache — thread data is cached in GmailAPIManager)
                 let html = buildThreadHTML(messages: messages)
-                Self.threadHTMLCache[cacheKey] = html
                 webViewStore.loadHTML(html)
                 isLoading = false
             } catch {
