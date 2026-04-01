@@ -17,6 +17,7 @@ struct ThreadDetailView: View {
     @State private var threadMessages: [ThreadMessage] = []
     @State private var isLoading = true
     @State private var loadError: String?
+    @State private var scrollOffset: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -58,7 +59,17 @@ struct ThreadDetailView: View {
                         if let lastId = threadMessages.last?.id {
                             proxy.scrollTo(lastId, anchor: .bottom)
                         }
-                        onRegisterScroll? { _ in }
+                        onRegisterScroll? { direction in
+                            // Keyboard arrow scroll: find visible message and scroll to next/prev
+                            guard !threadMessages.isEmpty else { return }
+                            let step = direction > 0 ? 1 : -1
+                            // Use scrollOffset to track approximate position
+                            scrollOffset += CGFloat(step)
+                            let index = max(0, min(threadMessages.count - 1, Int(scrollOffset)))
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(threadMessages[index].id, anchor: .top)
+                            }
+                        }
                     }
                 }
             }

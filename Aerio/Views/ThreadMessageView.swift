@@ -13,10 +13,16 @@ struct ThreadBodyWebView: NSViewRepresentable {
     let webView: WKWebView
 
     func makeNSView(context: Context) -> WKWebView {
-        webView
+        // Hide WKWebView's internal scrollbars — parent ScrollView handles scrolling
+        webView.enclosingScrollView?.hasVerticalScroller = false
+        webView.enclosingScrollView?.hasHorizontalScroller = false
+        return webView
     }
 
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func updateNSView(_ nsView: WKWebView, context: Context) {
+        nsView.enclosingScrollView?.hasVerticalScroller = false
+        nsView.enclosingScrollView?.hasHorizontalScroller = false
+    }
 }
 
 /// Manages a NonScrollingWebView for use in thread messages.
@@ -55,7 +61,7 @@ struct ThreadMessageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header: avatar + from/to/date
+            // Header: avatar + from/to/date + action buttons
             HStack(alignment: .top, spacing: 10) {
                 avatar
                 VStack(alignment: .leading, spacing: 2) {
@@ -64,6 +70,12 @@ struct ThreadMessageView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                         Spacer()
+                        // Per-message actions
+                        HStack(spacing: 4) {
+                            actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply", action: onReply)
+                            actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All", action: onReplyAll)
+                            actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward", action: onForward)
+                        }
                         Text(message.date.shortRelative)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
@@ -101,15 +113,6 @@ struct ThreadMessageView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
             }
-
-            // Per-message actions
-            HStack(spacing: 4) {
-                actionButton(icon: "arrowshape.turn.up.left", tooltip: "Reply", action: onReply)
-                actionButton(icon: "arrowshape.turn.up.left.2", tooltip: "Reply All", action: onReplyAll)
-                actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward", action: onForward)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
 
             // Thick divider
             Rectangle()
