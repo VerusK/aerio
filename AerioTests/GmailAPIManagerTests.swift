@@ -1354,6 +1354,36 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertEqual(movedEmail?.id, "\(testAccountId)_archive_m1")
     }
 
+    // MARK: - Thread / threadId
+
+    func testConvertGmailMessageIncludesThreadId() {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+
+        let message = GmailMessage(
+            id: "msg1",
+            threadId: "thread_abc",
+            labelIds: ["INBOX", "UNREAD"],
+            snippet: "Hello",
+            payload: GmailPayload(
+                mimeType: "text/plain",
+                headers: [
+                    GmailHeader(name: "From", value: "sender@test.com"),
+                    GmailHeader(name: "Subject", value: "Test"),
+                ],
+                body: nil,
+                parts: nil,
+                filename: nil
+            ),
+            internalDate: String(Int(Date().timeIntervalSince1970 * 1000)),
+            historyId: nil,
+            sizeEstimate: nil
+        )
+        let email = manager.convertGmailMessageToEmail(message, accountId: testAccountId, folder: .inbox)
+        XCTAssertNotNil(email)
+        XCTAssertEqual(email?.threadId, "thread_abc")
+    }
+
     // MARK: - Helpers
 
     private func setupMockForModifyMessage() {

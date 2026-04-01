@@ -4,6 +4,23 @@ import os.log
 
 private let logger = Logger(subsystem: "Aerio", category: "GmailAPIManager")
 
+struct ThreadMessage: Identifiable {
+    let id: String
+    let from: String
+    let to: String
+    let cc: String
+    let date: Date
+    let subject: String
+    let bodyHTML: String
+    let attachments: [MessageContentData.AttachmentInfo]
+    let inlineImages: [(cid: String, attachmentId: String, mimeType: String)]
+    let accountId: String
+    let msgId: String
+    let messageId: String?
+    let folder: Folder
+    let isRead: Bool
+}
+
 @MainActor
 final class GmailAPIManager: ObservableObject {
     @Published private(set) var clients: [String: GmailAPIClient] = [:]
@@ -27,6 +44,8 @@ final class GmailAPIManager: ObservableObject {
     private(set) var accountsWithCompletedFetch = Set<String>()
     var pageTokens: [String: [Folder: String]] = [:]
     private var fetchingMore: Set<String> = []
+    private static var threadCache: [String: [ThreadMessage]] = [:]
+    private static let threadCacheLimit = 20
 
     // Factory closure for creating clients — allows test injection
     var clientFactory: ((String, OAuthManager) -> GmailAPIClient)?
@@ -853,6 +872,89 @@ final class GmailAPIManager: ObservableObject {
         logger.info("[\(accountId)] draft deleted: \(draftId)")
     }
 
+    // MARK: - Thread Fetching
+
+    func fetchThread(threadId: String, accountId: String) async throws -> [ThreadMessage] {
+        let cacheKey = "\(accountId)_\(threadId)"
+        if let cached = Self.threadCache[cacheKey] {
+            return cached
+        }
+
+        guard let client = clients[accountId] else {
+            throw GmailAPIError.unauthorized
+        }
+
+        let thread = try await client.getThread(id: threadId, format: "full")
+        guard let messages = thread.messages else { return [] }
+
+        var threadMessages: [ThreadMessage] = []
+        for message in messages {
+            let headers = message.payload?.headers ?? []
+            let from = headers.first { $0.name.lowercased() == "from" }?.value ?? ""
+            let to = headers.first { $0.name.lowercased() == "to" }?.value ?? ""
+            let cc = headers.first { $0.name.lowercased() == "cc" }?.value ?? ""
+            let subject = headers.first { $0.name.lowercased() == "subject" }?.value ?? ""
+            let messageId = headers.first { $0.name.lowercased() == "message-id" }?.value
+
+            let date: Date
+            if let internalDate = message.internalDate, let ms = Double(internalDate) {
+                date = Date(timeIntervalSince1970: ms / 1000)
+            } else {
+                date = Date()
+            }
+
+            var bodyHTML = ""
+            if let payload = message.payload {
+                let extracted = extractBodyFromPayload(payload)
+                bodyHTML = extracted.isEmpty ? "<p>No message body</p>" : extracted
+            }
+
+            let attachments: [MessageContentData.AttachmentInfo]
+            if let payload = message.payload {
+                let allInlineIds: Set<String> = Set(extractInlineImages(payload).map { $0.attachmentId })
+                attachments = extractAttachments(payload, messageId: message.id)
+                    .filter { att in
+                        guard let attId = att.attachmentId else { return true }
+                        return !allInlineIds.contains(attId)
+                    }
+            } else {
+                attachments = []
+            }
+
+            let inlineImages = message.payload.map { extractInlineImages($0) } ?? []
+
+            let labelIds = message.labelIds ?? []
+            let isRead = !labelIds.contains(GmailLabelId.unread)
+            let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
+
+            threadMessages.append(ThreadMessage(
+                id: message.id,
+                from: from,
+                to: to,
+                cc: cc,
+                date: date,
+                subject: subject,
+                bodyHTML: bodyHTML,
+                attachments: attachments,
+                inlineImages: inlineImages,
+                accountId: accountId,
+                msgId: message.id,
+                messageId: messageId,
+                folder: folder,
+                isRead: isRead
+            ))
+        }
+
+        threadMessages.sort { $0.date < $1.date }
+
+        if Self.threadCache.count >= Self.threadCacheLimit {
+            Self.threadCache.removeValue(forKey: Self.threadCache.keys.first!)
+        }
+        Self.threadCache[cacheKey] = threadMessages
+
+        return threadMessages
+    }
+
     // MARK: - Conversion
 
     func convertGmailMessageToEmail(_ message: GmailMessage, accountId: String, folder: Folder, skipLabelCheck: Bool = false) -> Email? {
@@ -889,7 +991,8 @@ final class GmailAPIManager: ObservableObject {
             folder: folder,
             messageId: messageId,
             to: to,
-            cc: cc
+            cc: cc,
+            threadId: message.threadId
         )
     }
 
