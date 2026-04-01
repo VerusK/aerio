@@ -377,22 +377,32 @@ struct ThreadDetailView: View {
 
     private func stripQuotedContent(_ html: String) -> String {
         var result = html
+
+        // 1. Gmail HTML quote blocks
         let gmailQuotePattern = #"<div\s+class\s*=\s*"gmail_quote"[\s\S]*$"#
         if let regex = try? NSRegularExpression(pattern: gmailQuotePattern, options: .caseInsensitive) {
             result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
         }
+
+        // 2. HTML blockquotes
         let blockquotePattern = #"<blockquote[\s\S]*?</blockquote>"#
         if let regex = try? NSRegularExpression(pattern: blockquotePattern, options: .caseInsensitive) {
             result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
         }
-        let onWrotePattern = #"(?m)^On .+wrote:\s*$"#
-        if let regex = try? NSRegularExpression(pattern: onWrotePattern, options: []) {
+
+        // 3. Plain text reply separator: "---" followed by "On ... wrote:" — strip everything from "---" onwards
+        //    Handles both literal and inside <pre> tags
+        let separatorPattern = #"\n---\s*\n[\s\S]*$"#
+        if let regex = try? NSRegularExpression(pattern: separatorPattern, options: []) {
             result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
         }
-        let quotedLinePattern = #"(?m)^&gt;.*$"#
-        if let regex = try? NSRegularExpression(pattern: quotedLinePattern, options: []) {
+
+        // 4. "On ... wrote:" with quoted lines after (no separator)
+        let onWroteBlockPattern = #"\n*On .+wrote:\s*\n(&gt;[\s\S]*|>[\s\S]*)$"#
+        if let regex = try? NSRegularExpression(pattern: onWroteBlockPattern, options: []) {
             result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
         }
+
         return result
     }
 
