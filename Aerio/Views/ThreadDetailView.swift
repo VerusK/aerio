@@ -1,5 +1,74 @@
 import SwiftUI
 import WebKit
+import os.log
+
+private let logger = Logger(subsystem: "Aerio", category: "ThreadDetail")
+
+/// Navigation delegate that intercepts aerio:// attachment URLs and opens external links in browser.
+final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
+    weak var apiManager: GmailAPIManager?
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        if url.scheme == "aerio", url.host == "attachment" {
+            decisionHandler(.cancel)
+            handleAttachmentURL(url)
+            return
+        }
+
+        if navigationAction.navigationType == .linkActivated {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        } else {
+            decisionHandler(.allow)
+        }
+    }
+
+    private func handleAttachmentURL(_ url: URL) {
+        // aerio://attachment/{open|save}/{accountId}/{messageId}/{attachmentId}/{filename}
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 4 else { return }
+        let action = parts[0] // "open" or "save"
+        let accountId = parts[1]
+        let messageId = parts[2]
+        let attachmentId = parts[3]
+        let filename = parts.count > 4 ? parts[4].removingPercentEncoding ?? parts[4] : "attachment"
+
+        Task { @MainActor in
+            guard let apiManager else { return }
+            do {
+                let data = try await apiManager.downloadAttachment(
+                    messageId: messageId,
+                    attachmentId: attachmentId,
+                    accountId: accountId
+                )
+                let downloadsDir = SettingsView.resolvedDownloadsDirectory()
+                try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
+                var fileURL = downloadsDir.appendingPathComponent(filename)
+                var counter = 1
+                let baseName = (filename as NSString).deletingPathExtension
+                let ext = (filename as NSString).pathExtension
+                while FileManager.default.fileExists(atPath: fileURL.path) {
+                    let newName = ext.isEmpty ? "\(baseName) (\(counter))" : "\(baseName) (\(counter)).\(ext)"
+                    fileURL = downloadsDir.appendingPathComponent(newName)
+                    counter += 1
+                }
+                try data.write(to: fileURL)
+                if action == "open" {
+                    NSWorkspace.shared.open(fileURL)
+                } else {
+                    NSApp.requestUserAttention(.informationalRequest)
+                }
+            } catch {
+                logger.error("Failed to download attachment: \(error.localizedDescription)")
+            }
+        }
+    }
+}
 
 struct ThreadDetailView: View {
     let email: Email
@@ -19,6 +88,7 @@ struct ThreadDetailView: View {
     @State private var isLoading = true
     @State private var loadError: String?
     @StateObject private var webViewStore = BodyWebViewStore()
+    private let threadNavDelegate = ThreadNavigationDelegate()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -45,6 +115,8 @@ struct ThreadDetailView: View {
             }
         }
         .onAppear {
+            threadNavDelegate.apiManager = apiManager
+            webViewStore.webView.navigationDelegate = threadNavDelegate
             loadThread()
             onRegisterScroll? { direction in
                 webViewStore.scrollContent(direction: direction)
@@ -160,9 +232,16 @@ struct ThreadDetailView: View {
                 var chips: [String] = []
                 for att in message.attachments {
                     let sizeStr = att.size.isEmpty ? "" : " <span style=\"color:#999;font-size:10px;\">(\(escapeHTML(att.size)))</span>"
+                    let attId = att.attachmentId ?? ""
+                    let msgId = att.messageId ?? message.id
+                    let openURL = "aerio://attachment/open/\(message.accountId)/\(msgId)/\(attId)/\(att.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? att.name)"
+                    let saveURL = "aerio://attachment/save/\(message.accountId)/\(msgId)/\(attId)/\(att.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? att.name)"
                     chips.append("""
-                    <span style="display:inline-block;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:3px 8px;margin:2px 4px 2px 0;font-size:11px;">
-                        📎 \(escapeHTML(att.name))\(sizeStr)
+                    <span style="display:inline-flex;align-items:center;background:#2a2a2a;border:1px solid #444;border-radius:6px;margin:2px 4px 2px 0;font-size:11px;">
+                        <a href="\(openURL)" style="color:#ddd;text-decoration:none;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;">📎 \(escapeHTML(att.name))\(sizeStr)</a>
+                        <span style="border-left:1px solid #444;padding:3px 6px;">
+                            <a href="\(saveURL)" style="color:#888;text-decoration:none;font-size:10px;" title="Save to Downloads">⬇</a>
+                        </span>
                     </span>
                     """)
                 }
