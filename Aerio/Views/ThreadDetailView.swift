@@ -166,7 +166,7 @@ struct ThreadDetailView: View {
                     </span>
                     """)
                 }
-                attachmentsHTML = "<div style=\"padding-left:42px;padding-top:6px;\">\(chips.joined())</div>"
+                attachmentsHTML = "<div style=\"padding-top:4px;\">\(chips.joined())</div>"
             }
 
             let section = """
@@ -180,12 +180,12 @@ struct ThreadDetailView: View {
                         </div>
                         \(toLine)
                         \(ccLine)
+                        \(attachmentsHTML)
                     </div>
                 </div>
                 <div style="padding-left:42px;background:#fff;color:#1d1d1f;border-radius:6px;padding:12px;margin-top:4px;">
                     \(bodyHTML)
                 </div>
-                \(attachmentsHTML)
             </div>
             """
             sections.append(section)

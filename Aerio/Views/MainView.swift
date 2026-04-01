@@ -146,6 +146,7 @@ struct MainView: View {
     @State private var showingCompose = false
     @State private var composeType: ComposeType = .new
     @State private var composeTargetMsgId: String?
+    @State private var threadComposeEmail: Email?
     @State private var isRefreshing = false
     @State private var showingSearch = false
     @State private var isNavigatingProgrammatically = false
@@ -246,10 +247,11 @@ struct MainView: View {
                     apiManager: apiManager,
                     contactsCache: contactsCache,
                     composeType: composeType,
-                    replyToEmail: composeTargetMsgId.flatMap { findEmail(byMsgId: $0) },
+                    replyToEmail: threadComposeEmail ?? composeTargetMsgId.flatMap { findEmail(byMsgId: $0) },
                     preselectedAccountId: composeAccount?.id
                 )
                 showingCompose = false
+                threadComposeEmail = nil
             }
         }
         .overlay {
@@ -416,8 +418,22 @@ struct MainView: View {
     }
 
     private func triggerComposeFromThread(_ type: ComposeType, message: ThreadMessage) {
+        let email = Email(
+            msgId: message.msgId,
+            from: message.from,
+            subject: message.subject,
+            date: message.date,
+            snippet: "",
+            isRead: message.isRead,
+            accountId: message.accountId,
+            folder: message.folder,
+            messageId: message.messageId,
+            to: message.to,
+            cc: message.cc,
+            threadId: ""
+        )
         composeType = type
-        composeTargetMsgId = message.msgId
+        threadComposeEmail = email
         showingCompose = true
     }
 
