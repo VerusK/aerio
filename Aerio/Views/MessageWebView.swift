@@ -40,7 +40,7 @@ func extractBodyFromPayload(_ payload: GmailPayload) -> String {
 }
 
 /// Depth-first search for a leaf node with the specified MIME type.
-private func findLeaf(_ payload: GmailPayload, mimeType target: String) -> String? {
+func findLeaf(_ payload: GmailPayload, mimeType target: String) -> String? {
     if let parts = payload.parts, !parts.isEmpty {
         for part in parts {
             if let result = findLeaf(part, mimeType: target) {

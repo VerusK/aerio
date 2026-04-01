@@ -552,20 +552,56 @@ struct ComposeView: View {
         }
     }
 
-    /// Extract plain text body from MIME payload for draft editing.
+    /// Extract plain text body from MIME payload.
+    /// Tries text/plain first; falls back to text/html with tags stripped.
     private func extractPlainTextFromPayload(_ payload: GmailPayload) -> String {
-        if let parts = payload.parts, !parts.isEmpty {
-            for part in parts {
-                let result = extractPlainTextFromPayload(part)
-                if !result.isEmpty { return result }
-            }
-            return ""
+        // Try text/plain first
+        if let plain = findLeaf(payload, mimeType: "text/plain") {
+            return plain
         }
-        let mime = payload.mimeType?.lowercased() ?? ""
-        guard mime == "text/plain" else { return "" }
-        guard let bodyData = payload.body?.data, !bodyData.isEmpty else { return "" }
-        guard let decoded = RFC2822Builder.base64URLDecode(bodyData) else { return "" }
-        return String(data: decoded, encoding: .utf8) ?? ""
+        // Fallback: extract text/html and strip tags
+        if let html = findLeaf(payload, mimeType: "text/html") {
+            return stripHTML(html)
+        }
+        return ""
+    }
+
+    /// Strip HTML tags and decode common entities to produce plain text.
+    private func stripHTML(_ html: String) -> String {
+        // Remove style/script blocks entirely
+        var result = html
+        let blockPatterns = [
+            #"<style[^>]*>[\s\S]*?</style>"#,
+            #"<script[^>]*>[\s\S]*?</script>"#,
+        ]
+        for pattern in blockPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+            }
+        }
+        // Replace <br> and block-level tags with newlines
+        let nlPatterns = [#"<br\s*/?>"#, #"</?(p|div|tr|li|h[1-6])[^>]*>"#]
+        for pattern in nlPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "\n")
+            }
+        }
+        // Strip remaining tags
+        if let regex = try? NSRegularExpression(pattern: "<[^>]+>", options: []) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        }
+        // Decode common entities
+        result = result.replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+        // Collapse multiple blank lines
+        while result.contains("\n\n\n") {
+            result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func fetchReplyHeaders(email: Email, includeAllRecipients: Bool) {
