@@ -511,6 +511,7 @@ struct ComposeView: View {
             case .forward:
                 subjectField = email.subject.hasPrefix("Fwd:") ? email.subject : "Fwd: \(email.subject)"
                 bodyText = "\n\n---\nForwarded message from \(email.from):\n\(email.snippet)"
+                fetchReplyHeaders(email: email, includeAllRecipients: false)
             case .draft:
                 selectedAccountId = email.accountId
                 loadDraftContent(email: email)
@@ -586,6 +587,19 @@ struct ComposeView: View {
                     if let replyToHeader = headers.first(where: { $0.name.lowercased() == "reply-to" })?.value,
                        !replyToHeader.isEmpty {
                         toField = replyToHeader
+                    }
+                }
+
+                // Extract full body for reply/forward quote (replace snippet with full text)
+                if let payload = message.payload {
+                    let fullText = extractPlainTextFromPayload(payload)
+                    if !fullText.isEmpty {
+                        let quoted = fullText.components(separatedBy: "\n").map { "> \($0)" }.joined(separator: "\n")
+                        if composeType == .forward {
+                            bodyText = "\n\n---\nForwarded message from \(email.from):\n\(quoted)"
+                        } else {
+                            bodyText = "\n\n---\nOn \(email.date.formatted()), \(email.from) wrote:\n\(quoted)"
+                        }
                     }
                 }
 
