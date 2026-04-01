@@ -13,6 +13,7 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
     let accountId: String
     let folder: Folder
     let messageId: String?
+    let threadId: String
 
     init(
         msgId: String,
@@ -25,7 +26,8 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
         folder: Folder,
         messageId: String? = nil,
         to: String = "",
-        cc: String = ""
+        cc: String = "",
+        threadId: String = ""
     ) {
         self.id = "\(accountId)_\(folder.rawValue)_\(msgId)"
         self.msgId = msgId
@@ -39,6 +41,7 @@ struct Email: Identifiable, Equatable, Codable, Sendable {
         self.accountId = accountId
         self.folder = folder
         self.messageId = messageId
+        self.threadId = threadId
     }
 
     static func sortedByDate(_ emails: [Email], ascending: Bool = false) -> [Email] {

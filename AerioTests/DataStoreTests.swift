@@ -345,6 +345,26 @@ final class EmailCacheTests: XCTestCase {
         XCTAssertEqual(store.contentCacheCount, 2)
     }
 
+    // MARK: - ThreadId persistence
+
+    func testSaveAndLoadPreservesThreadId() {
+        let store = makeStore()
+        let email = Email(
+            msgId: "msg1",
+            from: "test@test.com",
+            subject: "Test",
+            date: Date(),
+            snippet: "preview",
+            accountId: "acc1",
+            folder: .inbox,
+            threadId: "thread456"
+        )
+        store.saveEmails([email])
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded[0].threadId, "thread456")
+    }
+
     // MARK: - To/Cc persistence
 
     func testSaveAndLoadPreservesToCc() {

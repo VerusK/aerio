@@ -188,6 +188,33 @@ final class EmailTests: XCTestCase {
         XCTAssertEqual(email.to, "")
         XCTAssertEqual(email.cc, "")
     }
+
+    func testEmailThreadIdField() {
+        let email = Email(
+            msgId: "msg1",
+            from: "test@test.com",
+            subject: "Test",
+            date: Date(),
+            snippet: "preview",
+            accountId: "acc1",
+            folder: .inbox,
+            threadId: "thread123"
+        )
+        XCTAssertEqual(email.threadId, "thread123")
+    }
+
+    func testEmailThreadIdDefaultsToEmpty() {
+        let email = Email(
+            msgId: "msg1",
+            from: "test@test.com",
+            subject: "Test",
+            date: Date(),
+            snippet: "preview",
+            accountId: "acc1",
+            folder: .inbox
+        )
+        XCTAssertEqual(email.threadId, "")
+    }
 }
 
 final class AccountTests: XCTestCase {

@@ -18,6 +18,7 @@ final class CachedEmail {
     var messageId: String?
     var to: String?
     var cc: String?
+    var threadId: String?
 
     init(from email: Email) {
         self.id = email.id
@@ -32,6 +33,7 @@ final class CachedEmail {
         self.messageId = email.messageId
         self.to = email.to
         self.cc = email.cc
+        self.threadId = email.threadId
     }
 
     func toEmail() -> Email? {
@@ -47,7 +49,8 @@ final class CachedEmail {
             folder: folder,
             messageId: messageId,
             to: to ?? "",
-            cc: cc ?? ""
+            cc: cc ?? "",
+            threadId: threadId ?? ""
         )
     }
 }
@@ -118,6 +121,7 @@ final class EmailCache: ObservableObject {
                 existing.messageId = email.messageId
                 existing.to = email.to
                 existing.cc = email.cc
+                existing.threadId = email.threadId
             } else {
                 modelContext.insert(CachedEmail(from: email))
             }
