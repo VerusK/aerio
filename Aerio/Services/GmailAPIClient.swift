@@ -111,6 +111,12 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         }
     }
 
+    func getThread(id: String, format: String = "full") async throws -> GmailThread {
+        let queryItems = [URLQueryItem(name: "format", value: format)]
+        let request = try buildRequest(path: "/threads/\(id)", queryItems: queryItems)
+        return try await execute(request: request)
+    }
+
     func modifyMessage(id: String, addLabels: [String]? = nil, removeLabels: [String]? = nil) async throws -> GmailMessage {
         let body = GmailModifyRequest(addLabelIds: addLabels, removeLabelIds: removeLabels)
         var request = try buildRequest(path: "/messages/\(id)/modify", method: "POST")

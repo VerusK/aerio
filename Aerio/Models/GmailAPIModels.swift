@@ -27,6 +27,14 @@ struct GmailMessage: Codable {
     let sizeEstimate: Int?
 }
 
+// MARK: - Thread
+
+struct GmailThread: Codable {
+    let id: String
+    let messages: [GmailMessage]?
+    let historyId: String?
+}
+
 struct GmailPayload: Codable {
     let mimeType: String?
     let headers: [GmailHeader]?
