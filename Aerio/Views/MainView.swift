@@ -336,21 +336,38 @@ struct MainView: View {
             ZStack {
                 if let selectedEmailId,
                    let email = findEmail(by: selectedEmailId) {
-                    NativeMessageDetail(
-                        email: email,
-                        apiManager: apiManager,
-                        folder: selectedFolder,
-                        onReply: { triggerCompose(.reply, msgId: email.msgId) },
-                        onReplyAll: { triggerCompose(.replyAll, msgId: email.msgId) },
-                        onForward: { triggerCompose(.forward, msgId: email.msgId) },
-                        onArchive: { executeActionOnEmail(email, action: .archive) },
-                        onDelete: { executeActionOnEmail(email, action: .delete) },
-                        onSpam: { executeActionOnEmail(email, action: .spam) },
-                        onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
-                        onEditDraft: { openDraft(email) },
-                        onRegisterScroll: { handler in detailScrollHandler = handler }
-                    )
-                    .id(email.id)
+                    if !email.threadId.isEmpty && hasMultipleThreadMessages(email) {
+                        ThreadDetailView(
+                            email: email,
+                            apiManager: apiManager,
+                            folder: selectedFolder,
+                            onReply: { msg in triggerComposeFromThread(.reply, message: msg) },
+                            onReplyAll: { msg in triggerComposeFromThread(.replyAll, message: msg) },
+                            onForward: { msg in triggerComposeFromThread(.forward, message: msg) },
+                            onArchive: { executeActionOnEmail(email, action: .archive) },
+                            onDelete: { executeActionOnEmail(email, action: .delete) },
+                            onSpam: { executeActionOnEmail(email, action: .spam) },
+                            onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
+                            onRegisterScroll: { handler in detailScrollHandler = handler }
+                        )
+                        .id(email.threadId)
+                    } else {
+                        NativeMessageDetail(
+                            email: email,
+                            apiManager: apiManager,
+                            folder: selectedFolder,
+                            onReply: { triggerCompose(.reply, msgId: email.msgId) },
+                            onReplyAll: { triggerCompose(.replyAll, msgId: email.msgId) },
+                            onForward: { triggerCompose(.forward, msgId: email.msgId) },
+                            onArchive: { executeActionOnEmail(email, action: .archive) },
+                            onDelete: { executeActionOnEmail(email, action: .delete) },
+                            onSpam: { executeActionOnEmail(email, action: .spam) },
+                            onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
+                            onEditDraft: { openDraft(email) },
+                            onRegisterScroll: { handler in detailScrollHandler = handler }
+                        )
+                        .id(email.id)
+                    }
                 } else {
                     VStack {
                         Text("Message Detail")
@@ -390,6 +407,18 @@ struct MainView: View {
 
     private func findEmail(byMsgId msgId: String) -> Email? {
         currentEmails.first { $0.msgId == msgId }
+    }
+
+    private func hasMultipleThreadMessages(_ email: Email) -> Bool {
+        let threadId = email.threadId
+        let allEmails = apiManager.emailsByAccount.values.flatMap { $0 }
+        return allEmails.filter { $0.threadId == threadId }.count > 1
+    }
+
+    private func triggerComposeFromThread(_ type: ComposeType, message: ThreadMessage) {
+        composeType = type
+        composeTargetMsgId = message.msgId
+        showingCompose = true
     }
 
     private func navigateToEmail(msgId: String, accountId: String) {

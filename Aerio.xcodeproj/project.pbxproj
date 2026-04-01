@@ -52,6 +52,8 @@
 		FB0000000000000000000001 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000002 /* NotificationManager.swift */; };
 		FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000004 /* NotificationManagerTests.swift */; };
 		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
+			FC0000000000000000000001 /* ThreadMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000002 /* ThreadMessageView.swift */; };
+			FC0000000000000000000003 /* ThreadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000004 /* ThreadDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -113,6 +115,8 @@
 		FB0000000000000000000002 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		FB0000000000000000000004 /* NotificationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManagerTests.swift; sourceTree = "<group>"; };
 		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
+			FC0000000000000000000002 /* ThreadMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadMessageView.swift; sourceTree = "<group>"; };
+			FC0000000000000000000004 /* ThreadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -231,6 +235,8 @@
 				BB0000000000000000000086 /* SettingsView.swift */,
 				DE0000000000000000000002 /* UnifiedSidebar.swift */,
 				EF0000000000000000000002 /* SearchOverlay.swift */,
+				FC0000000000000000000002 /* ThreadMessageView.swift */,
+				FC0000000000000000000004 /* ThreadDetailView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -376,6 +382,8 @@
 				EF0000000000000000000001 /* SearchOverlay.swift in Sources */,
 				FA0000000000000000000001 /* ContactsCache.swift in Sources */,
 				FB0000000000000000000001 /* NotificationManager.swift in Sources */,
+				FC0000000000000000000001 /* ThreadMessageView.swift in Sources */,
+				FC0000000000000000000003 /* ThreadDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
