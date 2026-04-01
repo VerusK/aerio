@@ -945,7 +945,7 @@ final class GmailAPIManager: ObservableObject {
             ))
         }
 
-        threadMessages.sort { $0.date < $1.date }
+        threadMessages.sort { $0.date > $1.date }
 
         if Self.threadCache.count >= Self.threadCacheLimit {
             Self.threadCache.removeValue(forKey: Self.threadCache.keys.first!)

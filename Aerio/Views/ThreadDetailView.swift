@@ -56,9 +56,6 @@ struct ThreadDetailView: View {
                         }
                     }
                     .onAppear {
-                        if let lastId = threadMessages.last?.id {
-                            proxy.scrollTo(lastId, anchor: .bottom)
-                        }
                         onRegisterScroll? { direction in
                             // Keyboard arrow scroll: find visible message and scroll to next/prev
                             guard !threadMessages.isEmpty else { return }
