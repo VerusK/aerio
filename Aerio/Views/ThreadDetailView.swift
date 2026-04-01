@@ -277,11 +277,15 @@ struct ThreadDetailView: View {
             let initial = String(message.from.prefix(1)).uppercased()
             let color = avatarColor(for: message.from)
             let dateStr = message.date.shortRelative
+            let replyIcon = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M9 17l-5-5 5-5'/><path d='M4 12h12a4 4 0 0 1 0 8h-1'/></svg>"
+            let replyAllIcon = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M12 17l-5-5 5-5'/><path d='M7 17l-5-5 5-5'/><path d='M7 12h12a4 4 0 0 1 0 8h-1'/></svg>"
+            let forwardIcon = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M15 17l5-5-5-5'/><path d='M20 12H8a4 4 0 0 0 0 8h1'/></svg>"
+            let btnStyle = "color:#888;text-decoration:none;padding:3px 5px;border-radius:4px;display:inline-flex;align-items:center;"
             let msgActions = """
             <span style="display:inline-flex;gap:2px;margin-right:8px;">
-                <a href="aerio://action/reply/\(message.id)" style="color:#888;text-decoration:none;font-size:14px;" title="Reply">↩</a>
-                <a href="aerio://action/replyall/\(message.id)" style="color:#888;text-decoration:none;font-size:14px;" title="Reply All">↩↩</a>
-                <a href="aerio://action/forward/\(message.id)" style="color:#888;text-decoration:none;font-size:14px;" title="Forward">↪</a>
+                <a href="aerio://action/reply/\(message.id)" style="\(btnStyle)" title="Reply" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">\(replyIcon)</a>
+                <a href="aerio://action/replyall/\(message.id)" style="\(btnStyle)" title="Reply All" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">\(replyAllIcon)</a>
+                <a href="aerio://action/forward/\(message.id)" style="\(btnStyle)" title="Forward" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">\(forwardIcon)</a>
             </span>
             """
             let toLine = message.to.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:2px;\">To: \(escapeHTML(message.to))</div>"
