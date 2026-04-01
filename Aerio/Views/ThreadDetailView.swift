@@ -42,11 +42,11 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
         let chipId = "att-\(attachmentId)"
         Task { @MainActor in
             guard let apiManager else { return }
-            // Show downloading state
+            // Show downloading state on save button only
             webView?.evaluateJavaScript("""
                 (function() {
                     var el = document.getElementById('\(chipId)');
-                    if (el) { el.dataset.originalText = el.innerHTML; el.innerHTML = '⏳ Downloading...'; el.style.opacity = '0.6'; }
+                    if (el) { var btn = el.querySelector('.att-save'); if (btn) { btn.dataset.orig = btn.textContent; btn.textContent = '⏳'; } }
                 })()
             """, completionHandler: nil)
             do {
@@ -72,11 +72,11 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
                 } else {
                     NSApp.requestUserAttention(.informationalRequest)
                 }
-                // Show done state, then restore
+                // Show done, then restore
                 webView?.evaluateJavaScript("""
                     (function() {
                         var el = document.getElementById('\(chipId)');
-                        if (el) { el.innerHTML = '✅ Done'; el.style.opacity = '1'; setTimeout(function() { el.innerHTML = el.dataset.originalText; }, 2000); }
+                        if (el) { var btn = el.querySelector('.att-save'); if (btn) { btn.textContent = '✅'; setTimeout(function() { btn.textContent = btn.dataset.orig; }, 2000); } }
                     })()
                 """, completionHandler: nil)
             } catch {
@@ -84,7 +84,7 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
                 webView?.evaluateJavaScript("""
                     (function() {
                         var el = document.getElementById('\(chipId)');
-                        if (el) { el.innerHTML = '❌ Failed'; el.style.opacity = '1'; setTimeout(function() { el.innerHTML = el.dataset.originalText; }, 2000); }
+                        if (el) { var btn = el.querySelector('.att-save'); if (btn) { btn.textContent = '❌'; setTimeout(function() { btn.textContent = btn.dataset.orig; }, 2000); } }
                     })()
                 """, completionHandler: nil)
             }
@@ -263,7 +263,7 @@ struct ThreadDetailView: View {
                     <span id="att-\(attId)" style="display:inline-flex;align-items:center;background:#2a2a2a;border:1px solid #444;border-radius:6px;margin:2px 4px 2px 0;font-size:11px;transition:opacity 0.2s;">
                         <a href="\(openURL)" style="color:#ddd;text-decoration:none;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;">📎 \(escapeHTML(att.name))\(sizeStr)</a>
                         <span style="border-left:1px solid #444;padding:3px 6px;">
-                            <a href="\(saveURL)" style="color:#888;text-decoration:none;font-size:10px;" title="Save to Downloads">⬇</a>
+                            <a class="att-save" href="\(saveURL)" style="color:#888;text-decoration:none;font-size:10px;" title="Save to Downloads">⬇</a>
                         </span>
                     </span>
                     """)
