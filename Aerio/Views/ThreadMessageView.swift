@@ -1,6 +1,45 @@
 import SwiftUI
 import WebKit
 
+/// WKWebView subclass that forwards scroll events to the parent ScrollView.
+class NonScrollingWebView: WKWebView {
+    override func scrollWheel(with event: NSEvent) {
+        nextResponder?.scrollWheel(with: event)
+    }
+}
+
+/// NSViewRepresentable for NonScrollingWebView.
+struct ThreadBodyWebView: NSViewRepresentable {
+    let webView: WKWebView
+
+    func makeNSView(context: Context) -> WKWebView {
+        webView
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+}
+
+/// Manages a NonScrollingWebView for use in thread messages.
+@MainActor
+final class ThreadWebViewStore: ObservableObject {
+    let webView: NonScrollingWebView
+    private let navigationDelegate = BodyWebViewNavigationDelegate()
+
+    init() {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        self.webView = NonScrollingWebView(frame: .zero, configuration: config)
+        self.webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        self.webView.appearance = NSAppearance(named: .aqua)
+        self.webView.navigationDelegate = navigationDelegate
+    }
+
+    func loadHTML(_ html: String) {
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+}
+
 struct ThreadMessageView: View {
     let message: ThreadMessage
     let apiManager: GmailAPIManager
@@ -9,7 +48,7 @@ struct ThreadMessageView: View {
     var onReplyAll: (() -> Void)?
     var onForward: (() -> Void)?
 
-    @StateObject private var bodyWebViewStore = BodyWebViewStore()
+    @StateObject private var bodyWebViewStore = ThreadWebViewStore()
     @State private var isLoading = true
     @State private var contentHeight: CGFloat = 100
     @State private var downloadingAttachment: String?
@@ -52,7 +91,7 @@ struct ThreadMessageView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 60)
             } else {
-                BodyWebView(webView: bodyWebViewStore.webView)
+                ThreadBodyWebView(webView: bodyWebViewStore.webView)
                     .frame(height: contentHeight)
             }
 
@@ -166,12 +205,7 @@ struct ThreadMessageView: View {
             }
             html = stripQuotedContent(html)
             let wrapped = wrapEmailHTML(html, subject: message.subject)
-            bodyWebViewStore.loadHTML(wrapped, emailId: message.id)
-            // Disable WKWebView internal scrolling — parent ScrollView handles it
-            DispatchQueue.main.async {
-                bodyWebViewStore.webView.enclosingScrollView?.hasVerticalScroller = false
-                bodyWebViewStore.webView.enclosingScrollView?.verticalScrollElasticity = .none
-            }
+            bodyWebViewStore.loadHTML(wrapped)
             isLoading = false
             // Give WebView time to render, then measure content height
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
