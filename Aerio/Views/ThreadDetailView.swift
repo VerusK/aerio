@@ -392,8 +392,8 @@ struct ThreadDetailView: View {
             result = before + closing
         }
 
-        // 5. "On ... wrote:" line (standalone, no --- separator)
-        if let regex = try? NSRegularExpression(pattern: #"<p[^>]*>\s*On .+?wrote:\s*</p>[\s\S]*?(</body>)"#, options: .caseInsensitive),
+        // 5. "On ... wrote:" only when followed by &gt; quoted lines (avoids false matches)
+        if let regex = try? NSRegularExpression(pattern: #"<p[^>]*>\s*On .+?wrote:\s*</p>\s*<p[^>]*>\s*&gt;"#, options: .caseInsensitive),
            let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) {
             let matchRange = Range(match.range, in: result)!
             result = String(result[result.startIndex..<matchRange.lowerBound]) + "</body></html>"

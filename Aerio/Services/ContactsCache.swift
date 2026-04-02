@@ -78,26 +78,52 @@ final class ContactsCache {
     func addContacts(from emails: [Email]) {
         var changed = false
         for email in emails {
-            let parsed = Self.parseFromHeader(email.from)
-            guard !parsed.email.isEmpty else { continue }
-            let normalizedEmail = parsed.email.lowercased()
-            let existing = contacts.first(where: { $0.email == normalizedEmail })
-            let newCount = (existing?.messageCount ?? 0) + 1
-            let contact = CachedContact(email: normalizedEmail, displayName: parsed.displayName, messageCount: newCount)
-            if existing != nil {
-                if existing?.displayName != contact.displayName || existing?.messageCount != newCount {
-                    contacts.remove(contact)
-                    contacts.insert(contact)
-                    changed = true
+            if email.folder == .sent {
+                // Sent emails: count To/Cc recipients (who I write to)
+                let recipients = Self.parseAddressList(email.to) + Self.parseAddressList(email.cc)
+                for parsed in recipients {
+                    guard !parsed.email.isEmpty else { continue }
+                    changed = upsertContact(email: parsed.email, displayName: parsed.displayName, incrementCount: true) || changed
                 }
             } else {
-                contacts.insert(contact)
-                changed = true
+                // Incoming emails: add sender for autocomplete but don't increment count
+                let parsed = Self.parseFromHeader(email.from)
+                guard !parsed.email.isEmpty else { continue }
+                changed = upsertContact(email: parsed.email, displayName: parsed.displayName, incrementCount: false) || changed
             }
         }
         if changed {
             save()
             logger.debug("ContactsCache updated, total: \(self.contacts.count)")
+        }
+    }
+
+    private func upsertContact(email: String, displayName: String?, incrementCount: Bool) -> Bool {
+        let normalized = email.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !normalized.isEmpty else { return false }
+        let existing = contacts.first(where: { $0.email == normalized })
+        let newCount = (existing?.messageCount ?? 0) + (incrementCount ? 1 : 0)
+        let contact = CachedContact(email: normalized, displayName: displayName, messageCount: newCount)
+        if let existing {
+            if existing.displayName != contact.displayName || existing.messageCount != newCount {
+                contacts.remove(contact)
+                contacts.insert(contact)
+                return true
+            }
+            return false
+        } else {
+            contacts.insert(contact)
+            return true
+        }
+    }
+
+    /// Parse comma-separated address list like "Name <email>, other@email.com"
+    nonisolated static func parseAddressList(_ list: String) -> [(email: String, displayName: String?)] {
+        guard !list.isEmpty else { return [] }
+        return list.components(separatedBy: ",").compactMap { part in
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            return parseFromHeader(trimmed)
         }
     }
 
