@@ -368,7 +368,7 @@ struct ThreadDetailView: View {
     private func stripQuotedContent(_ html: String) -> String {
         var result = html
 
-        // 1. Gmail HTML quote blocks: <div class="gmail_quote">...</div>
+        // 1. Gmail HTML quote blocks
         if let range = result.range(of: "<div class=\"gmail_quote\"", options: .caseInsensitive) {
             result = String(result[result.startIndex..<range.lowerBound])
         }
@@ -378,22 +378,25 @@ struct ThreadDetailView: View {
             result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
         }
 
-        // 3. Plain text reply separator: "\n---\n" or "\n\n---\n" — truncate everything from there
-        if let range = result.range(of: "\n---\n") {
-            let before = String(result[result.startIndex..<range.lowerBound])
-            // Preserve closing </pre> if present
-            let closingTag = result.contains("</pre>") ? "</pre>" : ""
-            result = before + closingTag
+        // 3. "---" separator in <p> tags: <p...>---</p> — truncate from there, keep </body></html>
+        if let regex = try? NSRegularExpression(pattern: #"<p[^>]*>\s*---\s*</p>[\s\S]*?(</body>)"#, options: .caseInsensitive),
+           let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) {
+            let matchRange = Range(match.range, in: result)!
+            result = String(result[result.startIndex..<matchRange.lowerBound]) + "</body></html>"
         }
 
-        // 4. "On <date> wrote:" followed by quoted lines (no --- separator)
-        if let range = result.range(of: "\nOn ", options: .caseInsensitive) {
-            let after = result[range.upperBound...]
-            if after.contains("wrote:") {
-                let before = String(result[result.startIndex..<range.lowerBound])
-                let closingTag = result.contains("</pre>") ? "</pre>" : ""
-                result = before + closingTag
-            }
+        // 4. "---" separator as plain text (in <pre> blocks)
+        if let range = result.range(of: "\n---\n") {
+            let before = String(result[result.startIndex..<range.lowerBound])
+            let closing = result.contains("</pre>") ? "</pre>" : ""
+            result = before + closing
+        }
+
+        // 5. "On ... wrote:" line (standalone, no --- separator)
+        if let regex = try? NSRegularExpression(pattern: #"<p[^>]*>\s*On .+?wrote:\s*</p>[\s\S]*?(</body>)"#, options: .caseInsensitive),
+           let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) {
+            let matchRange = Range(match.range, in: result)!
+            result = String(result[result.startIndex..<matchRange.lowerBound]) + "</body></html>"
         }
 
         return result
