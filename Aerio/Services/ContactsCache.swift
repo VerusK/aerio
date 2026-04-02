@@ -51,6 +51,8 @@ final class ContactsCache {
     private let key = "aerio_contacts_cache"
     private var contacts: Set<CachedContact>
 
+    private let countResetKey = "aerio_contacts_count_reset_v1"
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         if let data = defaults.data(forKey: key),
@@ -58,6 +60,14 @@ final class ContactsCache {
             self.contacts = decoded
         } else {
             self.contacts = []
+        }
+        // One-time migration: reset messageCount to 0 (was counting From headers, now counts To from Sent)
+        if !defaults.bool(forKey: countResetKey) {
+            let reset = contacts.map { CachedContact(email: $0.email, displayName: $0.displayName, messageCount: 0) }
+            contacts = Set(reset)
+            save()
+            defaults.set(true, forKey: countResetKey)
+            logger.info("ContactsCache: reset messageCount for \(reset.count) contacts")
         }
     }
 

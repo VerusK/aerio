@@ -246,7 +246,11 @@ struct ThreadDetailView: View {
                 threadMessages = messages
                 threadNavDelegate.threadMessages = messages
 
-                // Build single HTML document for entire thread (no HTML cache — thread data is cached in GmailAPIManager)
+                // Debug: log thread info
+                let subjects = messages.map { "\($0.from.prefix(20)): \($0.subject.prefix(30))" }.joined(separator: " | ")
+                try? "Thread \(email.threadId): \(messages.count) messages\n\(subjects)".write(toFile: "/tmp/aerio_thread_info.txt", atomically: true, encoding: .utf8)
+
+                // Build single HTML document for entire thread
                 let html = buildThreadHTML(messages: messages)
                 webViewStore.loadHTML(html)
                 isLoading = false
