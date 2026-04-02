@@ -625,9 +625,19 @@ struct ComposeView: View {
                     }
                 }
 
-                // Extract full body for reply/forward quote (replace snippet with full text)
+                // Extract body for reply/forward quote — only the message's own text, not nested quotes
                 if let payload = message.payload {
-                    let fullText = extractPlainTextFromPayload(payload)
+                    var fullText = extractPlainTextFromPayload(payload)
+                    // Strip quoted chain: everything after "---" separator or "On ... wrote:" line
+                    if let separatorRange = fullText.range(of: "\n---\n") {
+                        fullText = String(fullText[fullText.startIndex..<separatorRange.lowerBound])
+                    } else if let wroteRange = fullText.range(of: "\nOn ") {
+                        let after = fullText[wroteRange.upperBound...]
+                        if after.contains("wrote:") {
+                            fullText = String(fullText[fullText.startIndex..<wroteRange.lowerBound])
+                        }
+                    }
+                    fullText = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !fullText.isEmpty {
                         let quoted = fullText.components(separatedBy: "\n").map { "> \($0)" }.joined(separator: "\n")
                         if composeType == .forward {

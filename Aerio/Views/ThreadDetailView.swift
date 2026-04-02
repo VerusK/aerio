@@ -261,8 +261,7 @@ struct ThreadDetailView: View {
         var sections: [String] = []
 
         for message in messages {
-            var bodyHTML = message.bodyHTML
-            bodyHTML = stripQuotedContent(bodyHTML)
+            let bodyHTML = message.bodyHTML
 
             let initial = String(message.from.prefix(1)).uppercased()
             let color = avatarColor(for: message.from)
