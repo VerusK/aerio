@@ -817,6 +817,7 @@ struct ComposeView: View {
                 if let draftId, composeType == .draft {
                     try await apiManager.sendDraft(draftId: draftId, accountId: selectedAccountId)
                 } else {
+                    let replyThreadId = replyToEmail?.threadId.isEmpty == false ? replyToEmail?.threadId : nil
                     try await apiManager.sendEmail(
                         from: fromEmail,
                         to: toField,
@@ -828,7 +829,8 @@ struct ComposeView: View {
                         references: replyToEmail?.messageId ?? fetchedMessageId,
                         htmlBody: html.isEmpty ? nil : html,
                         attachments: rfcAttachments,
-                        inlineImages: rfcInlineImages
+                        inlineImages: rfcInlineImages,
+                        threadId: replyThreadId
                     )
                 }
                 hasSent = true

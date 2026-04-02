@@ -135,10 +135,13 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         return try await execute(request: request)
     }
 
-    func sendMessage(raw: String) async throws -> GmailMessage {
-        let body = GmailSendRequest(raw: raw)
+    func sendMessage(raw: String, threadId: String? = nil) async throws -> GmailMessage {
+        var bodyDict: [String: String] = ["raw": raw]
+        if let threadId, !threadId.isEmpty {
+            bodyDict["threadId"] = threadId
+        }
         var request = try buildRequest(path: "/messages/send", method: "POST")
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try JSONEncoder().encode(bodyDict)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return try await execute(request: request)
     }

@@ -343,9 +343,9 @@ struct MainView: View {
                             email: email,
                             apiManager: apiManager,
                             folder: selectedFolder,
-                            onReply: { msg in triggerComposeFromThread(.reply, message: msg) },
-                            onReplyAll: { msg in triggerComposeFromThread(.replyAll, message: msg) },
-                            onForward: { msg in triggerComposeFromThread(.forward, message: msg) },
+                            onReply: { msg in triggerComposeFromThread(.reply, message: msg, threadId: email.threadId) },
+                            onReplyAll: { msg in triggerComposeFromThread(.replyAll, message: msg, threadId: email.threadId) },
+                            onForward: { msg in triggerComposeFromThread(.forward, message: msg, threadId: email.threadId) },
                             onArchive: { executeActionOnEmail(email, action: .archive) },
                             onDelete: { executeActionOnEmail(email, action: .delete) },
                             onSpam: { executeActionOnEmail(email, action: .spam) },
@@ -417,7 +417,7 @@ struct MainView: View {
         return allEmails.filter { $0.threadId == threadId }.count > 1
     }
 
-    private func triggerComposeFromThread(_ type: ComposeType, message: ThreadMessage) {
+    private func triggerComposeFromThread(_ type: ComposeType, message: ThreadMessage, threadId: String = "") {
         let email = Email(
             msgId: message.msgId,
             from: message.from,
@@ -430,7 +430,7 @@ struct MainView: View {
             messageId: message.messageId,
             to: message.to,
             cc: message.cc,
-            threadId: ""
+            threadId: threadId
         )
         composeType = type
         threadComposeEmail = email

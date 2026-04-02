@@ -768,10 +768,10 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
-    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
+    func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = [], threadId: String? = nil) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let raw = buildRawMessage(from: from, to: to, cc: cc, subject: subject, body: body, inReplyTo: inReplyTo, references: references, htmlBody: htmlBody, attachments: attachments, inlineImages: inlineImages)
-        let sent = try await client.sendMessage(raw: raw)
+        let sent = try await client.sendMessage(raw: raw, threadId: threadId)
         // Remove INBOX label from self-sent messages so they don't appear in inbox
         if (sent.labelIds ?? []).contains(GmailLabelId.inbox) {
             _ = try? await client.modifyMessage(id: sent.id, removeLabels: [GmailLabelId.inbox])
