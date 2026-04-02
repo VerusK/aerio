@@ -834,6 +834,11 @@ struct ComposeView: View {
                     )
                 }
                 hasSent = true
+                // Update contact frequency for autocomplete
+                let allRecipients = ContactsCache.parseAddressList(toField) + ContactsCache.parseAddressList(ccField)
+                for recipient in allRecipients {
+                    contactsCache?.addContact(email: recipient.email, displayName: recipient.displayName)
+                }
                 if (composeType == .reply || composeType == .replyAll),
                    let email = replyToEmail, email.folder == .inbox,
                    UserDefaults.standard.bool(forKey: AppState.archiveOnReplyKey) {
