@@ -6,6 +6,20 @@ private let logger = Logger(subsystem: "Aerio", category: "ContactsCache")
 struct CachedContact: Codable, Hashable, Sendable {
     let email: String
     let displayName: String?
+    var messageCount: Int
+
+    init(email: String, displayName: String?, messageCount: Int = 0) {
+        self.email = email
+        self.displayName = displayName
+        self.messageCount = messageCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        email = try container.decode(String.self, forKey: .email)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        messageCount = try container.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
+    }
 
     // Deduplicate by email only — a contact with a changed displayName should update, not duplicate
     static func == (lhs: CachedContact, rhs: CachedContact) -> Bool {
@@ -54,8 +68,8 @@ final class ContactsCache {
     func addContact(email: String, displayName: String?) {
         let normalized = email.lowercased().trimmingCharacters(in: .whitespaces)
         guard !normalized.isEmpty else { return }
-        let contact = CachedContact(email: normalized, displayName: displayName)
-        // Remove existing entry for same email (may have different displayName), then insert updated
+        let existingCount = contacts.first(where: { $0.email == normalized })?.messageCount ?? 0
+        let contact = CachedContact(email: normalized, displayName: displayName, messageCount: existingCount + 1)
         contacts.remove(contact)
         contacts.insert(contact)
         save()
@@ -66,11 +80,13 @@ final class ContactsCache {
         for email in emails {
             let parsed = Self.parseFromHeader(email.from)
             guard !parsed.email.isEmpty else { continue }
-            let contact = CachedContact(email: parsed.email.lowercased(), displayName: parsed.displayName)
-            // Update existing entry if displayName changed
-            if let existing = contacts.first(where: { $0.email == contact.email }) {
-                if existing.displayName != contact.displayName {
-                    contacts.remove(existing)
+            let normalizedEmail = parsed.email.lowercased()
+            let existing = contacts.first(where: { $0.email == normalizedEmail })
+            let newCount = (existing?.messageCount ?? 0) + 1
+            let contact = CachedContact(email: normalizedEmail, displayName: parsed.displayName, messageCount: newCount)
+            if existing != nil {
+                if existing?.displayName != contact.displayName || existing?.messageCount != newCount {
+                    contacts.remove(contact)
                     contacts.insert(contact)
                     changed = true
                 }
@@ -88,7 +104,12 @@ final class ContactsCache {
     func search(_ query: String) -> [CachedContact] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         return contacts.filter { $0.matches(query) }
-            .sorted { ($0.displayName ?? $0.email) < ($1.displayName ?? $1.email) }
+            .sorted {
+                if $0.messageCount != $1.messageCount {
+                    return $0.messageCount > $1.messageCount
+                }
+                return ($0.displayName ?? $0.email) < ($1.displayName ?? $1.email)
+            }
     }
 
     func clear() {
