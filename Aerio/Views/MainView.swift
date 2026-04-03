@@ -338,7 +338,7 @@ struct MainView: View {
             ZStack {
                 if let selectedEmailId,
                    let email = findEmail(by: selectedEmailId) {
-                    if !email.threadId.isEmpty && selectedFolder != .drafts {
+                    if !email.threadId.isEmpty && selectedFolder != .drafts && apiManager.threadHasMultipleMessages(email.threadId) {
                         ThreadDetailView(
                             email: email,
                             apiManager: apiManager,
@@ -411,11 +411,6 @@ struct MainView: View {
         currentEmails.first { $0.msgId == msgId }
     }
 
-    private func hasMultipleThreadMessages(_ email: Email) -> Bool {
-        let threadId = email.threadId
-        let allEmails = apiManager.emailsByAccount.values.flatMap { $0 }
-        return allEmails.filter { $0.threadId == threadId }.count > 1
-    }
 
     private func triggerComposeFromThread(_ type: ComposeType, message: ThreadMessage, threadId: String = "") {
         let email = Email(

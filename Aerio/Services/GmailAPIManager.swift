@@ -872,7 +872,20 @@ final class GmailAPIManager: ObservableObject {
 
     // MARK: - Thread Fetching
 
+    private struct ThreadCacheEntry {
+        let messages: [ThreadMessage]
+        let timestamp: Date
+    }
+    private static var threadCache: [String: ThreadCacheEntry] = [:]
+    private static let threadCacheTTL: TimeInterval = 30
+
     func fetchThread(threadId: String, accountId: String) async throws -> [ThreadMessage] {
+        let cacheKey = "\(accountId)_\(threadId)"
+        if let cached = Self.threadCache[cacheKey],
+           Date().timeIntervalSince(cached.timestamp) < Self.threadCacheTTL {
+            return cached.messages
+        }
+
         guard let client = clients[accountId] else {
             throw GmailAPIError.unauthorized
         }
@@ -940,7 +953,15 @@ final class GmailAPIManager: ObservableObject {
 
         threadMessages.sort { $0.date > $1.date }
 
+        Self.threadCache[cacheKey] = ThreadCacheEntry(messages: threadMessages, timestamp: Date())
+
         return threadMessages
+    }
+
+    /// Returns true if the thread has multiple messages based on locally loaded emails.
+    func threadHasMultipleMessages(_ threadId: String) -> Bool {
+        let allEmails = emailsByAccount.values.flatMap { $0 }
+        return allEmails.filter { $0.threadId == threadId }.count > 1
     }
 
     // MARK: - Conversion
