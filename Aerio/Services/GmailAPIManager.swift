@@ -44,8 +44,6 @@ final class GmailAPIManager: ObservableObject {
     private(set) var accountsWithCompletedFetch = Set<String>()
     var pageTokens: [String: [Folder: String]] = [:]
     private var fetchingMore: Set<String> = []
-    private static var threadCache: [String: [ThreadMessage]] = [:]
-    private static let threadCacheLimit = 20
 
     // Factory closure for creating clients — allows test injection
     var clientFactory: ((String, OAuthManager) -> GmailAPIClient)?
@@ -875,11 +873,6 @@ final class GmailAPIManager: ObservableObject {
     // MARK: - Thread Fetching
 
     func fetchThread(threadId: String, accountId: String) async throws -> [ThreadMessage] {
-        let cacheKey = "\(accountId)_\(threadId)"
-        if let cached = Self.threadCache[cacheKey] {
-            return cached
-        }
-
         guard let client = clients[accountId] else {
             throw GmailAPIError.unauthorized
         }
@@ -946,11 +939,6 @@ final class GmailAPIManager: ObservableObject {
         }
 
         threadMessages.sort { $0.date > $1.date }
-
-        if Self.threadCache.count >= Self.threadCacheLimit {
-            Self.threadCache.removeValue(forKey: Self.threadCache.keys.first!)
-        }
-        Self.threadCache[cacheKey] = threadMessages
 
         return threadMessages
     }
