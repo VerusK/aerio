@@ -14,6 +14,9 @@ final class UnifiedMailbox: ObservableObject {
     init(apiManager: GmailAPIManager) {
         self.apiManager = apiManager
         observeAPIManager()
+        // Force initial rebuild from any pre-loaded cache data
+        rebuildEmails(from: apiManager.emailsByAccount, folder: selectedFolder, accountId: selectedAccountId)
+        rebuildUnreadCounts(from: apiManager.emailsByAccount)
     }
 
     private func observeAPIManager() {
