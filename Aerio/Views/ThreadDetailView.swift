@@ -232,6 +232,8 @@ struct ThreadDetailView: View {
 
     // MARK: - Thread loading
 
+    private static var threadHTMLCache: [String: String] = [:]
+
     private func loadThread() {
         if threadMessages.isEmpty {
             isLoading = true
@@ -246,8 +248,20 @@ struct ThreadDetailView: View {
                 threadMessages = messages
                 threadNavDelegate.threadMessages = messages
 
-                // Build single HTML document for entire thread
-                let html = buildThreadHTML(messages: messages)
+                // Build HTML — cache keyed by message count + IDs to detect changes
+                let cacheKey = messages.map(\.id).joined(separator: ",")
+                let htmlCacheKey = "\(email.threadId)_\(cacheKey)"
+                let html: String
+                if let cached = Self.threadHTMLCache[htmlCacheKey] {
+                    html = cached
+                } else {
+                    html = buildThreadHTML(messages: messages)
+                    Self.threadHTMLCache[htmlCacheKey] = html
+                    // Evict old entries
+                    if Self.threadHTMLCache.count > 20 {
+                        Self.threadHTMLCache.removeValue(forKey: Self.threadHTMLCache.keys.first!)
+                    }
+                }
                 webViewStore.loadHTML(html)
                 isLoading = false
             } catch {
