@@ -153,7 +153,8 @@ struct MessageList: View {
     }
 
     var filteredEmails: [Email] {
-        unifiedMailbox.emails(for: selectedFolder, accountId: selectedAccountId)
+        // Use @Published emails directly so SwiftUI detects changes
+        unifiedMailbox.emails
     }
 }
 
