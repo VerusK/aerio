@@ -16,6 +16,8 @@ struct MessageList: View {
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
 
+    @State private var lastTopEmailId: String?
+
     var body: some View {
         ScrollViewReader { proxy in
             List {
@@ -76,6 +78,18 @@ struct MessageList: View {
                 if let first = filteredEmails.first {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
+            }
+            .onChange(of: filteredEmails.first?.id) { oldFirst, newFirst in
+                // New email arrived at top — scroll to show it
+                if let newFirst, oldFirst != nil, oldFirst != newFirst {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(newFirst, anchor: .top)
+                    }
+                }
+                lastTopEmailId = newFirst
+            }
+            .onAppear {
+                lastTopEmailId = filteredEmails.first?.id
             }
         }
     }
