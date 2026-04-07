@@ -16,8 +16,6 @@ struct MessageList: View {
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
 
-    @State private var lastTopEmailId: String?
-
     var body: some View {
         ScrollViewReader { proxy in
             List {
@@ -79,19 +77,10 @@ struct MessageList: View {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
             }
-            .onChange(of: filteredEmails.first?.id) { oldFirst, newFirst in
-                // New email arrived at top — scroll to show it
-                if let newFirst, oldFirst != nil, oldFirst != newFirst {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(newFirst, anchor: .top)
-                    }
-                }
-                lastTopEmailId = newFirst
-            }
-            .onAppear {
-                lastTopEmailId = filteredEmails.first?.id
-            }
         }
+        // Force List recreation when a new email appears at top — fixes macOS SwiftUI
+        // List bug where content size isn't recalculated on prepend
+        .id(filteredEmails.first?.id ?? "empty")
     }
 
     @ViewBuilder
