@@ -78,9 +78,9 @@ struct MessageList: View {
                 }
             }
         }
-        // Force List recreation when a new email appears at top — fixes macOS SwiftUI
-        // List bug where content size isn't recalculated on prepend
-        .id(filteredEmails.first?.id ?? "empty")
+        // Force List recreation when emails change — fixes macOS SwiftUI
+        // List bug where content size isn't recalculated on insert
+        .id("\(filteredEmails.count)_\(filteredEmails.first?.id ?? "")")
     }
 
     @ViewBuilder
