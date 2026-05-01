@@ -251,12 +251,13 @@ final class GmailAPIManager: ObservableObject {
             pageToken = listResponse.nextPageToken
 
             guard !messageIds.isEmpty else {
-                // No emails at all for this folder — clear both cache and in-memory list
+                // Empty API responses are usually transient (rate limit, network glitch) —
+                // never wipe a populated cache from this path. If the folder is genuinely empty,
+                // an explicit user action (delete/archive) will reflect that.
+                logger.info("[\(accountId)] fetchEmails: empty response for folder=\(folder.displayName), keeping cache")
                 client.state = .idle
                 accountsWithCompletedFetch.insert(accountId)
                 pageTokens[accountId, default: [:]][folder] = nil
-                emailsByAccount[accountId]?.removeAll { $0.folder == folder }
-                dataStore?.replaceEmails(for: accountId, folder: folder, with: [])
                 return
             }
 

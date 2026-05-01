@@ -140,6 +140,11 @@ final class EmailCache: ObservableObject {
             predicate: #Predicate { $0.accountId == accountId && $0.folderRaw == folderRaw }
         )
         let cached = (try? modelContext.fetch(descriptor)) ?? []
+        // Safety: never wipe a populated folder with an empty fresh set — almost always a sync glitch.
+        if emails.isEmpty && !cached.isEmpty {
+            logger.warning("replaceEmails: refused to wipe \(cached.count) cached emails for \(accountId)/\(folderRaw) with empty set")
+            return
+        }
         for item in cached where !freshIds.contains(item.id) {
             modelContext.delete(item)
         }
