@@ -354,6 +354,7 @@ struct MainView: View {
                         )
                         .id(email.threadId)
                     } else {
+                        // No `.id(email.id)`: it would respawn the WKWebView's Web Content process per click.
                         NativeMessageDetail(
                             email: email,
                             apiManager: apiManager,
@@ -368,7 +369,6 @@ struct MainView: View {
                             onEditDraft: { openDraft(email) },
                             onRegisterScroll: { handler in detailScrollHandler = handler }
                         )
-                        .id(email.id)
                     }
                 } else {
                     VStack {

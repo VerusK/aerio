@@ -77,10 +77,13 @@ struct MessageList: View {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
             }
+            .onChange(of: filteredEmails.first?.id) { _, newFirst in
+                // Scrolling to the new top row forces macOS List to recalc content size on prepend.
+                if let newFirst {
+                    proxy.scrollTo(newFirst, anchor: .top)
+                }
+            }
         }
-        // Force List recreation when emails change — fixes macOS SwiftUI
-        // List bug where content size isn't recalculated on insert
-        .id("\(filteredEmails.count)_\(filteredEmails.first?.id ?? "")")
     }
 
     @ViewBuilder
