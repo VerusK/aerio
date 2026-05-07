@@ -31,18 +31,80 @@ The unifying root cause: **send is tied to the lifetime of the compose view and 
 
 ## Decisions
 
-- Persisted Outbox queue lives in the existing SwiftData store (`default.store`).
+- Persisted Outbox queue lives in its own SwiftData store (`outbox.store`) under Application Support, isolated from the email cache. Avoids coupling between `EmailCache` and `OutboxService` save/migration paths.
+- `OutboxService` is owned by `AppState` and injected into views via `@EnvironmentObject` (mirrors `AccountManager`, `GmailAPIManager`). Not a `.shared` singleton.
 - Send is fire-and-forget from the compose window: the window closes immediately after enqueue.
 - Inline `sendError` UI in ComposeView is removed; all post-enqueue feedback is delivered via the Outbox panel and `UNUserNotificationCenter`.
 - Idempotency is enforced via a locally-generated `Message-ID:` header that we control and can search for before retrying.
-- Sidebar shows an Outbox row only when the queue is non-empty.
+- Sidebar shows an Outbox row only when the queue is non-empty. A new `enum SidebarSelection { case folder(Folder), outbox }` replaces the implicit "selected folder" state so Outbox is not modeled as a Gmail folder.
+- The wire-protocol for sending is abstracted via an `OutboxSender` protocol that `GmailAPIClient` conforms to. Tests inject `MockOutboxSender`; production uses the real client.
+- `RFC2822Builder` accepts a `ComposePayload` struct so all three call sites (current `sendEmail`, current `saveDraft`, new Outbox path) build raw MIME via one entry point.
 - No `NWPathMonitor` integration; backoff retry is sufficient for the reported scenarios.
 
 ## Architecture
 
+### End-to-end data flow
+
+```
+[Send click in ComposeView]
+        │
+        ▼
+  build ComposePayload
+        │
+        ▼
+  RFC2822Builder.build(payload, messageId: <UUID@aerio.local>)
+        │
+        ▼
+  OutboxItem(rawMime, messageIdHeader, accountId, ...)
+        │
+        ▼
+  outboxService.enqueue(item)  ──┐  (returns immediately)
+                                 │
+        ┌────────────────────────┘
+        │
+        ▼
+  ComposeView: hasSent=true → onDismiss() → window closes
+                                 │
+                                 │  (parallel)
+                                 ▼
+  OutboxService.processLoop wakes via AsyncStream signal
+        │
+        ▼
+  fetch pending where nextAttemptAt<=now, sorted by createdAt
+        │
+        ▼
+  per-item, sequential:
+        │
+        ▼
+  status=.sending; (if attemptCount>0) probe rfc822msgid in SENT
+        │                                  │
+        │                                  └─→ found: skip send, treat as success
+        │
+        ▼
+  sender.sendMessage(raw, threadId)
+        │
+   ┌────┴────┐
+   │         │
+success   failure
+   │         │
+   │         └─→ classify (transient | permanent)
+   │                 │
+   │                 ├─ transient & attempts<3 → status=.pending,
+   │                 │                          nextAttemptAt=now+backoff
+   │                 │
+   │                 └─ permanent or attempts>=3 → status=.failed,
+   │                                              UNUserNotification(failure)
+   │
+   ├─ delete OutboxItem
+   ├─ if draftIdToConsume → client.deleteDraft
+   ├─ if archiveOnSuccess → client.modifyMessage(removeLabels: [INBOX])
+   ├─ apiManager.refreshAll()
+   └─ UNUserNotification(success) [suppressed if app frontmost]
+```
+
 ### Data Model
 
-`OutboxItem` is a SwiftData `@Model` stored alongside the existing email cache.
+`OutboxItem` is a SwiftData `@Model` stored in a dedicated `outbox.store` container.
 
 ```swift
 @Model
@@ -132,31 +194,91 @@ final class OutboxService: ObservableObject {
 A single `processLoop` task is owned by the service. It:
 
 1. Loads pending items where `nextAttemptAt <= now`, sorted by `createdAt`.
-2. If none, finds the earliest `nextAttemptAt` in the future and sleeps until then (cancellable).
-3. For each ready item: sets `.sending`, runs idempotency probe if needed, calls `client.sendMessage`, handles result.
-4. On success: deletes the item, fires success notification, kicks off `apiManager.refreshAll()`, performs side-effects (delete consumed draft, archive replied-to inbox message).
-5. On failure: classifies (transient vs permanent), updates `attemptCount` / `nextAttemptAt` / `status`, fires failure notification on permanent or after final retry.
+2. If none, finds the earliest `nextAttemptAt` in the future and sleeps **exactly until** that timestamp (not a fixed poll interval) — `Task.sleep(until:)`-equivalent — to avoid busy-loop. If the queue is fully empty, the loop awaits the wake-up signal indefinitely.
+3. For each ready item: sets `.sending`, runs idempotency probe if needed, calls `sender.sendMessage`, handles result.
+4. **Each item is processed inside its own `do/catch` boundary.** A corrupt or unprocessable item is logged, marked `.failed` with `lastError = "Processing crashed: <reason>"`, and the loop continues to the next item — one bad item must never block the queue forever.
+5. On success: deletes the item, fires success notification, kicks off `apiManager.refreshAll()`, performs side-effects (delete consumed draft, archive replied-to inbox message). Side-effect failures are logged but do not bubble — the email is sent; the side-effect is best-effort.
+6. On failure: classifies (transient vs permanent), updates `attemptCount` / `nextAttemptAt` / `status`, fires failure notification on permanent or after final retry.
 
 The loop starts in `init` (after loading items) and is signalled to wake up when `enqueue` or `retry` is called. Implementation: a lightweight `AsyncStream<Void>` continuation that the loop awaits; `enqueue`/`retry` `yield()` to it, and the loop's `Task.sleep` for backoff races against this signal so a new item shortcuts any pending sleep.
 
 Only one item is sent at a time (sequential processing). Concurrency is not a goal; ordering matches user intent.
+
+### Sender Abstraction
+
+```swift
+protocol OutboxSender {
+    func sendMessage(raw: Data, threadId: String?) async throws -> GmailMessage
+    func findInSent(messageId: String) async throws -> Bool
+}
+```
+
+`GmailAPIClient` is extended with `findInSent(messageId:)` (thin wrapper around `listMessages(query: "rfc822msgid:\(messageId)", labelIds: ["SENT"])`) and conforms to `OutboxSender`. Tests inject a `MockOutboxSender` that records calls and returns scripted results — no network, no auth, no Keychain.
+
+`OutboxService` is constructed with `@MainActor` per-account `[String: OutboxSender]` (mirrors how `GmailAPIManager` keeps `[accountId: GmailAPIClient]`). On account add/remove, `AppState` updates this map.
+
+### ComposePayload (DRY)
+
+```swift
+struct ComposePayload {
+    let from: String
+    let to: String
+    let cc: String?
+    let subject: String
+    let body: String
+    let inReplyTo: String?
+    let references: String?
+    let htmlBody: String?
+    let attachments: [RFC2822Builder.Attachment]
+    let inlineImages: [RFC2822Builder.InlineImage]
+    let messageId: String?  // optional; when set, embedded as Message-ID header
+}
+
+extension RFC2822Builder {
+    static func build(_ payload: ComposePayload) -> String { ... }
+}
+```
+
+`GmailAPIManager.sendEmail` and `GmailAPIManager.saveDraft` are refactored to construct `ComposePayload` and call the new builder. `OutboxService.enqueue` does the same. One source of truth for raw MIME assembly.
 
 ### ComposeView Changes
 
 `sendMessage()` becomes synchronous-feeling:
 
 ```swift
+@State private var isSendingViaOutbox = false  // race guard for saveDraftIfNeeded
+
 private func sendMessage() {
     guard !toField.isEmpty,
           let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email
-    else { return }
+    else {
+        logger.error("Send guard failed: empty toField or no fromEmail for account \(selectedAccountId, privacy: .public)")
+        return
+    }
+
+    isSendingViaOutbox = true
+    hasSent = true
 
     let messageId = "<\(UUID().uuidString)@aerio.local>"
-    let raw = RFC2822Builder.build(..., messageId: messageId)
-
+    let (htmlBody, editorInlineImages) = editorState.htmlBodyWithInlineImages()
     let archiveOnSuccess = (composeType == .reply || composeType == .replyAll)
         && replyToEmail?.folder == .inbox
         && UserDefaults.standard.bool(forKey: AppState.archiveOnReplyKey)
+
+    let payload = ComposePayload(
+        from: fromEmail,
+        to: toField,
+        cc: ccField.isEmpty ? nil : ccField,
+        subject: subjectField,
+        body: bodyText,
+        inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
+        references: replyToEmail?.messageId ?? fetchedMessageId,
+        htmlBody: htmlBody.isEmpty ? nil : htmlBody,
+        attachments: attachments.map { ... },
+        inlineImages: editorInlineImages.map { ... },
+        messageId: messageId
+    )
+    let raw = RFC2822Builder.build(payload)
 
     let item = OutboxItem(
         id: UUID(),
@@ -175,15 +297,23 @@ private func sendMessage() {
         archiveOnSuccessForAccountId: archiveOnSuccess ? replyToEmail?.accountId : nil
     )
 
-    hasSent = true
     Task { await outboxService.enqueue(item) }
     onDismiss?()
 }
 ```
 
-The Send button is already disabled when `toField.isEmpty` (existing logic). The `selectedAccountId` is always populated from the account picker (which defaults to the first account on init), so the `fromEmail` guard is a defensive no-op rather than a user-visible error.
+The Send button is already disabled when `toField.isEmpty` (existing logic). The `selectedAccountId` is always populated from the account picker (which defaults to the first account on init), so the `fromEmail` guard is a defensive no-op for production paths but logs if hit.
 
-`saveDraftIfNeeded` keeps its existing `guard !hasSent` check; setting `hasSent = true` synchronously before `onDismiss` ensures `onDisappear` sees the right value.
+`saveDraftIfNeeded` is updated to also bail when `isSendingViaOutbox` is true:
+
+```swift
+private func saveDraftIfNeeded() {
+    guard !hasSent && !isSendingViaOutbox else { return }
+    // ... existing logic
+}
+```
+
+This double-guard protects against any SwiftUI state-flush ordering issue between `hasSent` and `onDisappear`. It is explicit and cheap.
 
 The inline `sendError` `@State` and its UI block (`ComposeView.swift:163-174`) are removed; the `isSending` state is also no longer needed since the window closes immediately on Send.
 
@@ -194,7 +324,17 @@ The inline `sendError` `@State` and its UI block (`ComposeView.swift:163-174`) a
 - Title: `Outbox`
 - Badge: total item count
 - Color: red if any item is `.failed`, default otherwise
-- Selecting it sets a new sidebar selection mode that, in `MessageList`, shows the `OutboxList` view instead of the email list.
+
+A new selection model replaces the implicit "current folder" state:
+
+```swift
+enum SidebarSelection: Hashable {
+    case folder(Folder)
+    case outbox
+}
+```
+
+`UnifiedSidebar` and the message-list area both switch on `SidebarSelection`. When `.outbox` is active, the message-list area renders `OutboxList`; when `.folder(...)` is active, the existing `MessageList` flow runs unchanged. `Folder` keeps its current Gmail-domain meaning — Outbox is not a Gmail folder.
 
 ### OutboxList View
 
@@ -275,6 +415,23 @@ When `AccountManager` removes an account, all `OutboxItem`s with that `accountId
 - Send to invalid address (e.g. `notanemail`) — Outbox shows failed, notification appears
 - Send three pending messages — they go out one at a time, in order
 - Retry a failed message manually — sends successfully
+
+## Implementation Order (worktree lanes)
+
+After eng review, suggested execution lanes:
+
+| Lane | Step | Modules | Depends on |
+|---|---|---|---|
+| A | 1. `OutboxItem` model + dedicated `outbox.store` container | `Models/`, `Persistence/` | — |
+| A | 2. `RFC2822Builder.build(ComposePayload)` + `messageId` header support + tests | `Services/` (RFC2822Builder.swift) | — |
+| A | 3. NotificationManager `outbox.success`/`outbox.failure` categories + Retry action | `Services/` (NotificationManager.swift) | — |
+| B | 4. `OutboxSender` protocol + `GmailAPIClient.findInSent` + conformance | `Services/` (GmailAPIClient.swift) | 2 |
+| B | 5. `OutboxService` + `processLoop` + tests via `MockOutboxSender` | `Services/` | 1, 4 |
+| C | 6. `ComposeView` refactor (enqueue path, isSendingViaOutbox flag) | `Views/` | 5 |
+| C | 7. `SidebarSelection` enum + `UnifiedSidebar` Outbox row + `OutboxList` view | `Views/` | 5 |
+| D | 8. `AppState`/`AerioApp` wiring (env-injected service, resumeOnLaunch) | root + `Views/MainView.swift` | 5, 6, 7 |
+
+Lane A items (1, 2, 3) parallelize cleanly across worktrees — separate files, no coupling. Lane C items (6, 7) both edit `Views/` so run sequentially or coordinate carefully.
 
 ## Open Questions
 
