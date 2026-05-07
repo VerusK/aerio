@@ -1194,12 +1194,38 @@ class TabAwareTextView: NSTextView {
                 editorState?.toggleUnderline()
                 return
             case Self.kVK_ANSI_V:
+                if event.modifierFlags.contains(.shift) {
+                    pastePlainResetStyle()
+                    return
+                }
                 if pasteImageFromClipboard() { return }
             default:
                 break
             }
         }
         super.keyDown(with: event)
+    }
+
+    /// Insert clipboard text stripped of all formatting AND surrounding style —
+    /// `pasteAsPlainText:` only reads plain text but still inherits the cursor's
+    /// typingAttributes, so a paste right after a formatted block stays formatted.
+    private func pastePlainResetStyle() {
+        let pb = NSPasteboard.general
+        guard let text = pb.string(forType: .string), !text.isEmpty else { return }
+
+        let defaultAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.labelColor
+        ]
+        let range = selectedRange()
+        guard shouldChangeText(in: range, replacementString: text) else { return }
+
+        let attrString = NSAttributedString(string: text, attributes: defaultAttrs)
+        textStorage?.replaceCharacters(in: range, with: attrString)
+        typingAttributes = defaultAttrs
+        let nsLen = (text as NSString).length
+        setSelectedRange(NSRange(location: range.location + nsLen, length: 0))
+        didChangeText()
     }
 
     // MARK: - Drag & Drop file attachments

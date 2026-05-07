@@ -77,13 +77,11 @@ struct MessageList: View {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
             }
-            .onChange(of: filteredEmails.first?.id) { _, newFirst in
-                // Scrolling to the new top row forces macOS List to recalc content size on prepend.
-                if let newFirst {
-                    proxy.scrollTo(newFirst, anchor: .top)
-                }
-            }
         }
+        // Recreate List only when the top row changes (new email arrived or top archived) —
+        // macOS List won't recalc content size on prepend otherwise, hiding new rows.
+        // Keyed on first id only, NOT on count — that's what made every poll/archive freeze.
+        .id(filteredEmails.first?.id ?? "")
     }
 
     @ViewBuilder
