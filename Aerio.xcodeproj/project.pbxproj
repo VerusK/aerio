@@ -55,6 +55,8 @@
 		OB0000000000000000000003 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000004 /* OutboxStore.swift */; };
 		OB0000000000000000000005 /* ComposePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000006 /* ComposePayload.swift */; };
 		OB0000000000000000000007 /* OutboxSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000008 /* OutboxSender.swift */; };
+		OB0000000000000000000009 /* OutboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000000A /* OutboxService.swift */; };
+		OB0000000000000000000017 /* OutboxServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000018 /* OutboxServiceTests.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
 		OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */; };
 		OB0000000000000000000015 /* MockOutboxSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000016 /* MockOutboxSender.swift */; };
@@ -125,6 +127,8 @@
 		OB0000000000000000000004 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		OB0000000000000000000006 /* ComposePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposePayload.swift; sourceTree = "<group>"; };
 		OB0000000000000000000008 /* OutboxSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxSender.swift; sourceTree = "<group>"; };
+		OB000000000000000000000A /* OutboxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxService.swift; sourceTree = "<group>"; };
+		OB0000000000000000000018 /* OutboxServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxServiceTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFC2822BuilderPayloadTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000016 /* MockOutboxSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockOutboxSender.swift; sourceTree = "<group>"; };
@@ -199,6 +203,7 @@
 				OB0000000000000000000012 /* OutboxItemTests.swift */,
 				OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */,
 				OB0000000000000000000016 /* MockOutboxSender.swift */,
+				OB0000000000000000000018 /* OutboxServiceTests.swift */,
 			);
 			path = AerioTests;
 			sourceTree = "<group>";
@@ -239,6 +244,7 @@
 				FB0000000000000000000002 /* NotificationManager.swift */,
 				OB0000000000000000000006 /* ComposePayload.swift */,
 				OB0000000000000000000008 /* OutboxSender.swift */,
+				OB000000000000000000000A /* OutboxService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -409,6 +415,7 @@
 				OB0000000000000000000003 /* OutboxStore.swift in Sources */,
 				OB0000000000000000000005 /* ComposePayload.swift in Sources */,
 				OB0000000000000000000007 /* OutboxSender.swift in Sources */,
+				OB0000000000000000000009 /* OutboxService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -437,6 +444,7 @@
 				OB0000000000000000000011 /* OutboxItemTests.swift in Sources */,
 				OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */,
 				OB0000000000000000000015 /* MockOutboxSender.swift in Sources */,
+				OB0000000000000000000017 /* OutboxServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
