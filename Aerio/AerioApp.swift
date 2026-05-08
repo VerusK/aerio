@@ -49,6 +49,7 @@ struct AerioApp: App {
                 contactsCache: appState.contactsCache,
                 notificationManager: appState.notificationManager
             )
+            .environmentObject(appState.outboxService)
             .background(WindowAccessor())
             .navigationTitle("")
         }
@@ -123,6 +124,8 @@ final class AppState: ObservableObject {
     let unifiedMailbox: UnifiedMailbox
     let contactsCache: ContactsCache
     let notificationManager: NotificationManager
+    let outboxStore: OutboxStore
+    let outboxService: OutboxService
     let defaults: UserDefaults
     private var badgeCancellable: AnyCancellable?
     private var defaultsCancellable: AnyCancellable?
@@ -150,6 +153,14 @@ final class AppState: ObservableObject {
         api.contactsCache = contacts
         let notifications = NotificationManager()
         api.notificationManager = notifications
+        let outboxStore = OutboxStore()
+        let sendersByAccount: [String: OutboxSender] = api.clients.mapValues { $0 as OutboxSender }
+        let outbox = OutboxService(
+            store: outboxStore,
+            sendersByAccount: sendersByAccount,
+            notifier: OutboxNotifier(manager: notifications),
+            postSendRefresh: { [weak api] in await api?.refreshAll() }
+        )
         self.accountManager = am
         self.oauthManager = oauth
         self.emailCache = cache
@@ -157,6 +168,8 @@ final class AppState: ObservableObject {
         self.unifiedMailbox = UnifiedMailbox(apiManager: api)
         self.contactsCache = contacts
         self.notificationManager = notifications
+        self.outboxStore = outboxStore
+        self.outboxService = outbox
         self.defaults = .standard
 
         defaults.register(defaults: [
@@ -174,6 +187,27 @@ final class AppState: ObservableObject {
         Task {
             await notifications.requestPermission()
         }
+
+        // Outbox: resume any items stuck in .sending from a previous run, then start the loop.
+        Task { @MainActor in
+            do { _ = try await outbox.resumeOnLaunch() }
+            catch { Self.logger.error("outbox resumeOnLaunch failed: \(error.localizedDescription)") }
+            outbox.startLoop()
+        }
+
+        // Wire Retry-from-notification handler.
+        notifications.onOutboxRetry = { [weak outbox] itemId in
+            Task { @MainActor in try? await outbox?.retry(itemId: itemId) }
+        }
+
+        // Keep Outbox senders in sync with active GmailAPIManager.clients.
+        // GmailAPIManager.clients is @Published — react to changes.
+        Task { @MainActor [weak api, weak outbox] in
+            guard let api else { return }
+            for await clients in api.$clients.values {
+                outbox?.setSenders(clients.mapValues { $0 as OutboxSender })
+            }
+        }
     }
 
     init(accountManager: AccountManager, apiManager: GmailAPIManager, defaults: UserDefaults = .standard, notificationManager: NotificationManager? = nil, keychainStore: KeychainStore = KeychainHelper.shared) {
@@ -185,7 +219,15 @@ final class AppState: ObservableObject {
         let contacts = ContactsCache()
         self.contactsCache = contacts
         apiManager.contactsCache = contacts
-        self.notificationManager = notificationManager ?? NotificationManager()
+        let notifications = notificationManager ?? NotificationManager()
+        self.notificationManager = notifications
+        let outboxStore = OutboxStore(inMemory: true)
+        self.outboxStore = outboxStore
+        self.outboxService = OutboxService(
+            store: outboxStore, sendersByAccount: [:],
+            notifier: OutboxNotifier(manager: notifications),
+            postSendRefresh: { }
+        )
         self.defaults = defaults
 
         defaults.register(defaults: [
