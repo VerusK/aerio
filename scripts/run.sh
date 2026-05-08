@@ -22,7 +22,7 @@ enum BuildInfo {
     static let date = "$BUILD_DATE"
 
     static var shortLabel: String {
-        "\\(branch) · \\(commit)"
+        "Build: \\(commit)"
     }
 }
 EOF
