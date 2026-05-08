@@ -783,10 +783,13 @@ struct MainView: View {
             return nil
         }()
 
+        // No withAnimation here. Wrapping the selection move in an animation
+        // overlapped with the row-removal animation triggered by the emailsByAccount
+        // mutation, occasionally corrupting SwiftUI's StackLayout child buffer
+        // (EXC_BAD_ACCESS in StackLayout.makeChildren on rapid deletes).
+        // SwiftUI animates the row removal naturally; the selection just shifts.
+        selectedEmailId = nextEmailId
         Task {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedEmailId = nextEmailId
-            }
             do {
                 switch action {
                 case .archive:

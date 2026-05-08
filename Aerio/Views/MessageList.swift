@@ -58,12 +58,12 @@ struct MessageList: View {
             .frame(minWidth: 250)
             .onChange(of: selectedEmailId) { _, newValue in
                 if let newValue {
-                    // Use .center so the selected row is always clearly visible.
-                    // anchor: nil on macOS List often fails to scroll when the row
-                    // is technically "partially visible" or just off-screen.
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(newValue, anchor: .center)
-                    }
+                    // No withAnimation here: scrollTo can run concurrently with the
+                    // row-removal animation when SwiftUI re-renders the list after a
+                    // delete/archive, occasionally corrupting StackLayout's child
+                    // buffer (EXC_BAD_ACCESS). Immediate scroll, animations stay
+                    // confined to the row insertion/removal that SwiftUI handles.
+                    proxy.scrollTo(newValue, anchor: .center)
                 }
             }
             .onChange(of: selectedFolder) { _, _ in
