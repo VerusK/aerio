@@ -135,6 +135,8 @@ final class AppState: ObservableObject {
     static let downloadsDirectoryKey = "downloadsDirectory"
     static let pollIntervalKey = "pollInterval"
     static let defaultPollInterval: Double = 45
+    static let sendDelaySecondsKey = "sendDelaySeconds"
+    static let defaultSendDelaySeconds: Int = 15
     static let cacheRetentionDaysKey = "cacheRetentionDays"
     static let defaultCacheRetentionDays: Int = 30
     static let archiveOnReplyKey = "archiveOnReply"
@@ -176,7 +178,8 @@ final class AppState: ObservableObject {
             AppState.showDockBadgeKey: true,
             AppState.pollIntervalKey: AppState.defaultPollInterval,
             AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays,
-            AppState.archiveOnReplyKey: true
+            AppState.archiveOnReplyKey: true,
+            AppState.sendDelaySecondsKey: AppState.defaultSendDelaySeconds
         ])
         observeDockBadge()
 
@@ -234,7 +237,8 @@ final class AppState: ObservableObject {
             AppState.showDockBadgeKey: true,
             AppState.pollIntervalKey: AppState.defaultPollInterval,
             AppState.cacheRetentionDaysKey: AppState.defaultCacheRetentionDays,
-            AppState.archiveOnReplyKey: true
+            AppState.archiveOnReplyKey: true,
+            AppState.sendDelaySecondsKey: AppState.defaultSendDelaySeconds
         ])
         observeDockBadge()
     }

@@ -26,6 +26,7 @@ struct OutboxList: View {
 private struct OutboxRow: View {
     let item: OutboxItem
     @EnvironmentObject var outboxService: OutboxService
+    @State private var nowTick = Date()
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -37,6 +38,11 @@ private struct OutboxRow: View {
                 Text("To: \(item.recipientsPreview)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let countdown = pendingCountdownText {
+                    Text(countdown)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let err = item.lastError, item.status == .failed {
                     Text(err)
                         .font(.caption)
@@ -48,6 +54,22 @@ private struct OutboxRow: View {
             actions
         }
         .padding(.vertical, 4)
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            // Drives the pending countdown text. Only fires while this row is on screen.
+            nowTick = Date()
+        }
+    }
+
+    /// "Sending in 12s" text for a pending item with a future nextAttemptAt (Undo Send window
+    /// or backoff). Returns nil for items that should fire immediately or have already moved on.
+    private var pendingCountdownText: String? {
+        guard item.status == .pending else { return nil }
+        let secondsLeft = Int(item.nextAttemptAt.timeIntervalSince(nowTick).rounded(.up))
+        guard secondsLeft > 0 else { return nil }
+        if item.attemptCount > 0 {
+            return "Retrying in \(secondsLeft)s"
+        }
+        return "Sending in \(secondsLeft)s"
     }
 
     @ViewBuilder

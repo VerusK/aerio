@@ -814,6 +814,10 @@ struct ComposeView: View {
             messageId: messageId
         )
         let raw = RFC2822Builder.build(payload)
+        // Send delay (Undo Send window) — Outbox processes the item only after this delay.
+        // User can cancel via Outbox view. Default 15s, configurable in Settings.
+        let delaySeconds = max(0, UserDefaults.standard.integer(forKey: AppState.sendDelaySecondsKey))
+        let now = Date()
         let item = OutboxItem(
             id: UUID(),
             accountId: selectedAccountId,
@@ -825,8 +829,8 @@ struct ComposeView: View {
             recipientsPreview: ContactsCache.parseAddressList(toField).first?.email ?? toField,
             status: .pending,
             attemptCount: 0,
-            createdAt: Date(),
-            nextAttemptAt: Date(),
+            createdAt: now,
+            nextAttemptAt: now.addingTimeInterval(TimeInterval(delaySeconds)),
             archiveOnSuccessForMsgId: archiveOnSuccess ? replyToEmail?.msgId : nil,
             archiveOnSuccessForAccountId: archiveOnSuccess ? replyToEmail?.accountId : nil
         )

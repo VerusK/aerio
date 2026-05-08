@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(AppState.pollIntervalKey) private var pollInterval = AppState.defaultPollInterval
     @AppStorage(AppState.cacheRetentionDaysKey) private var cacheRetentionDays = AppState.defaultCacheRetentionDays
     @AppStorage(AppState.archiveOnReplyKey) private var archiveOnReply = true
+    @AppStorage(AppState.sendDelaySecondsKey) private var sendDelaySeconds = AppState.defaultSendDelaySeconds
     @State private var cacheDetails: [(name: String, path: String, size: Int64)] = []
     @State private var contentCacheCount: Int = 0
     @State private var cacheTotal: String = "Calculating…"
@@ -81,6 +82,18 @@ struct SettingsView: View {
                     Text("days")
                         .foregroundStyle(.secondary)
                 }
+
+                HStack {
+                    Text("Undo Send window")
+                    TextField("", value: $sendDelaySeconds, format: .number)
+                        .frame(width: 50)
+                        .multilineTextAlignment(.trailing)
+                    Text("sec")
+                        .foregroundStyle(.secondary)
+                }
+                Text("Outgoing messages wait this long in Outbox before being sent. Set to 0 to send immediately.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Cache") {
