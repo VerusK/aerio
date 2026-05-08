@@ -746,25 +746,13 @@ final class GmailAPIManager: ObservableObject {
     }
 
     private func buildRawMessage(from: String, to: String, cc: String?, subject: String, body: String, inReplyTo: String?, references: String?, htmlBody: String?, attachments: [RFC2822Builder.Attachment], inlineImages: [RFC2822Builder.InlineImage]) -> String {
-        if !attachments.isEmpty || !inlineImages.isEmpty {
-            return RFC2822Builder.buildRawHTMLMessageWithAttachments(
-                from: from, to: to, cc: cc, subject: subject,
-                htmlBody: htmlBody ?? "", plainBody: body,
-                attachments: attachments, inlineImages: inlineImages,
-                inReplyTo: inReplyTo, references: references
-            )
-        } else if let htmlBody, !htmlBody.isEmpty {
-            return RFC2822Builder.buildRawHTMLMessage(
-                from: from, to: to, cc: cc, subject: subject,
-                htmlBody: htmlBody, plainBody: body,
-                inReplyTo: inReplyTo, references: references
-            )
-        } else {
-            return RFC2822Builder.buildRawMessage(
-                from: from, to: to, cc: cc, subject: subject, body: body,
-                inReplyTo: inReplyTo, references: references
-            )
-        }
+        let payload = ComposePayload(
+            from: from, to: to, cc: cc, subject: subject, body: body,
+            inReplyTo: inReplyTo, references: references, htmlBody: htmlBody,
+            attachments: attachments, inlineImages: inlineImages,
+            messageId: nil
+        )
+        return RFC2822Builder.build(payload)
     }
 
     func sendEmail(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = [], threadId: String? = nil) async throws {
