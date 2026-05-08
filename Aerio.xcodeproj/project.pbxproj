@@ -54,6 +54,7 @@
 		OB0000000000000000000001 /* OutboxItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000002 /* OutboxItem.swift */; };
 		OB0000000000000000000003 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000004 /* OutboxStore.swift */; };
 		OB0000000000000000000005 /* ComposePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000006 /* ComposePayload.swift */; };
+		OB0000000000000000000007 /* OutboxSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000008 /* OutboxSender.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
 		OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */; };
 		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
@@ -122,6 +123,7 @@
 		OB0000000000000000000002 /* OutboxItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItem.swift; sourceTree = "<group>"; };
 		OB0000000000000000000004 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		OB0000000000000000000006 /* ComposePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposePayload.swift; sourceTree = "<group>"; };
+		OB0000000000000000000008 /* OutboxSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxSender.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFC2822BuilderPayloadTests.swift; sourceTree = "<group>"; };
 		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
@@ -233,6 +235,7 @@
 				FA0000000000000000000002 /* ContactsCache.swift */,
 				FB0000000000000000000002 /* NotificationManager.swift */,
 				OB0000000000000000000006 /* ComposePayload.swift */,
+				OB0000000000000000000008 /* OutboxSender.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -402,6 +405,7 @@
 				OB0000000000000000000001 /* OutboxItem.swift in Sources */,
 				OB0000000000000000000003 /* OutboxStore.swift in Sources */,
 				OB0000000000000000000005 /* ComposePayload.swift in Sources */,
+				OB0000000000000000000007 /* OutboxSender.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

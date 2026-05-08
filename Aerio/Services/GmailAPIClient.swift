@@ -57,6 +57,13 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
 
     // MARK: - Public API
 
+    /// Convenience: returns true if a message with the given RFC822 Message-ID exists in the SENT label.
+    /// Used by OutboxService for idempotency probes before retrying a send.
+    func findInSent(messageId: String) async throws -> Bool {
+        let response = try await listMessages(query: "rfc822msgid:\(messageId)", labelIds: ["SENT"], maxResults: 1)
+        return (response.messages?.isEmpty == false)
+    }
+
     func listMessages(query: String? = nil, labelIds: [String]? = nil, maxResults: Int = 50, pageToken: String? = nil) async throws -> GmailMessageListResponse {
         var queryItems = [URLQueryItem(name: "maxResults", value: String(maxResults))]
         if let query = query {
@@ -323,5 +330,13 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         refreshTask = task
         defer { refreshTask = nil }
         return try await task.value
+    }
+}
+
+// MARK: - OutboxSender conformance
+
+extension GmailAPIClient: OutboxSender {
+    func sendMessage(rawBase64URL: String, threadId: String?) async throws -> GmailMessage {
+        try await sendMessage(raw: rawBase64URL, threadId: threadId)
     }
 }
