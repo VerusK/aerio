@@ -30,6 +30,7 @@ jobs:
       - name: Generate BuildInfo
         env:
           BUILDINFO_BRANCH: ${{ github.ref_name }}
+          BUILDINFO_VERSION: ${{ steps.version.outputs.version }}
         run: ./scripts/gen-buildinfo.sh
 
       - name: Run tests

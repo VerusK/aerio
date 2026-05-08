@@ -213,7 +213,7 @@ struct UnifiedSidebar: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .help("\(BuildInfo.branch) · built \(BuildInfo.date)")
+                .help("Aerio v\(BuildInfo.version)\nBuild \(BuildInfo.commit) on \(BuildInfo.branch)\nBuilt \(BuildInfo.date)")
             Spacer()
         }
         .padding(.horizontal, 12)
