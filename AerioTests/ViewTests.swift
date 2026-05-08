@@ -301,6 +301,18 @@ final class ViewTests: XCTestCase {
         XCTAssertEqual(types.count, 5)
     }
 
+    @MainActor
+    private func makeStubOutbox() -> OutboxService {
+        let store = OutboxStore(inMemory: true)
+        return OutboxService(
+            store: store,
+            sendersByAccount: [:],
+            notifier: NoopNotifier(),
+            postSendRefresh: { }
+        )
+    }
+
+    @MainActor
     func testComposeViewInitializesWithDefaults() {
         let defaults = UserDefaults(suiteName: "ViewTests-compose-\(UUID().uuidString)")!
         let accountManager = AccountManager(defaults: defaults)
@@ -308,12 +320,13 @@ final class ViewTests: XCTestCase {
         let oauthManager = OAuthManager(keychainStore: mockKeychain)
         let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
 
-        let view = ComposeView(accountManager: accountManager, apiManager: apiManager)
+        let view = ComposeView(accountManager: accountManager, apiManager: apiManager, outboxService: makeStubOutbox())
         XCTAssertEqual(view.composeType, .new)
         XCTAssertNil(view.replyToEmail)
         XCTAssertNil(view.preselectedAccountId)
     }
 
+    @MainActor
     func testComposeViewInitializesWithReplyType() {
         let defaults = UserDefaults(suiteName: "ViewTests-compose-reply-\(UUID().uuidString)")!
         let accountManager = AccountManager(defaults: defaults)
@@ -322,12 +335,13 @@ final class ViewTests: XCTestCase {
         let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
 
         let email = Email(msgId: "msg1", from: "sender@test.com", subject: "Test", date: Date(), snippet: "Hello", isRead: false, accountId: "acc1", folder: .inbox)
-        let view = ComposeView(accountManager: accountManager, apiManager: apiManager, composeType: .reply, replyToEmail: email)
+        let view = ComposeView(accountManager: accountManager, apiManager: apiManager, outboxService: makeStubOutbox(), composeType: .reply, replyToEmail: email)
         XCTAssertEqual(view.composeType, .reply)
         XCTAssertNotNil(view.replyToEmail)
         XCTAssertEqual(view.replyToEmail?.from, "sender@test.com")
     }
 
+    @MainActor
     func testComposeViewInitializesWithPreselectedAccount() {
         let defaults = UserDefaults(suiteName: "ViewTests-compose-acct-\(UUID().uuidString)")!
         let accountManager = AccountManager(defaults: defaults)
@@ -335,7 +349,7 @@ final class ViewTests: XCTestCase {
         let oauthManager = OAuthManager(keychainStore: mockKeychain)
         let apiManager = GmailAPIManager(accountManager: accountManager, oauthManager: oauthManager, keychainStore: mockKeychain)
 
-        let view = ComposeView(accountManager: accountManager, apiManager: apiManager, preselectedAccountId: "acc-123")
+        let view = ComposeView(accountManager: accountManager, apiManager: apiManager, outboxService: makeStubOutbox(), preselectedAccountId: "acc-123")
         XCTAssertEqual(view.preselectedAccountId, "acc-123")
     }
 
