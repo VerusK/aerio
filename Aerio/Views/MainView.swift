@@ -625,6 +625,7 @@ struct MainView: View {
 
     /// Sidebar item for flat-list navigation
     private enum SidebarItem: Equatable {
+        case outbox
         case folder(Folder)
         case account(Folder, String) // folder + accountId
     }
@@ -632,6 +633,9 @@ struct MainView: View {
     /// Build flat list of visible sidebar items based on expanded state
     private var visibleSidebarItems: [SidebarItem] {
         var items: [SidebarItem] = []
+        if !outboxService.items.isEmpty {
+            items.append(.outbox)
+        }
         let hasMultipleAccounts = accountManager.accounts.count > 1
         for folder in Folder.allCases {
             items.append(.folder(folder))
@@ -646,6 +650,7 @@ struct MainView: View {
 
     /// Current sidebar cursor position
     private var currentSidebarItem: SidebarItem {
+        if sidebarSelection.isOutbox { return .outbox }
         if let accountId = selectedAccountId {
             return .account(selectedFolder, accountId)
         }
@@ -662,8 +667,11 @@ struct MainView: View {
 
     private func applySidebarItem(_ item: SidebarItem) {
         switch item {
+        case .outbox:
+            sidebarSelection = .outbox
+            selectedAccountId = nil
         case .folder(let folder):
-            if selectedFolder != folder || selectedAccountId != nil {
+            if sidebarSelection != .folder(folder) || selectedAccountId != nil {
                 sidebarSelection = .folder(folder)
                 selectedAccountId = nil
             }
