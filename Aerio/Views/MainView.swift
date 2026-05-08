@@ -141,7 +141,7 @@ struct MainView: View {
     var contactsCache: ContactsCache?
     var notificationManager: NotificationManager?
     @State private var selectedAccountId: String?
-    @State private var selectedFolder: Folder = .inbox
+    @State private var sidebarSelection: SidebarSelection = .folder(.inbox)
     @State private var selectedEmailId: String?
     @State private var showingCompose = false
     @State private var composeType: ComposeType = .new
@@ -166,6 +166,17 @@ struct MainView: View {
         self._searchViewModel = StateObject(wrappedValue: SearchViewModel(apiManager: apiManager))
     }
 
+    /// Computed projection of `sidebarSelection` for read sites that only care about the folder.
+    private var selectedFolder: Folder { sidebarSelection.folder }
+
+    /// Binding<Folder> wrapper around `sidebarSelection` for views that still expect it.
+    private var selectedFolderBinding: Binding<Folder> {
+        Binding(
+            get: { sidebarSelection.folder },
+            set: { sidebarSelection = .folder($0) }
+        )
+    }
+
     private var currentEmails: [Email] {
         unifiedMailbox.emails(for: selectedFolder, accountId: selectedAccountId)
     }
@@ -176,7 +187,7 @@ struct MainView: View {
                 accountManager: accountManager,
                 unifiedMailbox: unifiedMailbox,
                 oauthManager: oauthManager,
-                selectedFolder: $selectedFolder,
+                selectedFolder: selectedFolderBinding,
                 selectedAccountId: $selectedAccountId,
                 expandedFolders: $expandedFolders,
                 isFocused: focusedPanel == .sidebar,
@@ -222,11 +233,17 @@ struct MainView: View {
                 apiManager.markAsRead(emailId: email.id, accountId: email.accountId)
             }
         }
-        .onChange(of: selectedFolder) { oldValue, newValue in
+        .onChange(of: sidebarSelection) { oldValue, newValue in
             guard oldValue != newValue else { return }
-            unifiedMailbox.selectedFolder = newValue
+            // Outbox selection: skip mailbox folder navigation entirely.
+            if newValue.isOutbox {
+                if !isNavigatingProgrammatically { selectedEmailId = nil }
+                return
+            }
+            let folder = newValue.folder
+            unifiedMailbox.selectedFolder = folder
             if !isNavigatingProgrammatically { selectedEmailId = nil }
-            Task { await apiManager.navigateAllToFolder(newValue) }
+            Task { await apiManager.navigateAllToFolder(folder) }
         }
         .onAppear {
             keyMonitor.install { event in handleKeyEvent(event) }
@@ -269,7 +286,7 @@ struct MainView: View {
                             apiManager.emailsByAccount[accountId] = emails
                         }
                         isNavigatingProgrammatically = true
-                        selectedFolder = email.folder
+                        sidebarSelection = .folder(email.folder)
                         selectedAccountId = email.accountId
                         selectedEmailId = email.id
                         DispatchQueue.main.async { isNavigatingProgrammatically = false }
@@ -438,13 +455,13 @@ struct MainView: View {
         if let emails = apiManager.emailsByAccount[accountId],
            let email = emails.first(where: { $0.msgId == msgId }) {
             isNavigatingProgrammatically = true
-            selectedFolder = email.folder
+            sidebarSelection = .folder(email.folder)
             selectedAccountId = email.accountId
             selectedEmailId = email.id
             DispatchQueue.main.async { isNavigatingProgrammatically = false }
         } else {
             // Email not yet in memory — switch to inbox so next poll will show it
-            selectedFolder = .inbox
+            sidebarSelection = .folder(.inbox)
             selectedAccountId = accountId
         }
     }
@@ -637,11 +654,11 @@ struct MainView: View {
         switch item {
         case .folder(let folder):
             if selectedFolder != folder || selectedAccountId != nil {
-                selectedFolder = folder
+                sidebarSelection = .folder(folder)
                 selectedAccountId = nil
             }
         case .account(let folder, let accountId):
-            selectedFolder = folder
+            sidebarSelection = .folder(folder)
             selectedAccountId = accountId
         }
     }
@@ -676,7 +693,7 @@ struct MainView: View {
         default: return
         }
         selectedAccountId = nil
-        selectedFolder = folder
+        sidebarSelection = .folder(folder)
         focusedPanel = .messageList
     }
 

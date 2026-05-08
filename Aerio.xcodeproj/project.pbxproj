@@ -56,6 +56,7 @@
 		OB0000000000000000000005 /* ComposePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000006 /* ComposePayload.swift */; };
 		OB0000000000000000000007 /* OutboxSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000008 /* OutboxSender.swift */; };
 		OB0000000000000000000009 /* OutboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000000A /* OutboxService.swift */; };
+		OB000000000000000000000B /* SidebarSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000000C /* SidebarSelection.swift */; };
 		OB0000000000000000000017 /* OutboxServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000018 /* OutboxServiceTests.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
 		OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */; };
@@ -128,6 +129,7 @@
 		OB0000000000000000000006 /* ComposePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposePayload.swift; sourceTree = "<group>"; };
 		OB0000000000000000000008 /* OutboxSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxSender.swift; sourceTree = "<group>"; };
 		OB000000000000000000000A /* OutboxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxService.swift; sourceTree = "<group>"; };
+		OB000000000000000000000C /* SidebarSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelection.swift; sourceTree = "<group>"; };
 		OB0000000000000000000018 /* OutboxServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxServiceTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFC2822BuilderPayloadTests.swift; sourceTree = "<group>"; };
@@ -263,6 +265,7 @@
 				EF0000000000000000000002 /* SearchOverlay.swift */,
 				FC0000000000000000000002 /* ThreadMessageView.swift */,
 				FC0000000000000000000004 /* ThreadDetailView.swift */,
+				OB000000000000000000000C /* SidebarSelection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -416,6 +419,7 @@
 				OB0000000000000000000005 /* ComposePayload.swift in Sources */,
 				OB0000000000000000000007 /* OutboxSender.swift in Sources */,
 				OB0000000000000000000009 /* OutboxService.swift in Sources */,
+				OB000000000000000000000B /* SidebarSelection.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
