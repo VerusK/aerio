@@ -10,13 +10,23 @@ struct UnifiedSidebar: View {
     var isFocused: Bool = false
     var isRefreshing: Bool = false
     var onRefresh: (() -> Void)?
+    var isOutboxSelected: Bool = false
+    var onSelectOutbox: (() -> Void)?
+    @EnvironmentObject var outboxService: OutboxService
     @State private var showingAccountSetup = false
     @State private var editingAccount: Account?
+
+    private var outboxRowColor: Color {
+        outboxService.items.contains { $0.status == .failed } ? .red : .primary
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             Color.accentColor.opacity(isFocused ? 1 : 0).frame(height: 2)
             List {
+                if !outboxService.items.isEmpty {
+                    outboxRow
+                }
                 ForEach(Folder.allCases) { folder in
                     folderSection(folder)
                 }
@@ -36,6 +46,32 @@ struct UnifiedSidebar: View {
                 accountManager.updateAccount(updated)
             }
         }
+    }
+
+    // MARK: - Outbox row
+
+    private var outboxRow: some View {
+        Button(action: { onSelectOutbox?() }) {
+            HStack(spacing: 6) {
+                Image(systemName: "tray.and.arrow.up")
+                    .foregroundStyle(outboxRowColor)
+                    .frame(width: 18)
+                Text("Outbox")
+                    .foregroundStyle(outboxRowColor)
+                Spacer()
+                Text("\(outboxService.items.count)")
+                    .font(.caption.monospacedDigit())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(outboxRowColor.opacity(0.15))
+                    .clipShape(Capsule())
+                    .foregroundStyle(outboxRowColor)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(isOutboxSelected ? Color.accentColor.opacity(0.15) : Color.clear)
     }
 
     // MARK: - Folder section
