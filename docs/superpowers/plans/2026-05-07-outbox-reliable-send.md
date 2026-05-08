@@ -339,26 +339,17 @@ final class OutboxStore {
 
     init(inMemory: Bool = false) {
         let schema = Schema([OutboxItem.self])
-        let url = Self.storeURL()
-        let config: ModelConfiguration
-        if inMemory {
-            config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        } else {
-            config = ModelConfiguration(schema: schema, url: url)
-        }
+        // Same default location as EmailCache, but a separately-named store file ("outbox").
+        // SwiftData picks the per-app default URL; we just give the configuration a unique name
+        // so it doesn't collide with EmailCache's default-named container.
+        let config = ModelConfiguration("Outbox", schema: schema, isStoredInMemoryOnly: inMemory)
         do {
             self.container = try ModelContainer(for: schema, configurations: [config])
         } catch {
             logger.error("Failed to create outbox ModelContainer: \(error.localizedDescription). Falling back to in-memory.")
-            let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            let fallback = ModelConfiguration("Outbox", schema: schema, isStoredInMemoryOnly: true)
             self.container = try! ModelContainer(for: schema, configurations: [fallback])
         }
-    }
-
-    private static func storeURL() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return appSupport.appendingPathComponent("outbox.store")
     }
 
     func insert(_ item: OutboxItem) async throws {
@@ -798,7 +789,13 @@ actor MockOutboxSender: OutboxSender {
         case throwError(Error)
     }
 
-    var sendBehavior: Behavior = .success(GmailMessage(id: "sent-1", threadId: "t1", labelIds: [], snippet: nil, payload: nil, internalDate: nil, historyId: nil))
+    static let defaultSentMessage = GmailMessage(
+        id: "sent-1", threadId: "t1", labelIds: [],
+        snippet: nil, payload: nil, internalDate: nil,
+        historyId: nil, sizeEstimate: nil
+    )
+
+    var sendBehavior: Behavior = .success(MockOutboxSender.defaultSentMessage)
     var findInSentReturns: Bool = false
     var deleteDraftThrows: Error?
     var modifyMessageThrows: Error?
@@ -810,6 +807,8 @@ actor MockOutboxSender: OutboxSender {
 
     func setSendBehavior(_ b: Behavior) { sendBehavior = b }
     func setFindInSent(_ v: Bool) { findInSentReturns = v }
+    func setDeleteDraftThrows(_ e: Error?) { deleteDraftThrows = e }
+    func setModifyMessageThrows(_ e: Error?) { modifyMessageThrows = e }
 
     func sendMessage(rawBase64URL: String, threadId: String?) async throws -> GmailMessage {
         sendMessageCalls.append((rawBase64URL, threadId))
@@ -832,12 +831,16 @@ actor MockOutboxSender: OutboxSender {
     func modifyMessage(id: String, addLabels: [String]?, removeLabels: [String]?) async throws -> GmailMessage {
         modifyMessageCalls.append((id, addLabels, removeLabels))
         if let e = modifyMessageThrows { throw e }
-        return GmailMessage(id: id, threadId: nil, labelIds: nil, snippet: nil, payload: nil, internalDate: nil, historyId: nil)
+        return GmailMessage(
+            id: id, threadId: "t1", labelIds: nil,
+            snippet: nil, payload: nil, internalDate: nil,
+            historyId: nil, sizeEstimate: nil
+        )
     }
 }
 ```
 
-(If `GmailMessage`'s init signature differs, adjust. Check `Aerio/Models/GmailAPIModels.swift` to confirm.)
+Init signature matches `Aerio/Models/GmailAPIModels.swift:19-29`: 9 fields, `threadId` is `String` (non-optional), `sizeEstimate: Int?` is the trailing field.
 
 - [ ] **Step 2: Build to verify it compiles**
 
@@ -1051,9 +1054,11 @@ final class OutboxServiceProcessTests: XCTestCase {
 
         let stored = try await store.allItems()
         XCTAssertTrue(stored.isEmpty)
-        await XCTAssertEqual(await notifier.successCalls.count, 1)
+        let successCount = await notifier.successCalls.count
+        XCTAssertEqual(successCount, 1)
         XCTAssertTrue(refreshed)
-        await XCTAssertEqual(await sender.findInSentCalls.count, 0, "no idempotency probe on first attempt")
+        let probeCount = await sender.findInSentCalls.count
+        XCTAssertEqual(probeCount, 0, "no idempotency probe on first attempt")
     }
 }
 
@@ -1109,14 +1114,18 @@ extension OutboxService {
             if item.attemptCount > 0 {
                 if try await sender.findInSent(messageId: item.messageIdHeader) {
                     logger.info("idempotency: \(item.messageIdHeader) already in SENT, treating as success")
-                    await onSuccess(item)
+                    // We don't have the GmailMessage from a probe — pass nil so onSuccess
+                    // skips the self-send INBOX strip in this rare path. Idempotency-recovered
+                    // sends already exist in SENT; if they're also in INBOX (self-send), the
+                    // user has lived with that for the brief window between attempts.
+                    await onSuccess(item, sentMessage: nil)
                     return
                 }
             }
 
             let raw = String(data: item.rawMime, encoding: .utf8) ?? ""
-            _ = try await sender.sendMessage(rawBase64URL: raw, threadId: item.threadId)
-            await onSuccess(item)
+            let sentMessage = try await sender.sendMessage(rawBase64URL: raw, threadId: item.threadId)
+            await onSuccess(item, sentMessage: sentMessage)
         } catch {
             // Classification + retry handled in Task 9
             logger.error("attemptSend failed: \(error.localizedDescription)")
@@ -1127,7 +1136,7 @@ extension OutboxService {
         }
     }
 
-    private func onSuccess(_ item: OutboxItem) async {
+    private func onSuccess(_ item: OutboxItem, sentMessage: GmailMessage?) async {
         try? await store.delete(id: item.id)
         await notifier.notifySuccess(item: item)
         await postSendRefresh()
@@ -1184,7 +1193,8 @@ func testProcess_transientErrorReschedulesPendingWithBackoff() async throws {
     XCTAssertEqual(after.first?.status, .pending)
     XCTAssertEqual(after.first?.attemptCount, 1)
     XCTAssertEqual(after.first?.nextAttemptAt, fixedNow.addingTimeInterval(10))
-    await XCTAssertTrue(await notifier.failureCalls.isEmpty)
+    let failureCount = await notifier.failureCalls.count
+    XCTAssertEqual(failureCount, 0)
 }
 
 func testProcess_threeTransientFailuresMarksFailed() async throws {
@@ -1208,8 +1218,10 @@ func testProcess_threeTransientFailuresMarksFailed() async throws {
     XCTAssertEqual(after.count, 1)
     XCTAssertEqual(after.first?.status, .failed)
     XCTAssertEqual(after.first?.attemptCount, 3)
-    await XCTAssertEqual(await notifier.failureCalls.count, 1)
-    await XCTAssertEqual(await notifier.failureCalls.first?.1, false, "permanent flag should be false (exhausted, not permanent)")
+    let failureCount = await notifier.failureCalls.count
+    XCTAssertEqual(failureCount, 1)
+    let permanentFlag = await notifier.failureCalls.first?.1
+    XCTAssertEqual(permanentFlag, false, "permanent flag should be false (exhausted, not permanent)")
 }
 
 func testProcess_permanentErrorMarksFailedImmediately() async throws {
@@ -1229,7 +1241,8 @@ func testProcess_permanentErrorMarksFailedImmediately() async throws {
     let after = try await store.allItems()
     XCTAssertEqual(after.first?.status, .failed)
     XCTAssertEqual(after.first?.attemptCount, 1)
-    await XCTAssertEqual(await notifier.failureCalls.first?.1, true, "permanent should be true")
+    let permanentFlag = await notifier.failureCalls.first?.1
+    XCTAssertEqual(permanentFlag, true, "permanent should be true")
 }
 ```
 
@@ -1339,9 +1352,12 @@ func testIdempotency_skipsSendWhenMessageAlreadyInSent() async throws {
 
     let after = try await store.allItems()
     XCTAssertTrue(after.isEmpty, "item should be deleted as success via idempotency")
-    await XCTAssertEqual(await sender.findInSentCalls.count, 1)
-    await XCTAssertEqual(await sender.sendMessageCalls.count, 0, "should NOT send when already in SENT")
-    await XCTAssertEqual(await notifier.successCalls.count, 1)
+    let probeCount = await sender.findInSentCalls.count
+    XCTAssertEqual(probeCount, 1)
+    let sendCount = await sender.sendMessageCalls.count
+    XCTAssertEqual(sendCount, 0, "should NOT send when already in SENT")
+    let successCount = await notifier.successCalls.count
+    XCTAssertEqual(successCount, 1)
     XCTAssertTrue(refreshed)
 }
 
@@ -1357,8 +1373,10 @@ func testIdempotency_doesNotProbeOnFirstAttempt() async throws {
 
     await service.processOnce()
 
-    await XCTAssertEqual(await sender.findInSentCalls.count, 0)
-    await XCTAssertEqual(await sender.sendMessageCalls.count, 1)
+    let probeCount = await sender.findInSentCalls.count
+    XCTAssertEqual(probeCount, 0)
+    let sendCount = await sender.sendMessageCalls.count
+    XCTAssertEqual(sendCount, 1)
 }
 ```
 
@@ -1450,11 +1468,16 @@ git commit -m "feat(outbox): resumeOnLaunch resets stuck .sending items to .pend
 
 ---
 
-## Task 12: Post-success side effects (delete draft, archive inbox)
+## Task 12: Post-success side effects (delete draft, archive inbox, strip self-send INBOX)
 
 **Files:**
 - Modify: `Aerio/Services/OutboxService.swift`
 - Test:   extend `AerioTests/OutboxServiceTests.swift`
+
+This task preserves three existing side-effects when the send completes:
+1. **Consumed draft deletion** — currently in `ComposeView.sendMessage` for `composeType == .draft`.
+2. **Archive replied-to inbox message** — currently in `ComposeView.sendMessage` when `archiveOnReply` is enabled.
+3. **Self-send INBOX strip** — currently in `GmailAPIManager.sendEmail` lines 774-777 and `sendDraft` lines 862-865. When you send to your own address, Gmail labels the message with INBOX too. Existing code strips it. Without preservation this is a regression: self-emails would clutter the inbox.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1471,7 +1494,8 @@ func testSideEffects_deletesDraftWhenDraftIdToConsumeSet() async throws {
 
     await service.processOnce()
 
-    await XCTAssertEqual(await sender.deleteDraftCalls, ["draft-99"])
+    let calls = await sender.deleteDraftCalls
+    XCTAssertEqual(calls, ["draft-99"])
 }
 
 func testSideEffects_archivesInboxMessageOnReplyWhenFlagged() async throws {
@@ -1494,10 +1518,54 @@ func testSideEffects_archivesInboxMessageOnReplyWhenFlagged() async throws {
     XCTAssertEqual(calls.first?.remove ?? [], ["INBOX"])
 }
 
+func testSideEffects_stripsInboxFromSelfSentMessage() async throws {
+    let store = OutboxStore(inMemory: true)
+    let sender = MockOutboxSender()
+    // Returned GmailMessage has INBOX label → self-send detected.
+    await sender.setSendBehavior(.success(GmailMessage(
+        id: "sent-abc", threadId: "t1", labelIds: ["INBOX", "SENT"],
+        snippet: nil, payload: nil, internalDate: nil,
+        historyId: nil, sizeEstimate: nil
+    )))
+    let service = OutboxService(
+        store: store, sendersByAccount: ["a": sender],
+        notifier: NoopNotifier(), postSendRefresh: { }
+    )
+    try await store.insert(makeItem(account: "a"))
+
+    await service.processOnce()
+
+    let calls = await sender.modifyMessageCalls
+    XCTAssertEqual(calls.count, 1, "exactly one INBOX-strip call")
+    XCTAssertEqual(calls.first?.id, "sent-abc")
+    XCTAssertEqual(calls.first?.remove ?? [], ["INBOX"])
+}
+
+func testSideEffects_doesNotStripInboxWhenLabelAbsent() async throws {
+    let store = OutboxStore(inMemory: true)
+    let sender = MockOutboxSender()
+    // Sent message landed only in SENT — normal recipient, not self.
+    await sender.setSendBehavior(.success(GmailMessage(
+        id: "sent-xyz", threadId: "t1", labelIds: ["SENT"],
+        snippet: nil, payload: nil, internalDate: nil,
+        historyId: nil, sizeEstimate: nil
+    )))
+    let service = OutboxService(
+        store: store, sendersByAccount: ["a": sender],
+        notifier: NoopNotifier(), postSendRefresh: { }
+    )
+    try await store.insert(makeItem(account: "a"))
+
+    await service.processOnce()
+
+    let calls = await sender.modifyMessageCalls
+    XCTAssertTrue(calls.isEmpty, "no modifyMessage call when INBOX absent")
+}
+
 func testSideEffects_failureIsLoggedNotPropagated() async throws {
     let store = OutboxStore(inMemory: true)
     let sender = MockOutboxSender()
-    sender.deleteDraftThrows = GmailAPIError.networkError("dropped")
+    await sender.setDeleteDraftThrows(GmailAPIError.networkError("dropped"))
     let notifier = RecordingNotifier()
     let service = OutboxService(
         store: store, sendersByAccount: ["a": sender],
@@ -1508,8 +1576,9 @@ func testSideEffects_failureIsLoggedNotPropagated() async throws {
 
     await service.processOnce()
 
-    // success notification still fires; deleteDraft failure was swallowed
-    await XCTAssertEqual(await notifier.successCalls.count, 1)
+    // Success notification still fires; deleteDraft failure was swallowed.
+    let successCount = await notifier.successCalls.count
+    XCTAssertEqual(successCount, 1)
     let stored = try await store.allItems()
     XCTAssertTrue(stored.isEmpty)
 }
@@ -1521,28 +1590,36 @@ func testSideEffects_failureIsLoggedNotPropagated() async throws {
 xcodebuild test -project Aerio.xcodeproj -scheme Aerio -destination 'platform=macOS' -only-testing:AerioTests/OutboxServiceProcessTests
 ```
 
-Expected: tests fail (side effects not yet wired).
+Expected: side-effect tests fail (none of the side-effects are wired yet).
 
-- [ ] **Step 3: Update `onSuccess` to do side effects**
+- [ ] **Step 3: Update `onSuccess` to do all three side effects**
 
 Replace `onSuccess` in `OutboxService.swift` with:
 
 ```swift
-private func onSuccess(_ item: OutboxItem) async {
+private func onSuccess(_ item: OutboxItem, sentMessage: GmailMessage?) async {
     let sender = sendersByAccount[item.accountId]
 
-    // Delete consumed draft (best-effort)
+    // 1. Delete consumed draft (best-effort).
     if let draftId = item.draftIdToConsume, let sender {
         do { try await sender.deleteDraft(draftId: draftId) }
         catch { logger.error("deleteDraft failed (ignored): \(error.localizedDescription)") }
     }
 
-    // Archive replied-to inbox message (best-effort)
+    // 2. Archive replied-to inbox message (best-effort).
     if let archiveId = item.archiveOnSuccessForMsgId,
        let archiveAccount = item.archiveOnSuccessForAccountId,
-       let sender = sendersByAccount[archiveAccount] {
-        do { _ = try await sender.modifyMessage(id: archiveId, addLabels: nil, removeLabels: ["INBOX"]) }
+       let archiveSender = sendersByAccount[archiveAccount] {
+        do { _ = try await archiveSender.modifyMessage(id: archiveId, addLabels: nil, removeLabels: ["INBOX"]) }
         catch { logger.error("archive inbox failed (ignored): \(error.localizedDescription)") }
+    }
+
+    // 3. Strip INBOX label from self-sent messages so they don't clutter the user's inbox.
+    //    Gmail attaches INBOX to messages whose recipient matches the sender's address.
+    //    This preserves the existing behavior in GmailAPIManager.sendEmail/sendDraft.
+    if let sent = sentMessage, (sent.labelIds ?? []).contains("INBOX"), let sender {
+        do { _ = try await sender.modifyMessage(id: sent.id, addLabels: nil, removeLabels: ["INBOX"]) }
+        catch { logger.error("self-send INBOX strip failed (ignored): \(error.localizedDescription)") }
     }
 
     try? await store.delete(id: item.id)
@@ -1598,7 +1675,8 @@ func testProcess_corruptItemDoesNotStallQueue() async throws {
     XCTAssertEqual(stored.count, 1)
     XCTAssertEqual(stored.first?.status, .failed, "bad item is failed")
     XCTAssertEqual(stored.first?.subject, "bad")
-    await XCTAssertEqual(await sender.sendMessageCalls.count, 1, "good item was sent")
+    let sendCount = await sender.sendMessageCalls.count
+    XCTAssertEqual(sendCount, 1, "good item was sent")
 }
 ```
 
@@ -1771,7 +1849,8 @@ final class OutboxServiceLoopTests: XCTestCase {
 
         let stored = try await store.allItems()
         XCTAssertTrue(stored.isEmpty)
-        await XCTAssertEqual(await notifier.successCalls.count, 1)
+        let successCount = await notifier.successCalls.count
+        XCTAssertEqual(successCount, 1)
 
         service.stopLoop()
     }
@@ -2580,7 +2659,9 @@ Delete these `@State` declarations (lines around 44-47):
 
 Delete the entire `if let sendError { ... }` block (lines around 163-174).
 
-Find the Send button (`Button(action: { sendMessage() })`) and remove the `if isSending { ... } else if isSending { ... }` branch — replace with the simple "Send" label always.
+Find the toolbar row that shows "Sending…" state in `ComposeView.swift` (around lines 420-426: the `} else if isSending { ProgressView() ... Text("Sending…") }` block). Delete the entire `else if isSending` arm — the parent `if/else` chain collapses to whatever the preceding branch was.
+
+Update the Send button's `.disabled(...)` modifier (line 450): change `.disabled(isSending || isLoadingRecipients || isLoadingDraft || toField.isEmpty)` to `.disabled(isLoadingRecipients || isLoadingDraft || toField.isEmpty)` (drop the `isSending` term — that state no longer exists).
 
 - [ ] **Step 7: Run tests**
 
