@@ -148,40 +148,40 @@ final class OutboxNotifier: OutboxNotifying {
         self.manager = manager
     }
 
-    func notifySuccess(item: OutboxItem) async {
+    func notifySuccess(snapshot: OutboxItemSnapshot) async {
         let isAuthorized = await MainActor.run { manager?.isAuthorized ?? false }
         guard isAuthorized else { return }
         let isFrontmost = await MainActor.run { NSApp?.isActive == true }
         if isFrontmost { return }
         let content = UNMutableNotificationContent()
         content.title = "Sent"
-        content.subtitle = item.subject
-        content.body = "to \(item.recipientsPreview)"
+        content.subtitle = snapshot.subject
+        content.body = "to \(snapshot.recipientsPreview)"
         content.categoryIdentifier = NotificationManager.outboxSuccessCategory
         content.sound = .default
         let request = UNNotificationRequest(
-            identifier: "outbox_success_\(item.id)",
+            identifier: "outbox_success_\(snapshot.id)",
             content: content,
             trigger: nil
         )
         try? await UNUserNotificationCenter.current().add(request)
     }
 
-    func notifyFailure(item: OutboxItem, permanent: Bool) async {
+    func notifyFailure(snapshot: OutboxItemSnapshot, permanent: Bool) async {
         let isAuthorized = await MainActor.run { manager?.isAuthorized ?? false }
         guard isAuthorized else { return }
         let content = UNMutableNotificationContent()
         content.title = "Failed to send"
-        content.subtitle = item.subject
-        let detail = item.lastError ?? "Unknown error"
+        content.subtitle = snapshot.subject
+        let detail = snapshot.lastError ?? "Unknown error"
         content.body = permanent
             ? "\(detail) — Sign in again to retry."
             : "\(detail) — Tap Retry."
         content.categoryIdentifier = NotificationManager.outboxFailureCategory
-        content.userInfo = ["outboxItemId": item.id.uuidString]
+        content.userInfo = ["outboxItemId": snapshot.id.uuidString]
         content.sound = .default
         let request = UNNotificationRequest(
-            identifier: "outbox_failure_\(item.id)",
+            identifier: "outbox_failure_\(snapshot.id)",
             content: content,
             trigger: nil
         )

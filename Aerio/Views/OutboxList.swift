@@ -23,6 +23,11 @@ struct OutboxList: View {
     }
 }
 
+/// One stable timer publisher per view tree, hoisted out of view body to avoid
+/// republishing on every re-render (which can cause SwiftUI subscription churn
+/// and rare layout crashes when the parent updates rapidly).
+private let outboxRowTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
 private struct OutboxRow: View {
     let item: OutboxItem
     @EnvironmentObject var outboxService: OutboxService
@@ -54,8 +59,9 @@ private struct OutboxRow: View {
             actions
         }
         .padding(.vertical, 4)
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            // Drives the pending countdown text. Only fires while this row is on screen.
+        .onReceive(outboxRowTimer) { _ in
+            // Drives the pending countdown text. Cheap when the row is off-screen
+            // (SwiftUI gates onReceive on visibility for List rows).
             nowTick = Date()
         }
     }

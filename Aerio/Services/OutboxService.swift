@@ -3,11 +3,52 @@ import os.log
 
 private let logger = Logger(subsystem: "Aerio", category: "OutboxService")
 
+/// Plain-data view of an OutboxItem captured BEFORE the underlying @Model
+/// is deleted from the SwiftData store. Anything that runs after a delete
+/// (notifications, side effects) must use this snapshot, not the live model.
+struct OutboxItemSnapshot: Sendable {
+    let id: UUID
+    let accountId: String
+    let subject: String
+    let recipientsPreview: String
+    let lastError: String?
+    let draftIdToConsume: String?
+    let archiveOnSuccessForMsgId: String?
+    let archiveOnSuccessForAccountId: String?
+
+    @MainActor
+    init(_ item: OutboxItem) {
+        self.id = item.id
+        self.accountId = item.accountId
+        self.subject = item.subject
+        self.recipientsPreview = item.recipientsPreview
+        self.lastError = item.lastError
+        self.draftIdToConsume = item.draftIdToConsume
+        self.archiveOnSuccessForMsgId = item.archiveOnSuccessForMsgId
+        self.archiveOnSuccessForAccountId = item.archiveOnSuccessForAccountId
+    }
+
+    init(
+        id: UUID, accountId: String, subject: String, recipientsPreview: String,
+        lastError: String?, draftIdToConsume: String?,
+        archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?
+    ) {
+        self.id = id
+        self.accountId = accountId
+        self.subject = subject
+        self.recipientsPreview = recipientsPreview
+        self.lastError = lastError
+        self.draftIdToConsume = draftIdToConsume
+        self.archiveOnSuccessForMsgId = archiveOnSuccessForMsgId
+        self.archiveOnSuccessForAccountId = archiveOnSuccessForAccountId
+    }
+}
+
 /// Receives notifications about outbox item lifecycle. Production: OutboxNotifier (in NotificationManager.swift).
 /// Tests: NoopNotifier or RecordingNotifier.
 protocol OutboxNotifying: Sendable {
-    func notifySuccess(item: OutboxItem) async
-    func notifyFailure(item: OutboxItem, permanent: Bool) async
+    func notifySuccess(snapshot: OutboxItemSnapshot) async
+    func notifyFailure(snapshot: OutboxItemSnapshot, permanent: Bool) async
 }
 
 @MainActor
@@ -89,7 +130,7 @@ extension OutboxService {
             item.status = .failed
             item.lastError = "Processing crashed: \(error.localizedDescription)"
             try? store.save()
-            await notifier.notifyFailure(item: item, permanent: true)
+            await notifier.notifyFailure(snapshot: OutboxItemSnapshot(item), permanent: true)
         }
     }
 
@@ -101,7 +142,7 @@ extension OutboxService {
             item.status = .failed
             item.lastError = "Account removed"
             try? store.save()
-            await notifier.notifyFailure(item: item, permanent: true)
+            await notifier.notifyFailure(snapshot: OutboxItemSnapshot(item), permanent: true)
             return
         }
 
@@ -125,11 +166,11 @@ extension OutboxService {
             if classification == .permanent {
                 item.status = .failed
                 try? store.save()
-                await notifier.notifyFailure(item: item, permanent: true)
+                await notifier.notifyFailure(snapshot: OutboxItemSnapshot(item), permanent: true)
             } else if item.attemptCount >= 3 {
                 item.status = .failed
                 try? store.save()
-                await notifier.notifyFailure(item: item, permanent: false)
+                await notifier.notifyFailure(snapshot: OutboxItemSnapshot(item), permanent: false)
             } else {
                 item.status = .pending
                 item.nextAttemptAt = now().addingTimeInterval(Self.backoffSeconds(for: item.attemptCount))
@@ -139,17 +180,22 @@ extension OutboxService {
     }
 
     private func onSuccess(_ item: OutboxItem, sentMessage: GmailMessage?) async {
-        let sender = sendersByAccount[item.accountId]
+        // Snapshot every field we'll touch AFTER the SwiftData model is deleted.
+        // Reading properties on a deleted @Model is undefined behavior and
+        // can segfault — surfaced as an EXC_BAD_ACCESS in SwiftUI layout
+        // when the @Published items array re-renders downstream.
+        let snapshot = OutboxItemSnapshot(item)
+        let sender = sendersByAccount[snapshot.accountId]
 
         // 1. Delete consumed draft (best-effort).
-        if let draftId = item.draftIdToConsume, let sender {
+        if let draftId = snapshot.draftIdToConsume, let sender {
             do { try await sender.deleteDraft(draftId: draftId) }
             catch { logger.error("deleteDraft failed (ignored): \(error.localizedDescription)") }
         }
 
         // 2. Archive replied-to inbox message (best-effort).
-        if let archiveId = item.archiveOnSuccessForMsgId,
-           let archiveAccount = item.archiveOnSuccessForAccountId,
+        if let archiveId = snapshot.archiveOnSuccessForMsgId,
+           let archiveAccount = snapshot.archiveOnSuccessForAccountId,
            let archiveSender = sendersByAccount[archiveAccount] {
             do { _ = try await archiveSender.modifyMessage(id: archiveId, addLabels: nil, removeLabels: ["INBOX"]) }
             catch { logger.error("archive inbox failed (ignored): \(error.localizedDescription)") }
@@ -161,8 +207,8 @@ extension OutboxService {
             catch { logger.error("self-send INBOX strip failed (ignored): \(error.localizedDescription)") }
         }
 
-        try? await store.delete(id: item.id)
-        await notifier.notifySuccess(item: item)
+        try? await store.delete(id: snapshot.id)
+        await notifier.notifySuccess(snapshot: snapshot)
         await postSendRefresh()
     }
 

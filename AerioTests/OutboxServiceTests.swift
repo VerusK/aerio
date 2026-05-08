@@ -29,15 +29,15 @@ func makeItem(
 }
 
 actor NoopNotifier: OutboxNotifying {
-    func notifySuccess(item: OutboxItem) { }
-    func notifyFailure(item: OutboxItem, permanent: Bool) { }
+    func notifySuccess(snapshot: OutboxItemSnapshot) { }
+    func notifyFailure(snapshot: OutboxItemSnapshot, permanent: Bool) { }
 }
 
 actor RecordingNotifier: OutboxNotifying {
-    var successCalls: [OutboxItem] = []
-    var failureCalls: [(OutboxItem, Bool)] = []
-    func notifySuccess(item: OutboxItem) { successCalls.append(item) }
-    func notifyFailure(item: OutboxItem, permanent: Bool) { failureCalls.append((item, permanent)) }
+    var successCalls: [OutboxItemSnapshot] = []
+    var failureCalls: [(OutboxItemSnapshot, Bool)] = []
+    func notifySuccess(snapshot: OutboxItemSnapshot) { successCalls.append(snapshot) }
+    func notifyFailure(snapshot: OutboxItemSnapshot, permanent: Bool) { failureCalls.append((snapshot, permanent)) }
 }
 
 // MARK: - Enqueue tests
