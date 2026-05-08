@@ -93,14 +93,30 @@ jobs:
           fi
 
       - name: Update Homebrew tap
+        # Tap update is post-release housekeeping — DMG is already on the GitHub release.
+        # Don't fail the whole workflow if this step has issues (e.g., TAP_TOKEN expired).
+        # If it fails, run scripts/update-tap.sh locally and re-run.
+        continue-on-error: true
         env:
           TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
+          set -e
           VERSION=${{ steps.version.outputs.version }}
           SHA=${{ steps.sha.outputs.sha256 }}
 
-          git clone https://x-access-token:${TAP_TOKEN}@github.com/VerusK/homebrew-aerio.git $RUNNER_TEMP/tap
-          cd $RUNNER_TEMP/tap
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error::TAP_TOKEN secret is empty. Set a PAT with 'repo' scope at"
+            echo "::error::  https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "::error::Then re-run the script locally: scripts/update-tap.sh ${VERSION} ${SHA}"
+            exit 1
+          fi
+
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/VerusK/homebrew-aerio.git" "$RUNNER_TEMP/tap" || {
+            echo "::error::Failed to clone homebrew-aerio. TAP_TOKEN may be invalid/expired."
+            echo "::error::Refresh the PAT and update the TAP_TOKEN secret, then run scripts/update-tap.sh ${VERSION} ${SHA} locally."
+            exit 1
+          }
+          cd "$RUNNER_TEMP/tap"
 
           sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/aerio.rb
           sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/aerio.rb
@@ -109,4 +125,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Casks/aerio.rb
           git commit -m "Update Aerio to ${VERSION}"
-          git push
+          git push 2>&1 | tee /tmp/push.log || {
+            echo "::error::git push to homebrew-aerio failed."
+            if grep -q "Invalid username or token" /tmp/push.log; then
+              echo "::error::TAP_TOKEN is expired or revoked. Refresh PAT at:"
+              echo "::error::  https://github.com/settings/personal-access-tokens"
+              echo "::error::Update secret at:"
+              echo "::error::  https://github.com/${{ github.repository }}/settings/secrets/actions"
+              echo "::error::Meanwhile, run locally: scripts/update-tap.sh ${VERSION} ${SHA}"
+            fi
+            exit 1
+          }
