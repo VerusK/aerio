@@ -8,7 +8,8 @@ struct RFC2822Builder {
         subject: String,
         body: String,
         inReplyTo: String? = nil,
-        references: String? = nil
+        references: String? = nil,
+        messageId: String? = nil
     ) -> String {
         var lines: [String] = []
         let sanitize = { (s: String) in s.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "") }
@@ -18,6 +19,9 @@ struct RFC2822Builder {
             lines.append("Cc: \(sanitize(cc))")
         }
         lines.append("Subject: \(qEncode(subject))")
+        if let messageId, !messageId.isEmpty {
+            lines.append("Message-ID: \(messageId)")
+        }
         lines.append("MIME-Version: 1.0")
         lines.append("Content-Type: text/plain; charset=UTF-8")
         lines.append("Content-Transfer-Encoding: base64")
@@ -43,7 +47,8 @@ struct RFC2822Builder {
         htmlBody: String,
         plainBody: String,
         inReplyTo: String? = nil,
-        references: String? = nil
+        references: String? = nil,
+        messageId: String? = nil
     ) -> String {
         let boundary = "boundary_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         var lines: [String] = []
@@ -54,6 +59,9 @@ struct RFC2822Builder {
             lines.append("Cc: \(sanitize(cc))")
         }
         lines.append("Subject: \(qEncode(subject))")
+        if let messageId, !messageId.isEmpty {
+            lines.append("Message-ID: \(messageId)")
+        }
         lines.append("MIME-Version: 1.0")
         lines.append("Content-Type: multipart/alternative; boundary=\"\(boundary)\"")
         if let inReplyTo = inReplyTo, !inReplyTo.isEmpty {
@@ -108,7 +116,8 @@ struct RFC2822Builder {
         attachments: [Attachment] = [],
         inlineImages: [InlineImage] = [],
         inReplyTo: String? = nil,
-        references: String? = nil
+        references: String? = nil,
+        messageId: String? = nil
     ) -> String {
         let mixedBoundary = "mixed_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         let relatedBoundary = "related_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
@@ -124,6 +133,9 @@ struct RFC2822Builder {
             lines.append("Cc: \(sanitize(cc))")
         }
         lines.append("Subject: \(qEncode(subject))")
+        if let messageId, !messageId.isEmpty {
+            lines.append("Message-ID: \(messageId)")
+        }
         lines.append("MIME-Version: 1.0")
 
         if hasAttachments {
@@ -248,5 +260,34 @@ struct RFC2822Builder {
 
     static func base64URLDecode(_ string: String) -> Data? {
         Data.fromBase64URL(string)
+    }
+}
+
+extension RFC2822Builder {
+    /// Single entry point — picks the right MIME structure based on the payload.
+    static func build(_ payload: ComposePayload) -> String {
+        if !payload.attachments.isEmpty || !payload.inlineImages.isEmpty {
+            return buildRawHTMLMessageWithAttachments(
+                from: payload.from, to: payload.to, cc: payload.cc, subject: payload.subject,
+                htmlBody: payload.htmlBody ?? payload.body, plainBody: payload.body,
+                attachments: payload.attachments, inlineImages: payload.inlineImages,
+                inReplyTo: payload.inReplyTo, references: payload.references,
+                messageId: payload.messageId
+            )
+        }
+        if let html = payload.htmlBody, !html.isEmpty {
+            return buildRawHTMLMessage(
+                from: payload.from, to: payload.to, cc: payload.cc, subject: payload.subject,
+                htmlBody: html, plainBody: payload.body,
+                inReplyTo: payload.inReplyTo, references: payload.references,
+                messageId: payload.messageId
+            )
+        }
+        return buildRawMessage(
+            from: payload.from, to: payload.to, cc: payload.cc, subject: payload.subject,
+            body: payload.body,
+            inReplyTo: payload.inReplyTo, references: payload.references,
+            messageId: payload.messageId
+        )
     }
 }

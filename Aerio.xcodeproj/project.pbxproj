@@ -53,7 +53,9 @@
 		FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000004 /* NotificationManagerTests.swift */; };
 		OB0000000000000000000001 /* OutboxItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000002 /* OutboxItem.swift */; };
 		OB0000000000000000000003 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000004 /* OutboxStore.swift */; };
+		OB0000000000000000000005 /* ComposePayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000006 /* ComposePayload.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
+		OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */; };
 		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
 			FC0000000000000000000001 /* ThreadMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000002 /* ThreadMessageView.swift */; };
 			FC0000000000000000000003 /* ThreadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000004 /* ThreadDetailView.swift */; };
@@ -119,7 +121,9 @@
 		FB0000000000000000000004 /* NotificationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManagerTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000002 /* OutboxItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItem.swift; sourceTree = "<group>"; };
 		OB0000000000000000000004 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
+		OB0000000000000000000006 /* ComposePayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposePayload.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
+		OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFC2822BuilderPayloadTests.swift; sourceTree = "<group>"; };
 		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
 			FC0000000000000000000002 /* ThreadMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadMessageView.swift; sourceTree = "<group>"; };
 			FC0000000000000000000004 /* ThreadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadDetailView.swift; sourceTree = "<group>"; };
@@ -189,6 +193,7 @@
 				FA0000000000000000000004 /* ContactsCacheTests.swift */,
 				FB0000000000000000000004 /* NotificationManagerTests.swift */,
 				OB0000000000000000000012 /* OutboxItemTests.swift */,
+				OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */,
 			);
 			path = AerioTests;
 			sourceTree = "<group>";
@@ -227,6 +232,7 @@
 				5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */,
 				FA0000000000000000000002 /* ContactsCache.swift */,
 				FB0000000000000000000002 /* NotificationManager.swift */,
+				OB0000000000000000000006 /* ComposePayload.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -395,6 +401,7 @@
 				FC0000000000000000000003 /* ThreadDetailView.swift in Sources */,
 				OB0000000000000000000001 /* OutboxItem.swift in Sources */,
 				OB0000000000000000000003 /* OutboxStore.swift in Sources */,
+				OB0000000000000000000005 /* ComposePayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,6 +428,7 @@
 				FA0000000000000000000003 /* ContactsCacheTests.swift in Sources */,
 				FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */,
 				OB0000000000000000000011 /* OutboxItemTests.swift in Sources */,
+				OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
