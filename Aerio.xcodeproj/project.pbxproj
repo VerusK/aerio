@@ -57,6 +57,7 @@
 		OB0000000000000000000007 /* OutboxSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000008 /* OutboxSender.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
 		OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */; };
+		OB0000000000000000000015 /* MockOutboxSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000016 /* MockOutboxSender.swift */; };
 		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
 			FC0000000000000000000001 /* ThreadMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000002 /* ThreadMessageView.swift */; };
 			FC0000000000000000000003 /* ThreadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000004 /* ThreadDetailView.swift */; };
@@ -126,6 +127,7 @@
 		OB0000000000000000000008 /* OutboxSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxSender.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFC2822BuilderPayloadTests.swift; sourceTree = "<group>"; };
+		OB0000000000000000000016 /* MockOutboxSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockOutboxSender.swift; sourceTree = "<group>"; };
 		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
 			FC0000000000000000000002 /* ThreadMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadMessageView.swift; sourceTree = "<group>"; };
 			FC0000000000000000000004 /* ThreadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadDetailView.swift; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 				FB0000000000000000000004 /* NotificationManagerTests.swift */,
 				OB0000000000000000000012 /* OutboxItemTests.swift */,
 				OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */,
+				OB0000000000000000000016 /* MockOutboxSender.swift */,
 			);
 			path = AerioTests;
 			sourceTree = "<group>";
@@ -433,6 +436,7 @@
 				FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */,
 				OB0000000000000000000011 /* OutboxItemTests.swift in Sources */,
 				OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */,
+				OB0000000000000000000015 /* MockOutboxSender.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
