@@ -27,6 +27,11 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building version: ${VERSION}"
 
+      - name: Generate BuildInfo
+        env:
+          BUILDINFO_BRANCH: ${{ github.ref_name }}
+        run: ./scripts/gen-buildinfo.sh
+
       - name: Run tests
         run: |
           xcodebuild test \

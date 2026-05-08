@@ -21,6 +21,11 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
+      - name: Generate BuildInfo
+        env:
+          BUILDINFO_BRANCH: ${{ github.ref_name }}
+        run: ./scripts/gen-buildinfo.sh
+
       - name: Build and Test
         run: |
           xcodebuild test \
