@@ -3,15 +3,20 @@ import os.log
 
 private let logger = Logger(subsystem: "Aerio", category: "OutboxService")
 
-/// Plain-data view of an OutboxItem captured BEFORE the underlying @Model
-/// is deleted from the SwiftData store. Anything that runs after a delete
-/// (notifications, side effects) must use this snapshot, not the live model.
-struct OutboxItemSnapshot: Sendable {
+/// Plain-data, Sendable view of an OutboxItem.
+/// SwiftUI consumers (OutboxList, UnifiedSidebar) only ever see snapshots;
+/// the live `OutboxItem` @Model never escapes OutboxService. This avoids
+/// EXC_BAD_ACCESS in StackLayout when SwiftUI's layout cache holds a
+/// reference to a deleted/mutated SwiftData model across re-renders.
+struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
     let id: UUID
     let accountId: String
     let subject: String
     let recipientsPreview: String
+    let status: OutboxStatus
+    let attemptCount: Int
     let lastError: String?
+    let nextAttemptAt: Date
     let draftIdToConsume: String?
     let archiveOnSuccessForMsgId: String?
     let archiveOnSuccessForAccountId: String?
@@ -22,7 +27,10 @@ struct OutboxItemSnapshot: Sendable {
         self.accountId = item.accountId
         self.subject = item.subject
         self.recipientsPreview = item.recipientsPreview
+        self.status = item.status
+        self.attemptCount = item.attemptCount
         self.lastError = item.lastError
+        self.nextAttemptAt = item.nextAttemptAt
         self.draftIdToConsume = item.draftIdToConsume
         self.archiveOnSuccessForMsgId = item.archiveOnSuccessForMsgId
         self.archiveOnSuccessForAccountId = item.archiveOnSuccessForAccountId
@@ -30,14 +38,19 @@ struct OutboxItemSnapshot: Sendable {
 
     init(
         id: UUID, accountId: String, subject: String, recipientsPreview: String,
-        lastError: String?, draftIdToConsume: String?,
+        status: OutboxStatus, attemptCount: Int,
+        lastError: String?, nextAttemptAt: Date,
+        draftIdToConsume: String?,
         archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?
     ) {
         self.id = id
         self.accountId = accountId
         self.subject = subject
         self.recipientsPreview = recipientsPreview
+        self.status = status
+        self.attemptCount = attemptCount
         self.lastError = lastError
+        self.nextAttemptAt = nextAttemptAt
         self.draftIdToConsume = draftIdToConsume
         self.archiveOnSuccessForMsgId = archiveOnSuccessForMsgId
         self.archiveOnSuccessForAccountId = archiveOnSuccessForAccountId
@@ -53,7 +66,10 @@ protocol OutboxNotifying: Sendable {
 
 @MainActor
 final class OutboxService: ObservableObject {
-    @Published private(set) var items: [OutboxItem] = []
+    /// Public, SwiftUI-safe view of the queue. Value-type snapshots, never
+    /// exposes the underlying SwiftData @Model. Updated atomically on every
+    /// state change so SwiftUI's layout cache cannot hold a stale model.
+    @Published private(set) var items: [OutboxItemSnapshot] = []
 
     private let store: OutboxStore
     private var sendersByAccount: [String: OutboxSender]
@@ -95,7 +111,8 @@ final class OutboxService: ObservableObject {
 
     private func reloadItems() async {
         do {
-            items = try await store.allItems()
+            let models = try await store.allItems()
+            items = models.map(OutboxItemSnapshot.init)
         } catch {
             logger.error("Failed to reload outbox items: \(error.localizedDescription)")
         }

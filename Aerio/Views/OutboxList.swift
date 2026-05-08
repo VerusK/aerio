@@ -29,7 +29,7 @@ struct OutboxList: View {
 private let outboxRowTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
 private struct OutboxRow: View {
-    let item: OutboxItem
+    let item: OutboxItemSnapshot
     @EnvironmentObject var outboxService: OutboxService
     @State private var nowTick = Date()
 
