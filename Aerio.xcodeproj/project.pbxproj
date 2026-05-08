@@ -58,6 +58,7 @@
 		OB0000000000000000000009 /* OutboxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000000A /* OutboxService.swift */; };
 		OB000000000000000000000B /* SidebarSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000000C /* SidebarSelection.swift */; };
 		OB000000000000000000000D /* OutboxList.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000000E /* OutboxList.swift */; };
+		OB000000000000000000001A /* BuildInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB000000000000000000001B /* BuildInfo.swift */; };
 		OB0000000000000000000017 /* OutboxServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000018 /* OutboxServiceTests.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
 		OB0000000000000000000013 /* RFC2822BuilderPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */; };
@@ -132,6 +133,7 @@
 		OB000000000000000000000A /* OutboxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxService.swift; sourceTree = "<group>"; };
 		OB000000000000000000000C /* SidebarSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelection.swift; sourceTree = "<group>"; };
 		OB000000000000000000000E /* OutboxList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxList.swift; sourceTree = "<group>"; };
+		OB000000000000000000001B /* BuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.swift; sourceTree = "<group>"; };
 		OB0000000000000000000018 /* OutboxServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxServiceTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000014 /* RFC2822BuilderPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFC2822BuilderPayloadTests.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000010 /* AerioApp.swift */,
+				OB000000000000000000001B /* BuildInfo.swift */,
 				GG0000000000000000000005 /* Models */,
 				GG0000000000000000000006 /* Services */,
 				GG0000000000000000000008 /* Views */,
@@ -424,6 +427,7 @@
 				OB0000000000000000000009 /* OutboxService.swift in Sources */,
 				OB000000000000000000000B /* SidebarSelection.swift in Sources */,
 				OB000000000000000000000D /* OutboxList.swift in Sources */,
+				OB000000000000000000001A /* BuildInfo.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
