@@ -407,3 +407,36 @@ final class OutboxServiceCancelRetryTests: XCTestCase {
         XCTAssertEqual(stored.first?.attemptCount, 0, "retry resets attempt count")
     }
 }
+
+// MARK: - processLoop driver
+
+@MainActor
+final class OutboxServiceLoopTests: XCTestCase {
+    func testStartLoop_processesEnqueuedItem() async throws {
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        let notifier = RecordingNotifier()
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: notifier, postSendRefresh: { }
+        )
+
+        service.startLoop()
+        try await service.enqueue(makeItem(account: "a"))
+
+        // Wait up to 2s for the loop to drain (signal-driven; usually <100ms).
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() < deadline {
+            let current = try await store.allItems()
+            if current.isEmpty { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        let stored = try await store.allItems()
+        XCTAssertTrue(stored.isEmpty)
+        let successCount = await notifier.successCalls.count
+        XCTAssertEqual(successCount, 1)
+
+        service.stopLoop()
+    }
+}

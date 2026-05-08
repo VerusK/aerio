@@ -212,3 +212,65 @@ extension OutboxService {
         signal()
     }
 }
+
+// MARK: - Loop driver
+
+extension OutboxService {
+    func startLoop() {
+        guard processTask == nil else { return }
+        // Kick once so any items already in the store at boot get drained.
+        signal()
+        processTask = Task { [weak self] in
+            await self?.runLoop()
+        }
+    }
+
+    func stopLoop() {
+        nextWakeTimer?.cancel()
+        nextWakeTimer = nil
+        processTask?.cancel()
+        processTask = nil
+    }
+
+    private func runLoop() async {
+        guard let stream = signalStream else { return }
+        for await _ in stream {
+            if Task.isCancelled { return }
+            nextWakeTimer?.cancel()
+            nextWakeTimer = nil
+            await drainReady()
+            await scheduleNextWake()
+        }
+    }
+
+    private func drainReady() async {
+        while !Task.isCancelled {
+            let ready: [OutboxItem]
+            do { ready = try await store.pendingReady(asOf: now()) }
+            catch {
+                logger.error("drainReady fetch failed: \(error.localizedDescription)")
+                return
+            }
+            guard let item = ready.first else { return }
+            await attemptSend(item)
+            await reloadItems()
+        }
+    }
+
+    private func scheduleNextWake() async {
+        let next: Date?
+        do { next = try await store.earliestPendingNext(after: now()) }
+        catch {
+            logger.error("scheduleNextWake fetch failed: \(error.localizedDescription)")
+            return
+        }
+        guard let wake = next else { return }
+        let delay = max(0, wake.timeIntervalSince(now()))
+        let continuation = self.signalContinuation
+        nextWakeTimer = Task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            continuation?.yield()
+        }
+    }
+}
