@@ -52,6 +52,7 @@
 		FB0000000000000000000001 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000002 /* NotificationManager.swift */; };
 		FB0000000000000000000003 /* NotificationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000004 /* NotificationManagerTests.swift */; };
 		OB0000000000000000000001 /* OutboxItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000002 /* OutboxItem.swift */; };
+		OB0000000000000000000003 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000004 /* OutboxStore.swift */; };
 		OB0000000000000000000011 /* OutboxItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = OB0000000000000000000012 /* OutboxItemTests.swift */; };
 		FCFB46918A9F1999C7AC22DB /* GmailAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C440ADA83895F815072C69 /* GmailAPIClient.swift */; };
 			FC0000000000000000000001 /* ThreadMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000002 /* ThreadMessageView.swift */; };
@@ -117,6 +118,7 @@
 		FB0000000000000000000002 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		FB0000000000000000000004 /* NotificationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManagerTests.swift; sourceTree = "<group>"; };
 		OB0000000000000000000002 /* OutboxItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItem.swift; sourceTree = "<group>"; };
+		OB0000000000000000000004 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		OB0000000000000000000012 /* OutboxItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxItemTests.swift; sourceTree = "<group>"; };
 		CC0000000000000000000010 /* OAuth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = OAuth.xcconfig; sourceTree = "<group>"; };
 			FC0000000000000000000002 /* ThreadMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadMessageView.swift; sourceTree = "<group>"; };
@@ -259,6 +261,7 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000081 /* DataStore.swift */,
+				OB0000000000000000000004 /* OutboxStore.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -391,6 +394,7 @@
 				FC0000000000000000000001 /* ThreadMessageView.swift in Sources */,
 				FC0000000000000000000003 /* ThreadDetailView.swift in Sources */,
 				OB0000000000000000000001 /* OutboxItem.swift in Sources */,
+				OB0000000000000000000003 /* OutboxStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

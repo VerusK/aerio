@@ -68,3 +68,107 @@ final class OutboxItemTests: XCTestCase {
         XCTAssertEqual(item.status, .failed)
     }
 }
+
+@MainActor
+final class OutboxStoreTests: XCTestCase {
+    func testInMemoryStore_persistsAndFetchesItems() async throws {
+        let store = OutboxStore(inMemory: true)
+        let id = UUID()
+        let now = Date()
+        let item = OutboxItem(
+            id: id, accountId: "a", rawMime: Data("R".utf8), messageIdHeader: "<m>",
+            threadId: nil, draftIdToConsume: nil, subject: "s", recipientsPreview: "r",
+            status: .pending, attemptCount: 0, createdAt: now, nextAttemptAt: now,
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        try await store.insert(item)
+
+        let fetched = try await store.allItems()
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched.first?.id, id)
+    }
+
+    func testStore_deletesItemById() async throws {
+        let store = OutboxStore(inMemory: true)
+        let item = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<m>",
+            threadId: nil, draftIdToConsume: nil, subject: "s", recipientsPreview: "r",
+            status: .pending, attemptCount: 0, createdAt: Date(), nextAttemptAt: Date(),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        try await store.insert(item)
+        try await store.delete(id: item.id)
+        let fetched = try await store.allItems()
+        XCTAssertTrue(fetched.isEmpty)
+    }
+
+    func testStore_fetchesPendingReadyItems_sortedByCreatedAt() async throws {
+        let store = OutboxStore(inMemory: true)
+        let now = Date()
+        let older = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<a>",
+            threadId: nil, draftIdToConsume: nil, subject: "older", recipientsPreview: "r",
+            status: .pending, attemptCount: 0,
+            createdAt: now.addingTimeInterval(-10), nextAttemptAt: now.addingTimeInterval(-5),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        let newer = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<b>",
+            threadId: nil, draftIdToConsume: nil, subject: "newer", recipientsPreview: "r",
+            status: .pending, attemptCount: 0,
+            createdAt: now, nextAttemptAt: now.addingTimeInterval(-1),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        let future = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<c>",
+            threadId: nil, draftIdToConsume: nil, subject: "future", recipientsPreview: "r",
+            status: .pending, attemptCount: 0,
+            createdAt: now, nextAttemptAt: now.addingTimeInterval(60),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        try await store.insert(older)
+        try await store.insert(newer)
+        try await store.insert(future)
+
+        let ready = try await store.pendingReady(asOf: now)
+        XCTAssertEqual(ready.map(\.subject), ["older", "newer"])
+    }
+
+    func testStore_resetSendingToPending() async throws {
+        let store = OutboxStore(inMemory: true)
+        let stuck = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<m>",
+            threadId: nil, draftIdToConsume: nil, subject: "s", recipientsPreview: "r",
+            status: .sending, attemptCount: 0, createdAt: Date(), nextAttemptAt: Date(),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        try await store.insert(stuck)
+        let count = try await store.resetSendingToPending()
+        XCTAssertEqual(count, 1)
+        let after = try await store.allItems()
+        XCTAssertEqual(after.first?.status, .pending)
+    }
+
+    func testStore_earliestPendingNext_returnsFutureDateOnly() async throws {
+        let store = OutboxStore(inMemory: true)
+        let now = Date()
+        let past = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<a>",
+            threadId: nil, draftIdToConsume: nil, subject: "past", recipientsPreview: "r",
+            status: .pending, attemptCount: 0,
+            createdAt: now, nextAttemptAt: now.addingTimeInterval(-1),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        let future = OutboxItem(
+            id: UUID(), accountId: "a", rawMime: Data(), messageIdHeader: "<b>",
+            threadId: nil, draftIdToConsume: nil, subject: "future", recipientsPreview: "r",
+            status: .pending, attemptCount: 0,
+            createdAt: now, nextAttemptAt: now.addingTimeInterval(120),
+            archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+        )
+        try await store.insert(past)
+        try await store.insert(future)
+        let next = try await store.earliestPendingNext(after: now)
+        XCTAssertEqual(next, now.addingTimeInterval(120))
+    }
+}
