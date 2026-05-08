@@ -22,6 +22,7 @@ final class ComposeWindowManager {
     func open(
         accountManager: AccountManager,
         apiManager: GmailAPIManager,
+        outboxService: OutboxService,
         contactsCache: ContactsCache?,
         composeType: ComposeType,
         replyToEmail: Email?,
@@ -45,6 +46,7 @@ final class ComposeWindowManager {
         let composeView = ComposeView(
             accountManager: accountManager,
             apiManager: apiManager,
+            outboxService: outboxService,
             contactsCache: contactsCache,
             composeType: composeType,
             replyToEmail: replyToEmail,

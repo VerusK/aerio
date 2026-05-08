@@ -15,6 +15,7 @@ enum ComposeType: Sendable {
 struct ComposeView: View {
     let accountManager: AccountManager
     let apiManager: GmailAPIManager
+    let outboxService: OutboxService
     var contactsCache: ContactsCache?
     var composeType: ComposeType = .new
     var replyToEmail: Email?
@@ -45,7 +46,6 @@ struct ComposeView: View {
     @State private var isSendingViaOutbox = false
     @State private var isLoadingRecipients = false
     @State private var replyAllWarning: String?
-    @EnvironmentObject var outboxService: OutboxService
     @State private var fetchedMessageId: String?
     @State private var toSuggestions: [CachedContact] = []
     @State private var ccSuggestions: [CachedContact] = []

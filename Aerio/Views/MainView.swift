@@ -140,6 +140,7 @@ struct MainView: View {
     let oauthManager: OAuthManager
     var contactsCache: ContactsCache?
     var notificationManager: NotificationManager?
+    @EnvironmentObject var outboxService: OutboxService
     @State private var selectedAccountId: String?
     @State private var sidebarSelection: SidebarSelection = .folder(.inbox)
     @State private var selectedEmailId: String?
@@ -270,6 +271,7 @@ struct MainView: View {
                 ComposeWindowManager.shared.open(
                     accountManager: accountManager,
                     apiManager: apiManager,
+                    outboxService: outboxService,
                     contactsCache: contactsCache,
                     composeType: composeType,
                     replyToEmail: threadComposeEmail ?? composeTargetMsgId.flatMap { findEmail(byMsgId: $0) },
@@ -730,6 +732,7 @@ struct MainView: View {
         ComposeWindowManager.shared.open(
             accountManager: accountManager,
             apiManager: apiManager,
+            outboxService: outboxService,
             contactsCache: contactsCache,
             composeType: .draft,
             replyToEmail: email,
