@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import AppKit
 import os.log
 
 private let logger = Logger(subsystem: "Aerio", category: "NotificationManager")
@@ -16,14 +17,39 @@ final class NotificationManager: NSObject, ObservableObject {
     private let center: NotificationProvider
     private(set) var isAuthorized = false
 
+    static let outboxSuccessCategory = "AERIO_OUTBOX_SUCCESS"
+    static let outboxFailureCategory = "AERIO_OUTBOX_FAILURE"
+    static let outboxRetryActionId = "AERIO_OUTBOX_RETRY"
+
     /// Callback fired when a notification is clicked. Provides (emailId, accountId).
     var onNotificationClick: ((String, String) -> Void)?
+
+    /// Callback fired when user taps the Retry action on an outbox failure notification.
+    var onOutboxRetry: ((UUID) -> Void)?
 
     init(center: NotificationProvider = UNUserNotificationCenter.current()) {
         self.center = center
         super.init()
         if let realCenter = center as? UNUserNotificationCenter {
             realCenter.delegate = self
+            let retryAction = UNNotificationAction(
+                identifier: Self.outboxRetryActionId,
+                title: "Retry",
+                options: [.foreground]
+            )
+            let failureCategory = UNNotificationCategory(
+                identifier: Self.outboxFailureCategory,
+                actions: [retryAction],
+                intentIdentifiers: [],
+                options: []
+            )
+            let successCategory = UNNotificationCategory(
+                identifier: Self.outboxSuccessCategory,
+                actions: [],
+                intentIdentifiers: [],
+                options: []
+            )
+            realCenter.setNotificationCategories([failureCategory, successCategory])
         }
     }
 
@@ -80,6 +106,17 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+
+        if response.actionIdentifier == Self.outboxRetryActionId,
+           let idString = userInfo["outboxItemId"] as? String,
+           let uuid = UUID(uuidString: idString) {
+            completionHandler()
+            Task { @MainActor in
+                onOutboxRetry?(uuid)
+            }
+            return
+        }
+
         guard let emailId = userInfo["emailId"] as? String,
               let accountId = userInfo["accountId"] as? String else {
             completionHandler()
@@ -99,5 +136,55 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     ) {
         // Show notification even when app is in foreground
         completionHandler([.banner, .sound])
+    }
+}
+
+/// Adapter from OutboxService's OutboxNotifying protocol to UNUserNotificationCenter.
+/// Posts user-visible banners on outbox success and failure.
+final class OutboxNotifier: OutboxNotifying {
+    weak var manager: NotificationManager?
+
+    init(manager: NotificationManager) {
+        self.manager = manager
+    }
+
+    func notifySuccess(item: OutboxItem) async {
+        let isAuthorized = await MainActor.run { manager?.isAuthorized ?? false }
+        guard isAuthorized else { return }
+        let isFrontmost = await MainActor.run { NSApp?.isActive == true }
+        if isFrontmost { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Sent"
+        content.subtitle = item.subject
+        content.body = "to \(item.recipientsPreview)"
+        content.categoryIdentifier = NotificationManager.outboxSuccessCategory
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "outbox_success_\(item.id)",
+            content: content,
+            trigger: nil
+        )
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
+    func notifyFailure(item: OutboxItem, permanent: Bool) async {
+        let isAuthorized = await MainActor.run { manager?.isAuthorized ?? false }
+        guard isAuthorized else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Failed to send"
+        content.subtitle = item.subject
+        let detail = item.lastError ?? "Unknown error"
+        content.body = permanent
+            ? "\(detail) — Sign in again to retry."
+            : "\(detail) — Tap Retry."
+        content.categoryIdentifier = NotificationManager.outboxFailureCategory
+        content.userInfo = ["outboxItemId": item.id.uuidString]
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "outbox_failure_\(item.id)",
+            content: content,
+            trigger: nil
+        )
+        try? await UNUserNotificationCenter.current().add(request)
     }
 }
