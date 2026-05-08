@@ -41,11 +41,11 @@ struct ComposeView: View {
     @State private var subjectField: String = ""
     @State private var bodyText: String = ""
     @State private var attachments: [ComposeAttachment] = []
-    @State private var isSending = false
     @State private var hasSent = false
+    @State private var isSendingViaOutbox = false
     @State private var isLoadingRecipients = false
-    @State private var sendError: String?
     @State private var replyAllWarning: String?
+    @EnvironmentObject var outboxService: OutboxService
     @State private var fetchedMessageId: String?
     @State private var toSuggestions: [CachedContact] = []
     @State private var ccSuggestions: [CachedContact] = []
@@ -160,18 +160,6 @@ struct ComposeView: View {
                 .padding(.vertical, 4)
             }
 
-            if let sendError {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                    Text(sendError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            }
         }
     }
 
@@ -417,12 +405,6 @@ struct ComposeView: View {
                 Text("Loading draft…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else if isSending {
-                ProgressView()
-                    .scaleEffect(0.7)
-                Text("Sending…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -447,7 +429,7 @@ struct ComposeView: View {
                 }
             }
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(isSending || isLoadingRecipients || isLoadingDraft || toField.isEmpty)
+            .disabled(isLoadingRecipients || isLoadingDraft || toField.isEmpty)
             .help("Send message (⌘Return)")
         }
         .padding()
@@ -544,7 +526,6 @@ struct ComposeView: View {
                     }
                 }
             } catch {
-                sendError = "Failed to load draft"
                 logger.error("Draft load failed: \(error.localizedDescription)")
             }
             isLoadingDraft = false
@@ -768,7 +749,7 @@ struct ComposeView: View {
     }
 
     private func saveDraftIfNeeded() {
-        guard !hasSent else { return }
+        guard !hasSent && !isSendingViaOutbox else { return }
         // Don't create a new draft when editing an existing one
         guard composeType != .draft else { return }
         guard isDirty, hasContent else { return }
@@ -799,58 +780,66 @@ struct ComposeView: View {
     }
 
     private func sendMessage() {
-        guard !toField.isEmpty else { return }
-        isSending = true
-        sendError = nil
-
-        guard let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email else {
-            sendError = "No account selected"
-            isSending = false
+        guard !toField.isEmpty,
+              let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email
+        else {
+            logger.error("Send guard failed: empty toField or no fromEmail for account \(selectedAccountId, privacy: .public)")
             return
         }
+        // Race-protect saveDraftIfNeeded against onDisappear ordering: set BOTH flags
+        // synchronously before onDismiss so the @State flush propagates predictably.
+        isSendingViaOutbox = true
+        hasSent = true
 
         let (html, editorInlineImages) = editorState.htmlBodyWithInlineImages()
-        let rfcAttachments = attachments.map { RFC2822Builder.Attachment(filename: $0.filename, mimeType: $0.mimeType, data: $0.data) }
-        let rfcInlineImages = editorInlineImages.map { RFC2822Builder.InlineImage(cid: $0.cid, mimeType: $0.mimeType, data: $0.data) }
-        Task {
-            do {
-                if let draftId, composeType == .draft {
-                    try await apiManager.sendDraft(draftId: draftId, accountId: selectedAccountId)
-                } else {
-                    let replyThreadId = replyToEmail?.threadId.isEmpty == false ? replyToEmail?.threadId : nil
-                    try await apiManager.sendEmail(
-                        from: fromEmail,
-                        to: toField,
-                        cc: ccField.isEmpty ? nil : ccField,
-                        subject: subjectField,
-                        body: bodyText,
-                        accountId: selectedAccountId,
-                        inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
-                        references: replyToEmail?.messageId ?? fetchedMessageId,
-                        htmlBody: html.isEmpty ? nil : html,
-                        attachments: rfcAttachments,
-                        inlineImages: rfcInlineImages,
-                        threadId: replyThreadId
-                    )
-                }
-                hasSent = true
-                // Update contact frequency for autocomplete
-                let allRecipients = ContactsCache.parseAddressList(toField) + ContactsCache.parseAddressList(ccField)
-                for recipient in allRecipients {
-                    contactsCache?.addContact(email: recipient.email, displayName: recipient.displayName)
-                }
-                if (composeType == .reply || composeType == .replyAll),
-                   let email = replyToEmail, email.folder == .inbox,
-                   UserDefaults.standard.bool(forKey: AppState.archiveOnReplyKey) {
-                    try? await apiManager.archiveEmail(msgId: email.msgId, accountId: email.accountId, folder: .inbox)
-                }
-                onDismiss?()
-                Task { await apiManager.refreshAll() }
-            } catch {
-                sendError = error.localizedDescription
-            }
-            isSending = false
+        let messageId = "<\(UUID().uuidString)@aerio.local>"
+        let archiveOnSuccess = (composeType == .reply || composeType == .replyAll)
+            && replyToEmail?.folder == .inbox
+            && UserDefaults.standard.bool(forKey: AppState.archiveOnReplyKey)
+        let payload = ComposePayload(
+            from: fromEmail,
+            to: toField,
+            cc: ccField.isEmpty ? nil : ccField,
+            subject: subjectField,
+            body: bodyText,
+            inReplyTo: replyToEmail?.messageId ?? fetchedMessageId,
+            references: replyToEmail?.messageId ?? fetchedMessageId,
+            htmlBody: html.isEmpty ? nil : html,
+            attachments: attachments.map {
+                RFC2822Builder.Attachment(filename: $0.filename, mimeType: $0.mimeType, data: $0.data)
+            },
+            inlineImages: editorInlineImages.map {
+                RFC2822Builder.InlineImage(cid: $0.cid, mimeType: $0.mimeType, data: $0.data)
+            },
+            messageId: messageId
+        )
+        let raw = RFC2822Builder.build(payload)
+        let item = OutboxItem(
+            id: UUID(),
+            accountId: selectedAccountId,
+            rawMime: Data(raw.utf8),
+            messageIdHeader: messageId,
+            threadId: replyToEmail?.threadId.isEmpty == false ? replyToEmail?.threadId : nil,
+            draftIdToConsume: composeType == .draft ? draftId : nil,
+            subject: subjectField,
+            recipientsPreview: ContactsCache.parseAddressList(toField).first?.email ?? toField,
+            status: .pending,
+            attemptCount: 0,
+            createdAt: Date(),
+            nextAttemptAt: Date(),
+            archiveOnSuccessForMsgId: archiveOnSuccess ? replyToEmail?.msgId : nil,
+            archiveOnSuccessForAccountId: archiveOnSuccess ? replyToEmail?.accountId : nil
+        )
+
+        Task { try? await outboxService.enqueue(item) }
+
+        // Update contact frequency for autocomplete (was previously inside the post-send block).
+        let allRecipients = ContactsCache.parseAddressList(toField) + ContactsCache.parseAddressList(ccField)
+        for recipient in allRecipients {
+            contactsCache?.addContact(email: recipient.email, displayName: recipient.displayName)
         }
+
+        onDismiss?()
     }
 }
 
