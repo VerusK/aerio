@@ -4,9 +4,9 @@ import Foundation
 /// Edit values manually only if running xcodebuild without the script.
 enum BuildInfo {
     static let version = "1.5.0"
-    static let commit = "c934591"
+    static let commit = "721420b"
     static let branch = "main"
-    static let date = "2026-05-08 11:30 UTC"
+    static let date = "2026-05-08 11:37 UTC"
 
     static var shortLabel: String {
         "v\(version) · \(commit)"
