@@ -126,6 +126,124 @@ final class GmailAPIManagerTests: XCTestCase {
         }
     }
 
+    // The dock badge derives unread count from Gmail's server-side `label.messagesUnread`
+    // on INBOX, but the inbox list shows only the loaded paginated batch. An unread email
+    // older than the first page would otherwise be counted in the badge but invisible to
+    // the user. fetchEmails must close that gap by loading every currently-unread INBOX
+    // message.
+    func testFetchEmailsLoadsUnreadInboxBeyondFirstPage() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+
+            func ok(_ body: String) -> (HTTPURLResponse, Data) {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, body.data(using: .utf8)!)
+            }
+
+            if url.contains("/labels/INBOX") {
+                return ok("""
+                {"id": "INBOX", "name": "INBOX", "messagesUnread": 1}
+                """)
+            }
+
+            if url.contains("/messages/msg1") {
+                return ok("""
+                {"id": "msg1", "threadId": "t1", "labelIds": ["INBOX"], "snippet": "First",
+                 "payload": {"headers": [{"name": "From", "value": "a@b.com"}, {"name": "Subject", "value": "Newer 1"}]},
+                 "internalDate": "1711000010000", "historyId": "12345"}
+                """)
+            }
+            if url.contains("/messages/msg2") {
+                return ok("""
+                {"id": "msg2", "threadId": "t2", "labelIds": ["INBOX"], "snippet": "Second",
+                 "payload": {"headers": [{"name": "From", "value": "c@d.com"}, {"name": "Subject", "value": "Newer 2"}]},
+                 "internalDate": "1711000005000", "historyId": "12346"}
+                """)
+            }
+            if url.contains("/messages/msg99") {
+                return ok("""
+                {"id": "msg99", "threadId": "t99", "labelIds": ["INBOX", "UNREAD"], "snippet": "Old unread",
+                 "payload": {"headers": [{"name": "From", "value": "old@b.com"}, {"name": "Subject", "value": "Buried"}]},
+                 "internalDate": "1700000000000", "historyId": "11000"}
+                """)
+            }
+
+            // List endpoint — check UNREAD sweep before generic INBOX listing.
+            if url.contains("/messages") && !url.contains("/messages/") {
+                if url.contains("labelIds=UNREAD") {
+                    return ok("""
+                    {"messages": [{"id": "msg99", "threadId": "t99"}], "resultSizeEstimate": 1}
+                    """)
+                }
+                return ok("""
+                {"messages": [{"id": "msg1", "threadId": "t1"}, {"id": "msg2", "threadId": "t2"}],
+                 "nextPageToken": "page2", "resultSizeEstimate": 50}
+                """)
+            }
+
+            return ok("{}")
+        }
+
+        await manager.fetchEmails(for: testAccountId)
+
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertEqual(emails.count, 3, "first-page emails plus the buried unread email")
+        XCTAssertTrue(emails.contains { $0.msgId == "msg1" })
+        XCTAssertTrue(emails.contains { $0.msgId == "msg2" })
+        let buried = emails.first { $0.msgId == "msg99" }
+        XCTAssertNotNil(buried, "old unread INBOX email must be loaded, not only counted")
+        XCTAssertEqual(buried?.isRead, false)
+        XCTAssertEqual(buried?.folder, .inbox)
+        XCTAssertEqual(manager.unreadCountsByAccount[testAccountId], 1)
+    }
+
+    // When the server reports zero unread, the inbox-unread sweep must be skipped —
+    // an extra listMessages call per fetch would be wasted bandwidth in the steady state.
+    func testFetchEmailsSkipsUnreadSweepWhenServerSaysZero() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+
+        let unreadSweepCalls = RequestCounter()
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+
+            func ok(_ body: String) -> (HTTPURLResponse, Data) {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, body.data(using: .utf8)!)
+            }
+
+            if url.contains("/labels/INBOX") {
+                return ok("""
+                {"id": "INBOX", "name": "INBOX", "messagesUnread": 0}
+                """)
+            }
+            if url.contains("/messages/msg1") {
+                return ok("""
+                {"id": "msg1", "threadId": "t1", "labelIds": ["INBOX"], "snippet": "x",
+                 "payload": {"headers": [{"name": "From", "value": "a@b.com"}, {"name": "Subject", "value": "x"}]},
+                 "internalDate": "1711000000000", "historyId": "12345"}
+                """)
+            }
+            if url.contains("/messages") && !url.contains("/messages/") {
+                if url.contains("labelIds=UNREAD") {
+                    unreadSweepCalls.increment()
+                }
+                return ok("""
+                {"messages": [{"id": "msg1", "threadId": "t1"}], "resultSizeEstimate": 1}
+                """)
+            }
+            return ok("{}")
+        }
+
+        await manager.fetchEmails(for: testAccountId)
+
+        XCTAssertEqual(unreadSweepCalls.value, 0, "no unread on server means no sweep call")
+    }
+
     // MARK: - Mark As Read
 
     func testMarkAsReadOptimisticUpdate() async {
@@ -818,8 +936,13 @@ final class GmailAPIManagerTests: XCTestCase {
 
             // List messages endpoint — return page 1 then page 2
             if url.contains("/messages") && !url.contains("/messages/") {
-                let count = listCallCount.increment()
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                // The unread-INBOX sweep uses labelIds=INBOX&labelIds=UNREAD; don't let it
+                // skew listCallCount which gates this test's "stops after first batch" claim.
+                if url.contains("labelIds=UNREAD") {
+                    return (response, #"{"messages": [{"id": "msg1", "threadId": "t1"}], "resultSizeEstimate": 1}"#.data(using: .utf8)!)
+                }
+                let count = listCallCount.increment()
                 if count == 1 {
                     // First page with nextPageToken
                     let json = """

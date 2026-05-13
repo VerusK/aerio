@@ -301,6 +301,8 @@ final class GmailAPIManager: ObservableObject {
             accountsWithCompletedFetch.insert(accountId)
             dataStore?.replaceEmails(for: accountId, folder: folder, with: allFetchedEmails)
             contactsCache?.addContacts(from: allFetchedEmails)
+
+            await loadMissingUnreadInbox(for: accountId, client: client)
         } catch let apiError as GmailAPIError {
             logger.error("[\(accountId)] fetchEmails failed (API): \(apiError.localizedDescription) — folder=\(self.currentFolder.displayName)")
             switch apiError {
@@ -452,6 +454,10 @@ final class GmailAPIManager: ObservableObject {
                 dataStore?.replaceEmails(for: accountId, folder: folder, with: currentEmails.filter { $0.folder == folder })
             }
             dataStore?.purgeOldEmails(keepLast: 1000)
+
+            // Runs after per-folder persistence so its own saveEmails calls aren't
+            // wiped by the replaceEmails loop above.
+            await loadMissingUnreadInbox(for: accountId, client: client)
         } catch let apiError as GmailAPIError {
             switch apiError {
             case .historyExpired:
@@ -536,6 +542,54 @@ final class GmailAPIManager: ObservableObject {
             unreadCountsByAccount[accountId] = label.messagesUnread ?? 0
         } catch {
             logger.warning("[\(accountId)] failed to fetch unread count: \(error.localizedDescription)")
+        }
+    }
+
+    // The dock badge derives unread count from Gmail's server-side `label.messagesUnread`
+    // on INBOX, but the inbox list shows only the loaded paginated batch. If an unread
+    // email is older than the first page (or otherwise absent from emailsByAccount),
+    // the badge would count it while the user has no way to find it short of scrolling
+    // through every page of read mail. This sweep loads every currently-unread INBOX
+    // message so the two stay in agreement.
+    private func loadMissingUnreadInbox(for accountId: String, client: GmailAPIClient) async {
+        let serverUnread = unreadCountsByAccount[accountId] ?? 0
+        guard serverUnread > 0 else { return }
+
+        let localUnread = emailsByAccount[accountId]?.filter { $0.folder == .inbox && !$0.isRead }.count ?? 0
+        guard serverUnread > localUnread else { return }
+
+        do {
+            let listResponse = try await client.listMessages(
+                labelIds: [GmailLabelId.inbox, GmailLabelId.unread],
+                maxResults: 100,
+                pageToken: nil
+            )
+            let allUnreadIds = listResponse.messages?.map(\.id) ?? []
+            guard !allUnreadIds.isEmpty else { return }
+
+            let existingMsgIds = Set(emailsByAccount[accountId]?.filter { $0.folder == .inbox }.map(\.msgId) ?? [])
+            let missingIds = allUnreadIds.filter { !existingMsgIds.contains($0) }
+            guard !missingIds.isEmpty else { return }
+
+            let messages = try await client.getMessages(
+                ids: missingIds,
+                format: "metadata",
+                metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"]
+            )
+            let newEmails = messages.compactMap { msg -> Email? in
+                let labelIds = msg.labelIds ?? []
+                let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
+                return convertGmailMessageToEmail(msg, accountId: accountId, folder: folder)
+            }
+            guard !newEmails.isEmpty else { return }
+
+            var current = emailsByAccount[accountId] ?? []
+            current.append(contentsOf: newEmails)
+            emailsByAccount[accountId] = current
+            dataStore?.saveEmails(newEmails)
+            logger.info("[\(accountId)] loaded \(newEmails.count) missing unread INBOX emails (server=\(serverUnread), local was=\(localUnread))")
+        } catch {
+            logger.warning("[\(accountId)] loadMissingUnreadInbox failed: \(error.localizedDescription)")
         }
     }
 
