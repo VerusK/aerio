@@ -448,27 +448,33 @@ struct NativeMessageDetail: View {
         if let cachedHTML = bodyWebViewStore.cachedHTML(for: email.id) {
             bodyWebViewStore.loadHTML(cachedHTML)
             isLoading = false
-            // Load headers from SwiftData for display if not already set
-            if messageContent == nil {
-                if let cached = apiManager.dataStore?.loadContent(accountId: email.accountId, msgId: email.msgId) {
-                    messageContent = MessageContentData(
-                        from: cached.headers["from"] ?? email.from,
-                        to: cached.headers["to"] ?? email.to,
-                        cc: cached.headers["cc"] ?? email.cc,
-                        subject: cached.headers["subject"] ?? email.subject,
-                        date: cached.headers["date"] ?? email.date.shortRelative,
-                        bodyHTML: cached.bodyHTML,
-                        attachments: cached.attachments.map { dict in
-                            MessageContentData.AttachmentInfo(
-                                name: dict["name"] ?? "",
-                                size: dict["size"] ?? "",
-                                attachmentId: dict["attachmentId"],
-                                messageId: dict["messageId"],
-                                mimeType: dict["mimeType"]
-                            )
-                        }
-                    )
-                }
+            // Always refresh headers for the current email. messageContent is @State
+            // that persists across email switches because the parent view doesn't
+            // bind .id(email.id) (intentional — avoids respawning WKWebView). Without
+            // re-reading SwiftData on every switch, subject/from/to/cc/date stay frozen
+            // on the previously-selected email while the body updates correctly.
+            if let cached = apiManager.dataStore?.loadContent(accountId: email.accountId, msgId: email.msgId) {
+                messageContent = MessageContentData(
+                    from: cached.headers["from"] ?? email.from,
+                    to: cached.headers["to"] ?? email.to,
+                    cc: cached.headers["cc"] ?? email.cc,
+                    subject: cached.headers["subject"] ?? email.subject,
+                    date: cached.headers["date"] ?? email.date.shortRelative,
+                    bodyHTML: cached.bodyHTML,
+                    attachments: cached.attachments.map { dict in
+                        MessageContentData.AttachmentInfo(
+                            name: dict["name"] ?? "",
+                            size: dict["size"] ?? "",
+                            attachmentId: dict["attachmentId"],
+                            messageId: dict["messageId"],
+                            mimeType: dict["mimeType"]
+                        )
+                    }
+                )
+            } else {
+                // In-memory HTML cached but SwiftData entry gone (rare — manual cache
+                // clear). Drop stale headers; view falls back to Email's metadata.
+                messageContent = nil
             }
             return
         }

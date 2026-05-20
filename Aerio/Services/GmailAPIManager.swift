@@ -550,7 +550,9 @@ final class GmailAPIManager: ObservableObject {
     // email is older than the first page (or otherwise absent from emailsByAccount),
     // the badge would count it while the user has no way to find it short of scrolling
     // through every page of read mail. This sweep loads every currently-unread INBOX
-    // message so the two stay in agreement.
+    // message so the two stay in agreement — and reconciles the badge downward when
+    // Gmail's maintained counter drifts above the actual ground-truth list (e.g. user
+    // marked a message read in another client and the counter hasn't propagated yet).
     private func loadMissingUnreadInbox(for accountId: String, client: GmailAPIClient) async {
         let serverUnread = unreadCountsByAccount[accountId] ?? 0
         guard serverUnread > 0 else { return }
@@ -565,29 +567,38 @@ final class GmailAPIManager: ObservableObject {
                 pageToken: nil
             )
             let allUnreadIds = listResponse.messages?.map(\.id) ?? []
-            guard !allUnreadIds.isEmpty else { return }
-
             let existingMsgIds = Set(emailsByAccount[accountId]?.filter { $0.folder == .inbox }.map(\.msgId) ?? [])
             let missingIds = allUnreadIds.filter { !existingMsgIds.contains($0) }
-            guard !missingIds.isEmpty else { return }
 
-            let messages = try await client.getMessages(
-                ids: missingIds,
-                format: "metadata",
-                metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"]
-            )
-            let newEmails = messages.compactMap { msg -> Email? in
-                let labelIds = msg.labelIds ?? []
-                let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
-                return convertGmailMessageToEmail(msg, accountId: accountId, folder: folder)
+            if !missingIds.isEmpty {
+                let messages = try await client.getMessages(
+                    ids: missingIds,
+                    format: "metadata",
+                    metadataHeaders: ["From", "To", "Cc", "Subject", "Date", "Message-ID"]
+                )
+                let newEmails = messages.compactMap { msg -> Email? in
+                    let labelIds = msg.labelIds ?? []
+                    let folder = Folder.allCases.first { $0.matchesLabels(labelIds) } ?? .inbox
+                    return convertGmailMessageToEmail(msg, accountId: accountId, folder: folder)
+                }
+                if !newEmails.isEmpty {
+                    var current = emailsByAccount[accountId] ?? []
+                    current.append(contentsOf: newEmails)
+                    emailsByAccount[accountId] = current
+                    dataStore?.saveEmails(newEmails)
+                    logger.info("[\(accountId)] loaded \(newEmails.count) missing unread INBOX emails (server=\(serverUnread), local was=\(localUnread))")
+                }
             }
-            guard !newEmails.isEmpty else { return }
 
-            var current = emailsByAccount[accountId] ?? []
-            current.append(contentsOf: newEmails)
-            emailsByAccount[accountId] = current
-            dataStore?.saveEmails(newEmails)
-            logger.info("[\(accountId)] loaded \(newEmails.count) missing unread INBOX emails (server=\(serverUnread), local was=\(localUnread))")
+            // Reconcile the badge against the inbox-unread listing — Gmail's maintained
+            // label.messagesUnread can drift above reality (cross-client read with
+            // counter-propagation lag). Without this, the dock badge stays "stuck" at
+            // a phantom count with no email to find.
+            let visibleUnread = emailsByAccount[accountId]?.filter { $0.folder == .inbox && !$0.isRead }.count ?? 0
+            if visibleUnread != serverUnread {
+                unreadCountsByAccount[accountId] = visibleUnread
+                logger.info("[\(accountId)] reconciled unread count: gmail.label=\(serverUnread), visible=\(visibleUnread)")
+            }
         } catch {
             logger.warning("[\(accountId)] loadMissingUnreadInbox failed: \(error.localizedDescription)")
         }
