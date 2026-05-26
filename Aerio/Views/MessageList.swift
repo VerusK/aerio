@@ -78,15 +78,10 @@ struct MessageList: View {
                 }
             }
         }
-        // macOS List (NSTableView under the hood) doesn't recalc content size on
-        // insert — a new row exists in the data but stays invisible until the View
-        // is rebuilt. Keying only on first?.id missed the case where the arrival
-        // wasn't the topmost (older internalDate, or a race with archiving the top
-        // row): counter updated, but the message stayed hidden until folder switch.
-        // Including count covers every insert/delete; in-place updates (mark-as-read)
-        // leave both unchanged. Safe against poll-thrash because rebuildEmails skips
-        // no-op emissions, so identity only recomputes on actual changes.
-        .id("\(filteredEmails.count)_\(filteredEmails.first?.id ?? "")")
+        // Recreate List only when the top row changes (new email arrived or top archived) —
+        // macOS List won't recalc content size on prepend otherwise, hiding new rows.
+        // Keyed on first id only, NOT on count — that's what made every poll/archive freeze.
+        .id(filteredEmails.first?.id ?? "")
     }
 
     @ViewBuilder
