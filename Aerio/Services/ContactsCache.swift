@@ -127,14 +127,35 @@ final class ContactsCache {
         }
     }
 
-    /// Parse comma-separated address list like "Name <email>, other@email.com"
-    nonisolated static func parseAddressList(_ list: String) -> [(email: String, displayName: String?)] {
+    /// RFC 5322-aware split: only split on commas that fall OUTSIDE quoted
+    /// strings, so a display name like `"Doe, Jane" <jane@x.com>` stays one
+    /// address instead of being torn into two bogus entries.
+    nonisolated static func splitAddressList(_ list: String) -> [String] {
         guard !list.isEmpty else { return [] }
-        return list.components(separatedBy: ",").compactMap { part in
-            let trimmed = part.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { return nil }
-            return parseFromHeader(trimmed)
+        var results: [String] = []
+        var current = ""
+        var inQuotes = false
+        for ch in list {
+            if ch == "\"" {
+                inQuotes.toggle()
+                current.append(ch)
+            } else if ch == "," && !inQuotes {
+                let trimmed = current.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { results.append(trimmed) }
+                current = ""
+            } else {
+                current.append(ch)
+            }
         }
+        let trimmed = current.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty { results.append(trimmed) }
+        return results
+    }
+
+    /// Parse comma-separated address list like "Name <email>, other@email.com".
+    /// Splits on commas outside quoted strings (see `splitAddressList`).
+    nonisolated static func parseAddressList(_ list: String) -> [(email: String, displayName: String?)] {
+        splitAddressList(list).map { parseFromHeader($0) }
     }
 
     func search(_ query: String) -> [CachedContact] {

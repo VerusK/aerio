@@ -875,6 +875,20 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
+    /// The account most recently used to send mail to `recipient`, found via a
+    /// Gmail `in:sent {to: cc:}` search across all accounts. Used as a cold-miss
+    /// fallback when the local `SentAccountMap` has no entry. The `{to cc}` OR
+    /// group honors the to-or-cc matching rule. Returns nil if nothing matches
+    /// or the matching account no longer exists.
+    func lastSenderAccountIdViaSearch(forRecipient recipient: String) async -> String? {
+        let r = recipient.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !r.isEmpty else { return nil }
+        let (emails, _) = await searchEmailsWithTokens(query: "in:sent {to:\(r) cc:\(r)}")
+        let existing = Set(accountManager.accounts.map(\.id))
+        // searchEmailsWithTokens returns results sorted newest-first.
+        return emails.first { $0.folder == .sent && existing.contains($0.accountId) }?.accountId
+    }
+
     func saveDraft(from: String, to: String, cc: String? = nil, subject: String, body: String, accountId: String, inReplyTo: String? = nil, references: String? = nil, htmlBody: String? = nil, attachments: [RFC2822Builder.Attachment] = [], inlineImages: [RFC2822Builder.InlineImage] = []) async throws {
         guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
         let raw = buildRawMessage(from: from, to: to, cc: cc, subject: subject, body: body, inReplyTo: inReplyTo, references: references, htmlBody: htmlBody, attachments: attachments, inlineImages: inlineImages)

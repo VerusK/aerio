@@ -55,6 +55,15 @@ struct ComposeView: View {
     @State private var isPopulatingHeaders = false
     @State private var draftId: String?
     @State private var isLoadingDraft = false
+    // From auto-fill (new compose only): pick the account last used to write the
+    // first recipient. `fromAutoFillDisabled` latches once the user picks From by
+    // hand; `resolveToken` invalidates stale async network results.
+    @State private var fromAutoFillDisabled = false
+    @State private var lastResolvedRecipient: String?
+    @State private var resolveToken = 0
+    // True while the async network fallback is searching — From is disabled and
+    // shows a spinner until the search resolves.
+    @State private var isResolvingFrom = false
     @StateObject private var editorState = ComposeEditorState()
     @FocusState private var focusedField: ComposeField?
 
@@ -88,28 +97,42 @@ struct ComposeView: View {
         .onChange(of: ccField) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
         .onChange(of: subjectField) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
         .onChange(of: bodyText) { _, _ in if isInitialized && !isPopulatingHeaders { isDirty = true } }
+        .onChange(of: focusedField) { old, _ in
+            // Leaving the To field commits it → resolve the From account.
+            if old == .to { resolveFrom() }
+        }
     }
 
     private var composeForm: some View {
         VStack(spacing: 0) {
-            // From picker
+            // To
+            autocompleteFieldRow("To:", text: $toField, suggestions: $toSuggestions, field: .to, focusField: .to)
+                .disabled(isLoadingRecipients)
+            Divider()
+
+            // From picker (sits under To; auto-fills from last-used sender for the recipient)
             HStack {
                 Text("From:")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 50, alignment: .leading)
-                FromPickerView(accounts: accountManager.accounts, selectedAccountId: $selectedAccountId)
+                FromPickerView(
+                    accounts: accountManager.accounts,
+                    selectedAccountId: $selectedAccountId,
+                    onUserSelect: { fromAutoFillDisabled = true }
+                )
                     .frame(height: 22)
                     .fixedSize(horizontal: true, vertical: false)
+                    .disabled(isResolvingFrom)
+                if isResolvingFrom {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.leading, 6)
+                }
                 Spacer()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            Divider()
-
-            // To
-            autocompleteFieldRow("To:", text: $toField, suggestions: $toSuggestions, field: .to, focusField: .to)
-                .disabled(isLoadingRecipients)
             Divider()
 
             // Cc
@@ -192,6 +215,11 @@ struct ComposeView: View {
                     .focused($focusedField, equals: focusField)
                     .onChange(of: text.wrappedValue) { _, newValue in
                         updateSuggestions(for: field, query: newValue)
+                        // A comma after the first address commits it → resolve From.
+                        if field == .to, Self.hasOutsideQuoteComma(newValue) { resolveFrom() }
+                    }
+                    .onSubmit {
+                        if field == .to { resolveFrom() }
                     }
                     .onKeyPress(.downArrow) {
                         guard !items.isEmpty else { return .ignored }
@@ -305,6 +333,69 @@ struct ComposeView: View {
         text.wrappedValue = mutableParts.joined(separator: ", ") + ", "
         selectedSuggestionIndex = -1
         clearSuggestions(for: field)
+        if field == .to { resolveFrom() }
+    }
+
+    // MARK: - From auto-fill
+
+    /// True if `s` contains a comma OUTSIDE quotes (a real address delimiter),
+    /// so `"Doe, Jane" <j@x>` is not mistaken for two addresses.
+    private static func hasOutsideQuoteComma(_ s: String) -> Bool {
+        var inQuotes = false
+        for ch in s {
+            if ch == "\"" { inQuotes.toggle() }
+            else if ch == "," && !inQuotes { return true }
+        }
+        return false
+    }
+
+    /// Normalized email of the first address currently in To, or nil.
+    private func firstRecipientEmail() -> String? {
+        guard let token = ContactsCache.splitAddressList(toField).first else { return nil }
+        let email = ContactsCache.parseFromHeader(token).email
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces)
+        return email.isEmpty ? nil : email
+    }
+
+    /// Auto-select the From account for the first To recipient (new compose only).
+    /// Primary: the synchronous `SentAccountMap`. Cold miss: a network Gmail search
+    /// whose result is applied only if still relevant (token + recipient + account
+    /// still valid) and the user hasn't taken over From.
+    private func resolveFrom() {
+        guard composeType == .new, !fromAutoFillDisabled else { return }
+        guard let recipient = firstRecipientEmail() else {
+            lastResolvedRecipient = nil
+            return
+        }
+        guard recipient != lastResolvedRecipient else { return }
+        lastResolvedRecipient = recipient
+
+        // Bump first so any in-flight network search is treated as superseded
+        // (and stops owning the loader).
+        resolveToken += 1
+        let token = resolveToken
+
+        // Primary: durable map (instant, sync — no loader).
+        if let acct = SentAccountMap.shared.accountId(forRecipient: recipient),
+           accountManager.accounts.contains(where: { $0.id == acct }) {
+            isResolvingFrom = false
+            selectedAccountId = acct
+            return
+        }
+
+        // Cold miss → network fallback. Disable From + show a spinner while it runs.
+        isResolvingFrom = true
+        Task { @MainActor in
+            let acct = await apiManager.lastSenderAccountIdViaSearch(forRecipient: recipient)
+            guard token == resolveToken else { return }  // superseded by a newer resolve
+            isResolvingFrom = false
+            guard !fromAutoFillDisabled,
+                  firstRecipientEmail() == recipient,
+                  let acct,
+                  accountManager.accounts.contains(where: { $0.id == acct }) else { return }
+            selectedAccountId = acct
+        }
     }
 
     static func extractCurrentToken(from text: String) -> String {
@@ -674,26 +765,7 @@ struct ComposeView: View {
     }
 
     private func parseAddressList(_ raw: String) -> [String] {
-        guard !raw.isEmpty else { return [] }
-        // RFC 5322-aware split: only split on commas outside quoted strings
-        var results: [String] = []
-        var current = ""
-        var inQuotes = false
-        for ch in raw {
-            if ch == "\"" {
-                inQuotes.toggle()
-                current.append(ch)
-            } else if ch == "," && !inQuotes {
-                let trimmed = current.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty { results.append(trimmed) }
-                current = ""
-            } else {
-                current.append(ch)
-            }
-        }
-        let trimmed = current.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty { results.append(trimmed) }
-        return results
+        ContactsCache.splitAddressList(raw)
     }
 
     var hasContent: Bool {
@@ -842,6 +914,10 @@ struct ComposeView: View {
         for recipient in allRecipients {
             contactsCache?.addContact(email: recipient.email, displayName: recipient.displayName)
         }
+
+        // Remember which account wrote to these recipients so a future new compose
+        // can auto-select this sender (captures manual From overrides too).
+        SentAccountMap.shared.recordRecipients(to: toField, cc: ccField, accountId: selectedAccountId)
 
         onDismiss?()
     }
@@ -1374,6 +1450,10 @@ class TabAwareTextView: NSTextView {
 struct FromPickerView: NSViewRepresentable {
     let accounts: [Account]
     @Binding var selectedAccountId: String
+    /// Fired ONLY on a real user pick from the popup (its target action), never on
+    /// programmatic selection sync. Lets the caller disable From auto-fill.
+    var onUserSelect: (() -> Void)? = nil
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -1389,6 +1469,8 @@ struct FromPickerView: NSViewRepresentable {
     }
 
     func updateNSView(_ popup: NSPopUpButton, context: Context) {
+        context.coordinator.parent = self
+        popup.isEnabled = isEnabled
         updateItems(popup)
     }
 
@@ -1414,6 +1496,7 @@ struct FromPickerView: NSViewRepresentable {
         @objc func selectionChanged(_ sender: NSPopUpButton) {
             if let id = sender.selectedItem?.representedObject as? String {
                 parent.selectedAccountId = id
+                parent.onUserSelect?()
             }
         }
     }

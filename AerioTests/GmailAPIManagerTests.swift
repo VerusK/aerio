@@ -81,6 +81,62 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertNil(try mockKeychain.loadTokens(for: testAccountId))
     }
 
+    // MARK: - Last Sender Lookup (network fallback)
+
+    func testLastSenderViaSearchReturnsAccountForSentMatch() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        accountManager.addAccount(account)
+        manager.addClient(for: account)
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+            func ok(_ body: String) -> (HTTPURLResponse, Data) {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, body.data(using: .utf8)!)
+            }
+            if url.contains("/messages/sent1") {
+                return ok("""
+                {"id": "sent1", "threadId": "t1", "labelIds": ["SENT"], "snippet": "hi",
+                 "payload": {"headers": [
+                    {"name": "From", "value": "\(self.testAccountId)"},
+                    {"name": "To", "value": "Friend <friend@x.com>"},
+                    {"name": "Subject", "value": "hello"}]},
+                 "internalDate": "1711000000000"}
+                """)
+            }
+            if url.contains("/messages") && !url.contains("/messages/") {
+                return ok("""
+                {"messages": [{"id": "sent1", "threadId": "t1"}], "resultSizeEstimate": 1}
+                """)
+            }
+            return ok("{}")
+        }
+
+        let acct = await manager.lastSenderAccountIdViaSearch(forRecipient: "friend@x.com")
+        XCTAssertEqual(acct, testAccountId)
+    }
+
+    func testLastSenderViaSearchReturnsNilWhenNoMatch() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        accountManager.addAccount(account)
+        manager.addClient(for: account)
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, """
+            {"resultSizeEstimate": 0}
+            """.data(using: .utf8)!)
+        }
+
+        let acct = await manager.lastSenderAccountIdViaSearch(forRecipient: "stranger@x.com")
+        XCTAssertNil(acct)
+    }
+
+    func testLastSenderViaSearchReturnsNilForEmptyRecipient() async {
+        let acct = await manager.lastSenderAccountIdViaSearch(forRecipient: "   ")
+        XCTAssertNil(acct)
+    }
+
     // MARK: - Fetch Emails
 
     func testFetchEmailsUpdatesEmailsByAccount() async {
