@@ -12,6 +12,15 @@ enum ComposeType: Sendable {
     case draft
 }
 
+/// Pre-filled content for opening a compose window already populated — used when
+/// re-opening a stuck/failed Outbox message for editing and resend.
+struct ComposeSeed {
+    var to: String = ""
+    var cc: String = ""
+    var subject: String = ""
+    var body: String = ""
+}
+
 struct ComposeView: View {
     let accountManager: AccountManager
     let apiManager: GmailAPIManager
@@ -20,6 +29,12 @@ struct ComposeView: View {
     var composeType: ComposeType = .new
     var replyToEmail: Email?
     var preselectedAccountId: String?
+    /// When set, the compose fields are pre-filled from this (Outbox edit flow).
+    var seed: ComposeSeed?
+    /// When editing an Outbox message: its id. The original stays in the Outbox while
+    /// editing and is removed only after a successful resend — so closing without
+    /// sending leaves it recoverable in the Outbox (never auto-saved as a draft).
+    var editingOutboxItemId: UUID?
     var onDismiss: (() -> Void)?
 
     struct ComposeAttachment: Identifiable {
@@ -49,6 +64,9 @@ struct ComposeView: View {
     @State private var fetchedMessageId: String?
     @State private var toSuggestions: [CachedContact] = []
     @State private var ccSuggestions: [CachedContact] = []
+    /// Set when a send is blocked before enqueue (e.g. a recipient with no email);
+    /// drives the "Can't send" alert. ComposeView otherwise has no error surface.
+    @State private var sendError: String?
     @State private var selectedSuggestionIndex: Int = -1
     @State private var isDirty = false
     @State private var isInitialized = false
@@ -101,6 +119,14 @@ struct ComposeView: View {
             // Leaving the To field commits it → resolve the From account.
             if old == .to { resolveFrom() }
         }
+        .alert("Can’t send this message", isPresented: Binding(
+            get: { sendError != nil },
+            set: { if !$0 { sendError = nil } }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(sendError ?? "")
+        }
     }
 
     private var composeForm: some View {
@@ -113,7 +139,7 @@ struct ComposeView: View {
             // From picker (sits under To; auto-fills from last-used sender for the recipient)
             HStack {
                 Text("From:")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 50, alignment: .leading)
                 FromPickerView(
@@ -189,12 +215,12 @@ struct ComposeView: View {
     private func fieldRow(_ label: String, text: Binding<String>, focusField: ComposeField) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
             TextField("", text: text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .focused($focusedField, equals: focusField)
         }
         .padding(.horizontal, 12)
@@ -206,12 +232,12 @@ struct ComposeView: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(label)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 50, alignment: .leading)
                 TextField("", text: text)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .focused($focusedField, equals: focusField)
                     .onChange(of: text.wrappedValue) { _, newValue in
                         updateSuggestions(for: field, query: newValue)
@@ -254,10 +280,10 @@ struct ComposeView: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 if let name = contact.displayName {
                                     Text(name)
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 13, weight: .medium))
                                 }
                                 Text(contact.email)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -297,7 +323,10 @@ struct ComposeView: View {
         }
         let alreadyAdded = Self.existingEmails(in: query)
         let results = cache.search(currentToken).filter { !alreadyAdded.contains($0.email) }
-        selectedSuggestionIndex = -1
+        // Pre-highlight the top match so pressing Return commits it. Without this the
+        // index stayed -1 and Return did nothing — the user's typed name (no email)
+        // was sent verbatim and Gmail rejected it with "Invalid To header".
+        selectedSuggestionIndex = results.isEmpty ? -1 : 0
         switch field {
         case .to: toSuggestions = results
         case .cc: ccSuggestions = results
@@ -327,10 +356,23 @@ struct ComposeView: View {
 
     private func insertContact(_ contact: CachedContact, into text: Binding<String>, field: AutocompleteField) {
         let current = text.wrappedValue
-        let parts = current.components(separatedBy: ",")
-        var mutableParts = parts.dropLast().map { $0.trimmingCharacters(in: .whitespaces) }
-        mutableParts.append(contact.formatted)
-        text.wrappedValue = mutableParts.joined(separator: ", ") + ", "
+        // Replace the partial token being typed (everything after the last top-level
+        // comma) with the picked contact, preserving earlier recipients verbatim —
+        // including any with a quoted comma like "Last, First". A naive split on ","
+        // would tear those apart.
+        var inQuotes = false
+        var lastComma: String.Index?
+        var idx = current.startIndex
+        while idx < current.endIndex {
+            let ch = current[idx]
+            if ch == "\"" { inQuotes.toggle() }
+            else if ch == "," && !inQuotes { lastComma = idx }
+            idx = current.index(after: idx)
+        }
+        let prefix = lastComma.map { String(current[..<$0]).trimmingCharacters(in: .whitespaces) } ?? ""
+        text.wrappedValue = prefix.isEmpty
+            ? contact.formatted + ", "
+            : prefix + ", " + contact.formatted + ", "
         selectedSuggestionIndex = -1
         clearSuggestions(for: field)
         if field == .to { resolveFrom() }
@@ -441,7 +483,7 @@ struct ComposeView: View {
             }
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: isActive ? .bold : .regular))
+                .font(.system(size: 14, weight: isActive ? .bold : .regular))
                 .foregroundStyle(isActive ? Color.accentColor : .primary)
                 .frame(width: 26, height: 22)
                 .background(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
@@ -458,15 +500,15 @@ struct ComposeView: View {
                 ForEach(attachments) { att in
                     HStack(spacing: 4) {
                         Image(systemName: "doc")
-                            .font(.system(size: 10))
-                        Text("\(att.filename) (\(att.sizeString))")
                             .font(.system(size: 11))
+                        Text("\(att.filename) (\(att.sizeString))")
+                            .font(.system(size: 12))
                             .lineLimit(1)
                         Button {
                             attachments.removeAll { $0.id == att.id }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -555,6 +597,18 @@ struct ComposeView: View {
             selectedAccountId = preselectedAccountId
         } else {
             selectedAccountId = accountManager.accounts.first?.id ?? ""
+        }
+
+        // Outbox edit: pre-fill from the recovered message. Marked dirty so closing
+        // without resending preserves it as a draft (the original Outbox item was
+        // removed when this editor opened).
+        if let seed {
+            toField = seed.to
+            ccField = seed.cc
+            subjectField = seed.subject
+            bodyText = seed.body
+            isDirty = true
+            return
         }
 
         if let email = replyToEmail {
@@ -822,6 +876,9 @@ struct ComposeView: View {
 
     private func saveDraftIfNeeded() {
         guard !hasSent && !isSendingViaOutbox else { return }
+        // Editing an Outbox message: don't spin off a Gmail draft on close — the
+        // original is still in the Outbox, so the content is never lost.
+        guard editingOutboxItemId == nil else { return }
         // Don't create a new draft when editing an existing one
         guard composeType != .draft else { return }
         guard isDirty, hasContent else { return }
@@ -851,6 +908,28 @@ struct ComposeView: View {
         }
     }
 
+    /// Returns a human-readable problem if To/Cc contain a recipient without a valid
+    /// email (or To has no addresses at all); nil when recipients are OK.
+    static func invalidRecipientMessage(to: String, cc: String) -> String? {
+        let toAddrs = ContactsCache.parseAddressList(to)
+        guard !toAddrs.isEmpty else {
+            return "Add at least one recipient in the To field."
+        }
+        let ccAddrs = ContactsCache.parseAddressList(cc)
+        let bad = (toAddrs + ccAddrs).filter { !isValidEmail($0.email) }
+        guard bad.isEmpty else {
+            let names = bad.map { $0.displayName ?? $0.email }.joined(separator: ", ")
+            return "These recipients have no valid email address: \(names).\n\nPick a contact from the suggestions, or type a full address like name@example.com."
+        }
+        return nil
+    }
+
+    /// Conservative email sanity check — single source of truth lives in ContactsCache
+    /// so the compose guard and contact caching agree on what counts as an address.
+    static func isValidEmail(_ raw: String) -> Bool {
+        ContactsCache.isValidEmail(raw)
+    }
+
     private func sendMessage() {
         guard !toField.isEmpty,
               let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email
@@ -858,6 +937,17 @@ struct ComposeView: View {
             logger.error("Send guard failed: empty toField or no fromEmail for account \(selectedAccountId, privacy: .public)")
             return
         }
+
+        // Validate recipients before enqueue. A bare name like "Stonebraker" — typed
+        // and submitted without picking an autocomplete entry — carries no email, and
+        // Gmail rejects the whole send with "HTTP 400: Invalid To header". Catch it
+        // here and tell the user, rather than enqueuing a message doomed to fail.
+        if let problem = Self.invalidRecipientMessage(to: toField, cc: ccField) {
+            logger.error("Send blocked: invalid recipients")
+            sendError = problem
+            return
+        }
+
         // Race-protect saveDraftIfNeeded against onDisappear ordering: set BOTH flags
         // synchronously before onDismiss so the @State flush propagates predictably.
         isSendingViaOutbox = true
@@ -904,10 +994,19 @@ struct ComposeView: View {
             createdAt: now,
             nextAttemptAt: now.addingTimeInterval(TimeInterval(delaySeconds)),
             archiveOnSuccessForMsgId: archiveOnSuccess ? replyToEmail?.msgId : nil,
-            archiveOnSuccessForAccountId: archiveOnSuccess ? replyToEmail?.accountId : nil
+            archiveOnSuccessForAccountId: archiveOnSuccess ? replyToEmail?.accountId : nil,
+            toRecipients: toField,
+            ccRecipients: ccField,
+            bodyText: bodyText
         )
 
         Task { try? await outboxService.enqueue(item) }
+
+        // If this was an Outbox edit, remove the original now that the corrected
+        // message is queued.
+        if let editingOutboxItemId {
+            Task { try? await outboxService.cancel(itemId: editingOutboxItemId) }
+        }
 
         // Update contact frequency for autocomplete (was previously inside the post-send block).
         let allRecipients = ContactsCache.parseAddressList(toField) + ContactsCache.parseAddressList(ccField)

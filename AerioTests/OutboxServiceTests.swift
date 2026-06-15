@@ -168,6 +168,55 @@ final class OutboxServiceProcessTests: XCTestCase {
         XCTAssertEqual(permanentFlag, true, "permanent should be true")
     }
 
+    func testProcess_http4xxMarksFailedImmediately() async throws {
+        // A 4xx (e.g. 413 payload too large, 400 malformed MIME) will fail identically
+        // on every retry, so it must be classified permanent and fail fast — not
+        // retried 3× like a transient network error.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setSendBehavior(.throwError(GmailAPIError.httpError(413, "Request Entity Too Large")))
+        let notifier = RecordingNotifier()
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: notifier, postSendRefresh: { }
+        )
+        let item = makeItem(account: "a")
+        try await store.insert(item)
+
+        await service.processOnce()
+
+        let after = try await store.allItems()
+        XCTAssertEqual(after.first?.status, .failed)
+        XCTAssertEqual(after.first?.attemptCount, 1, "must not retry a permanent 4xx")
+        let permanentFlag = await notifier.failureCalls.first?.1
+        XCTAssertEqual(permanentFlag, true, "4xx should be reported as permanent")
+        XCTAssertEqual(after.first?.lastError, "HTTP 413: Request Entity Too Large")
+    }
+
+    func testProcess_http5xxIsTransient() async throws {
+        // A 5xx is worth retrying — it should reschedule as pending, not fail.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setSendBehavior(.throwError(GmailAPIError.httpError(503, "Service Unavailable")))
+        let notifier = RecordingNotifier()
+        let fixedNow = Date(timeIntervalSince1970: 1000)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: notifier, postSendRefresh: { },
+            now: { fixedNow }
+        )
+        let item = makeItem(account: "a", nextAttemptAt: fixedNow)
+        try await store.insert(item)
+
+        await service.processOnce()
+
+        let after = try await store.allItems()
+        XCTAssertEqual(after.first?.status, .pending)
+        XCTAssertEqual(after.first?.attemptCount, 1)
+        let failureCount = await notifier.failureCalls.count
+        XCTAssertEqual(failureCount, 0)
+    }
+
     // MARK: - Idempotency
 
     func testIdempotency_skipsSendWhenMessageAlreadyInSent() async throws {

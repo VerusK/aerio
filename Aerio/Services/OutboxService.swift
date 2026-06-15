@@ -20,6 +20,10 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
     let draftIdToConsume: String?
     let archiveOnSuccessForMsgId: String?
     let archiveOnSuccessForAccountId: String?
+    /// Composed content, surfaced so a failed/queued send can be recovered.
+    let toRecipients: String
+    let ccRecipients: String
+    let bodyText: String
 
     @MainActor
     init(_ item: OutboxItem) {
@@ -34,6 +38,9 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         self.draftIdToConsume = item.draftIdToConsume
         self.archiveOnSuccessForMsgId = item.archiveOnSuccessForMsgId
         self.archiveOnSuccessForAccountId = item.archiveOnSuccessForAccountId
+        self.toRecipients = item.toRecipients
+        self.ccRecipients = item.ccRecipients
+        self.bodyText = item.bodyText
     }
 
     init(
@@ -41,7 +48,8 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         status: OutboxStatus, attemptCount: Int,
         lastError: String?, nextAttemptAt: Date,
         draftIdToConsume: String?,
-        archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?
+        archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?,
+        toRecipients: String = "", ccRecipients: String = "", bodyText: String = ""
     ) {
         self.id = id
         self.accountId = accountId
@@ -54,6 +62,9 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         self.draftIdToConsume = draftIdToConsume
         self.archiveOnSuccessForMsgId = archiveOnSuccessForMsgId
         self.archiveOnSuccessForAccountId = archiveOnSuccessForAccountId
+        self.toRecipients = toRecipients
+        self.ccRecipients = ccRecipients
+        self.bodyText = bodyText
     }
 }
 
@@ -238,6 +249,10 @@ extension OutboxService {
                 return .transient
             case .forbidden, .notFound, .sessionExpired, .decodingError, .historyExpired, .unauthorized:
                 return .permanent
+            case .httpError(let code, _):
+                // 5xx is worth retrying; 4xx (malformed MIME, payload too large,
+                // unprocessable) will fail identically on every retry — fail fast.
+                return (500...599).contains(code) ? .transient : .permanent
             }
         }
         return .transient

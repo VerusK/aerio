@@ -47,6 +47,61 @@ final class ContactsCacheTests: XCTestCase {
         XCTAssertTrue(cache.allContacts.isEmpty)
     }
 
+    func testFormattedQuotesNameWithComma() {
+        // "Last, First" corporate contacts must be quoted, or the address parser
+        // splits them into two bogus recipients ("Stonebraker" + "Kelli ... <...>").
+        let c = CachedContact(email: "kellistonebraker@synovus.com", displayName: "Stonebraker, Kelli Elizabeth")
+        XCTAssertEqual(c.formatted, "\"Stonebraker, Kelli Elizabeth\" <kellistonebraker@synovus.com>")
+    }
+
+    func testFormattedPlainNameNotQuoted() {
+        let c = CachedContact(email: "alice@example.com", displayName: "Alice Smith")
+        XCTAssertEqual(c.formatted, "Alice Smith <alice@example.com>")
+    }
+
+    func testCommaNameRoundTripsToOneValidRecipient() {
+        // The end-to-end fix: a comma-name contact, once inserted, parses back to a
+        // single recipient with a valid email — not two broken ones.
+        let c = CachedContact(email: "kellistonebraker@synovus.com", displayName: "Stonebraker, Kelli Elizabeth")
+        let parsed = ContactsCache.parseAddressList(c.formatted)
+        XCTAssertEqual(parsed.count, 1)
+        XCTAssertEqual(parsed.first?.email, "kellistonebraker@synovus.com")
+        XCTAssertTrue(ContactsCache.isValidEmail(parsed.first?.email ?? ""))
+    }
+
+    func testAddBareNameIgnored() {
+        // The bug: a failed send to a bare name cached "Stonebraker" as a contact,
+        // which then re-appeared in autocomplete and re-inserted an invalid recipient.
+        cache.addContact(email: "Stonebraker", displayName: "Stonebraker")
+        XCTAssertTrue(cache.allContacts.isEmpty)
+    }
+
+    func testSearchExcludesInvalidEmailContacts() {
+        // Even if a bad entry somehow exists, it must never be suggested.
+        let suite = "ContactsCacheTests-bad-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let bad = CachedContact(email: "Stonebraker", displayName: "Stonebraker")
+        let good = CachedContact(email: "mike@db.com", displayName: "Mike Stonebraker")
+        d.set(try! JSONEncoder().encode(Set([bad, good])), forKey: "aerio_contacts_cache")
+        let c = ContactsCache(defaults: d)
+        let results = c.search("stone")
+        XCTAssertFalse(results.contains { $0.email == "Stonebraker" })
+        XCTAssertTrue(results.contains { $0.email == "mike@db.com" })
+        d.removePersistentDomain(forName: suite)
+    }
+
+    func testInvalidContactsPurgedOnLoad() {
+        let suite = "ContactsCacheTests-purge-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let bad = CachedContact(email: "Stonebraker", displayName: "Stonebraker")
+        let good = CachedContact(email: "alice@example.com", displayName: "Alice")
+        d.set(try! JSONEncoder().encode(Set([bad, good])), forKey: "aerio_contacts_cache")
+        let c = ContactsCache(defaults: d)
+        XCTAssertEqual(c.allContacts.count, 1)
+        XCTAssertEqual(c.allContacts.first?.email, "alice@example.com")
+        d.removePersistentDomain(forName: suite)
+    }
+
     func testDeduplication() {
         cache.addContact(email: "alice@example.com", displayName: "Alice")
         cache.addContact(email: "alice@example.com", displayName: "Alice")

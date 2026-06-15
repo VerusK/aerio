@@ -18,6 +18,13 @@ final class OutboxItem {
     var subject: String
     var recipientsPreview: String
 
+    /// Human-readable composed content, stored so a failed/queued send can be
+    /// recovered (copied back, or re-edited) without parsing `rawMime`.
+    /// Defaulted for lightweight SwiftData migration of pre-existing items.
+    var toRecipients: String = ""
+    var ccRecipients: String = ""
+    var bodyText: String = ""
+
     /// Raw storage for SwiftData; use `status` accessor.
     var statusRaw: String
     var attemptCount: Int
@@ -48,7 +55,10 @@ final class OutboxItem {
         createdAt: Date,
         nextAttemptAt: Date,
         archiveOnSuccessForMsgId: String?,
-        archiveOnSuccessForAccountId: String?
+        archiveOnSuccessForAccountId: String?,
+        toRecipients: String = "",
+        ccRecipients: String = "",
+        bodyText: String = ""
     ) {
         self.id = id
         self.accountId = accountId
@@ -58,6 +68,9 @@ final class OutboxItem {
         self.draftIdToConsume = draftIdToConsume
         self.subject = subject
         self.recipientsPreview = recipientsPreview
+        self.toRecipients = toRecipients
+        self.ccRecipients = ccRecipients
+        self.bodyText = bodyText
         self.statusRaw = status.rawValue
         self.attemptCount = attemptCount
         self.lastError = nil

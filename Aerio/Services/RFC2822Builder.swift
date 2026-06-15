@@ -12,11 +12,10 @@ struct RFC2822Builder {
         messageId: String? = nil
     ) -> String {
         var lines: [String] = []
-        let sanitize = { (s: String) in s.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "") }
-        lines.append("From: \(sanitize(from))")
-        lines.append("To: \(sanitize(to))")
+        lines.append("From: \(encodeAddressList(from))")
+        lines.append("To: \(encodeAddressList(to))")
         if let cc = cc, !cc.isEmpty {
-            lines.append("Cc: \(sanitize(cc))")
+            lines.append("Cc: \(encodeAddressList(cc))")
         }
         lines.append("Subject: \(qEncode(subject))")
         if let messageId, !messageId.isEmpty {
@@ -52,11 +51,10 @@ struct RFC2822Builder {
     ) -> String {
         let boundary = "boundary_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         var lines: [String] = []
-        let sanitize = { (s: String) in s.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "") }
-        lines.append("From: \(sanitize(from))")
-        lines.append("To: \(sanitize(to))")
+        lines.append("From: \(encodeAddressList(from))")
+        lines.append("To: \(encodeAddressList(to))")
         if let cc = cc, !cc.isEmpty {
-            lines.append("Cc: \(sanitize(cc))")
+            lines.append("Cc: \(encodeAddressList(cc))")
         }
         lines.append("Subject: \(qEncode(subject))")
         if let messageId, !messageId.isEmpty {
@@ -126,11 +124,10 @@ struct RFC2822Builder {
         let hasAttachments = !attachments.isEmpty
 
         var lines: [String] = []
-        let sanitize = { (s: String) in s.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "") }
-        lines.append("From: \(sanitize(from))")
-        lines.append("To: \(sanitize(to))")
+        lines.append("From: \(encodeAddressList(from))")
+        lines.append("To: \(encodeAddressList(to))")
         if let cc = cc, !cc.isEmpty {
-            lines.append("Cc: \(sanitize(cc))")
+            lines.append("Cc: \(encodeAddressList(cc))")
         }
         lines.append("Subject: \(qEncode(subject))")
         if let messageId, !messageId.isEmpty {
@@ -231,6 +228,47 @@ struct RFC2822Builder {
 
         let raw = lines.joined(separator: "\r\n")
         return base64URLEncode(Data(raw.utf8))
+    }
+
+    /// Build a valid RFC 5322 address-list header value ("To"/"Cc"/"From") from a
+    /// user-entered string like `Name <email>, other@x.com`.
+    ///
+    /// Crucially, this RFC 2047-encodes any non-ASCII display name and quotes ASCII
+    /// names containing specials. Without it, a non-ASCII display name (e.g. a
+    /// Cyrillic contact name pulled in by autocomplete) lands in the header as raw
+    /// UTF-8 and Gmail rejects the send with `HTTP 400: Invalid To header`.
+    /// Reuses `ContactsCache.parseAddressList`, which is quote-aware and drops empty
+    /// entries (so stray trailing commas are normalized away too).
+    static func encodeAddressList(_ raw: String) -> String {
+        let parsed = ContactsCache.parseAddressList(raw)
+        guard !parsed.isEmpty else { return stripCRLF(raw) }
+        let encoded: [String] = parsed.compactMap { addr in
+            let email = stripCRLF(addr.email)
+            guard !email.isEmpty else { return nil }
+            guard let name = addr.displayName, !name.isEmpty else { return email }
+            return "\(encodeDisplayName(stripCRLF(name))) <\(email)>"
+        }
+        return encoded.isEmpty ? stripCRLF(raw) : encoded.joined(separator: ", ")
+    }
+
+    /// Encode a display name for use in an address header: RFC 2047 encoded-word for
+    /// non-ASCII, quoted-string for ASCII names containing RFC 5322 specials,
+    /// otherwise verbatim.
+    private static func encodeDisplayName(_ name: String) -> String {
+        let isASCII = name.unicodeScalars.allSatisfy { $0.value < 128 }
+        if !isASCII {
+            return qEncode(name) // =?UTF-8?Q?…?= — encoded-words need no quoting
+        }
+        let specials = CharacterSet(charactersIn: "()<>[]:;@\\,.\"")
+        guard name.rangeOfCharacter(from: specials) != nil else { return name }
+        let escaped = name
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    private static func stripCRLF(_ s: String) -> String {
+        s.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
     }
 
     static func qEncode(_ string: String) -> String {

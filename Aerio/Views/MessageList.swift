@@ -198,22 +198,22 @@ struct MessageRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(email.from)
-                        .font(.system(size: 13, weight: email.isRead ? .regular : .semibold))
+                        .font(.system(size: 14, weight: email.isRead ? .regular : .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     Spacer()
                     Text(email.date.shortRelative)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
                 }
 
                 Text(email.subject)
-                    .font(.system(size: 12, weight: email.isRead ? .regular : .medium))
+                    .font(.system(size: 13, weight: email.isRead ? .regular : .medium))
                     .foregroundStyle(email.isRead ? .secondary : .primary)
                     .lineLimit(1)
 
                 Text(email.snippet)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }

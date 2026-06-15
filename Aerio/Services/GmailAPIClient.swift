@@ -17,6 +17,10 @@ enum GmailAPIError: LocalizedError {
     case decodingError(String)
     case historyExpired
     case networkError(String)
+    /// An unexpected HTTP status (e.g. 400 malformed MIME, 413 payload too large)
+    /// that isn't covered by the dedicated cases above. Carries the response body
+    /// so the real reason is visible instead of being hidden behind "Network error".
+    case httpError(Int, String)
 
     var errorDescription: String? {
         switch self {
@@ -29,6 +33,7 @@ enum GmailAPIError: LocalizedError {
         case .decodingError(let msg): return "Decoding error: \(msg)"
         case .historyExpired: return "History expired - full sync required"
         case .networkError(let msg): return "Network error: \(msg)"
+        case .httpError(let code, let body): return "HTTP \(code): \(body)"
         }
     }
 }
@@ -250,7 +255,11 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         do {
             (data, response) = try await session.data(for: authedRequest)
         } catch {
-            throw GmailAPIError.networkError(error.localizedDescription)
+            // Preserve the underlying URLError code/domain — "The request timed out.
+            // [NSURLErrorDomain -1001]" tells us far more than the bare description,
+            // and is what we need to tell a real timeout from a dropped connection.
+            let ns = error as NSError
+            throw GmailAPIError.networkError("\(error.localizedDescription) [\(ns.domain) \(ns.code)]")
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -303,8 +312,11 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
             return try await execute(request: request, retryCount: retryCount + 1, hasRefreshed: hasRefreshed)
 
         default:
+            // Any other status (400 malformed MIME, 411/413 too large, 422, …).
+            // These are HTTP-level failures, NOT network errors — surface the real
+            // status + body so the cause is visible and classification is correct.
             let body = String(data: data, encoding: .utf8) ?? "unknown"
-            throw GmailAPIError.networkError("Unexpected status \(httpResponse.statusCode): \(body)")
+            throw GmailAPIError.httpError(httpResponse.statusCode, body)
         }
     }
 

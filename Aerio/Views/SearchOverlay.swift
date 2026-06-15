@@ -209,11 +209,11 @@ struct SearchOverlay: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-                .font(.system(size: 16))
+                .font(.system(size: 17))
 
             TextField("Search emails...", text: $searchViewModel.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 16))
+                .font(.system(size: 17))
                 .focused($isSearchFieldFocused)
                 .onKeyPress(.escape) {
                     dismiss()
@@ -267,7 +267,7 @@ struct SearchOverlay: View {
             } label: {
                 Image(systemName: "questionmark.circle")
                     .foregroundStyle(.secondary)
-                    .font(.system(size: 14))
+                    .font(.system(size: 15))
             }
             .buttonStyle(.plain)
             .help("Gmail search operators")
@@ -335,7 +335,7 @@ struct SearchOverlay: View {
                     .foregroundStyle(.tertiary)
                 Text("No results found")
                     .foregroundStyle(.secondary)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
@@ -369,26 +369,26 @@ struct SearchResultRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(email.from)
-                        .font(.system(size: 13, weight: email.isRead ? .regular : .semibold))
+                        .font(.system(size: 14, weight: email.isRead ? .regular : .semibold))
                         .lineLimit(1)
                     Spacer()
                     Text(email.date.shortRelative)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
 
                 Text(email.subject)
-                    .font(.system(size: 12, weight: email.isRead ? .regular : .medium))
+                    .font(.system(size: 13, weight: email.isRead ? .regular : .medium))
                     .lineLimit(1)
 
                 Text(email.snippet)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.tertiary)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
@@ -419,15 +419,15 @@ struct SearchPreviewPanel: View {
                 // Header
                 VStack(alignment: .leading, spacing: 4) {
                     Text(email.subject)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .lineLimit(2)
                     HStack {
                         Text(email.from)
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(email.date.shortRelative)
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
                     }
                 }

@@ -242,7 +242,7 @@ struct NativeMessageDetail: View {
     private var messageHeaders: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(messageContent?.subject ?? email.subject)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .textSelection(.enabled)
 
             HStack(alignment: .top) {
@@ -257,7 +257,7 @@ struct NativeMessageDetail: View {
                 }
                 Spacer()
                 Text(messageContent?.date ?? email.date.shortRelative)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
 
@@ -265,10 +265,10 @@ struct NativeMessageDetail: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 4) {
                         Image(systemName: "paperclip")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text("\(attachments.count) attachment\(attachments.count == 1 ? "" : "s")")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
 
@@ -286,16 +286,16 @@ struct NativeMessageDetail: View {
                                                 .frame(width: 14, height: 14)
                                         } else {
                                             Image(systemName: iconForAttachment(att.mimeType))
-                                                .font(.system(size: 14))
+                                                .font(.system(size: 15))
                                                 .foregroundStyle(.blue)
                                         }
                                         VStack(alignment: .leading, spacing: 1) {
                                             Text(att.name)
-                                                .font(.system(size: 12, weight: .medium))
+                                                .font(.system(size: 13, weight: .medium))
                                                 .lineLimit(1)
                                             if !att.size.isEmpty {
                                                 Text(att.size)
-                                                    .font(.system(size: 10))
+                                                    .font(.system(size: 11))
                                                     .foregroundStyle(.secondary)
                                             }
                                         }
@@ -316,7 +316,7 @@ struct NativeMessageDetail: View {
                                     downloadAttachment(att, openAfter: false)
                                 } label: {
                                     Image(systemName: "arrow.down.to.line")
-                                        .font(.system(size: 11))
+                                        .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
                                         .frame(width: 28, height: 28)
                                 }
@@ -375,7 +375,7 @@ struct NativeMessageDetail: View {
             action?()
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
         }
         .buttonStyle(.borderless)
         .help(tooltip)
@@ -385,11 +385,11 @@ struct NativeMessageDetail: View {
     private func headerRow(_ label: String, value: String) -> some View {
         HStack(alignment: .top, spacing: 4) {
             Text(label + ":")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 36, alignment: .trailing)
             Text(value)
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .textSelection(.enabled)
                 .lineLimit(2)
         }

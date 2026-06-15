@@ -712,6 +712,16 @@ final class GmailAPIManager: ObservableObject {
         do {
             try await apiCall(client)
         } catch {
+            // A 404 means the message no longer exists on the server — e.g. a phantom
+            // optimistic draft that never synced. Reverting would make a stuck row
+            // reappear forever ("can't delete, Resource not found"). Instead, accept
+            // the removal as correct and drop the row for good.
+            if let apiError = error as? GmailAPIError, case .notFound = apiError {
+                logger.warning("[\(accountId)] performMove: notFound for msgId=\(msgId) — dropping stale row instead of reverting")
+                _ = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
+                persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
+                return
+            }
             revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
             throw error
         }

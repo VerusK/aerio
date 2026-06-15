@@ -38,10 +38,22 @@ struct CachedContact: Codable, Hashable, Sendable {
     }
 
     var formatted: String {
-        if let name = displayName, !name.isEmpty {
-            return "\(name) <\(email)>"
-        }
-        return email
+        guard let name = displayName, !name.isEmpty else { return email }
+        return "\(Self.quotedDisplayName(name)) <\(email)>"
+    }
+
+    /// Quote a display name when it contains characters that the address-list parser
+    /// would otherwise choke on — a comma especially (e.g. a "Last, First" corporate
+    /// contact), which would be split into two bogus recipients. Embedded quotes and
+    /// backslashes are escaped. Non-ASCII stays readable here; wire-level RFC 2047
+    /// encoding happens later in RFC2822Builder.
+    static func quotedDisplayName(_ name: String) -> String {
+        let breaking = CharacterSet(charactersIn: ",<>\"")
+        guard name.rangeOfCharacter(from: breaking) != nil else { return name }
+        let escaped = name
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 }
 
@@ -69,6 +81,15 @@ final class ContactsCache {
             defaults.set(true, forKey: countResetKey)
             logger.info("ContactsCache: reset messageCount for \(reset.count) contacts")
         }
+        // Purge entries whose "email" isn't actually an address (e.g. a bare name an
+        // earlier failed send accidentally cached). These pollute autocomplete and
+        // re-insert an invalid recipient when picked.
+        let valid = contacts.filter { Self.isValidEmail($0.email) }
+        if valid.count != contacts.count {
+            logger.info("ContactsCache: purged \(self.contacts.count - valid.count) invalid contact(s)")
+            contacts = valid
+            save()
+        }
     }
 
     var allContacts: Set<CachedContact> {
@@ -77,7 +98,7 @@ final class ContactsCache {
 
     func addContact(email: String, displayName: String?) {
         let normalized = email.lowercased().trimmingCharacters(in: .whitespaces)
-        guard !normalized.isEmpty else { return }
+        guard Self.isValidEmail(normalized) else { return }
         let existingCount = contacts.first(where: { $0.email == normalized })?.messageCount ?? 0
         let contact = CachedContact(email: normalized, displayName: displayName, messageCount: existingCount + 1)
         contacts.remove(contact)
@@ -110,7 +131,7 @@ final class ContactsCache {
 
     private func upsertContact(email: String, displayName: String?, incrementCount: Bool) -> Bool {
         let normalized = email.lowercased().trimmingCharacters(in: .whitespaces)
-        guard !normalized.isEmpty else { return false }
+        guard Self.isValidEmail(normalized) else { return false }
         let existing = contacts.first(where: { $0.email == normalized })
         let newCount = (existing?.messageCount ?? 0) + (incrementCount ? 1 : 0)
         let contact = CachedContact(email: normalized, displayName: displayName, messageCount: newCount)
@@ -158,9 +179,23 @@ final class ContactsCache {
         splitAddressList(list).map { parseFromHeader($0) }
     }
 
+    /// Conservative email sanity check — catches obvious non-addresses (a bare name,
+    /// missing @, missing domain dot). Not a full RFC validator. Shared by the compose
+    /// recipient guard so the two stay consistent.
+    nonisolated static func isValidEmail(_ raw: String) -> Bool {
+        let s = raw.trimmingCharacters(in: .whitespaces)
+        guard !s.isEmpty, !s.contains(" ") else { return false }
+        let parts = s.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return false }
+        let local = parts[0], domain = parts[1]
+        guard !local.isEmpty, !domain.isEmpty else { return false }
+        return domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
+    }
+
     func search(_ query: String) -> [CachedContact] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-        return contacts.filter { $0.matches(query) }
+        // Never suggest a contact whose stored "email" isn't a real address.
+        return contacts.filter { $0.matches(query) && Self.isValidEmail($0.email) }
             .sorted {
                 if $0.messageCount != $1.messageCount {
                     return $0.messageCount > $1.messageCount

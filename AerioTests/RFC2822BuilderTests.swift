@@ -47,6 +47,55 @@ final class RFC2822BuilderTests: XCTestCase {
         XCTAssertFalse(message.contains("Subject: Привет"))
     }
 
+    private func decode(_ raw: String) -> String {
+        String(data: RFC2822Builder.base64URLDecode(raw)!, encoding: .utf8)!
+    }
+
+    func testNonASCIIDisplayNameInToIsEncoded() {
+        // The bug: a Cyrillic display name in To went out as raw UTF-8 → Gmail
+        // rejected the send with "HTTP 400: Invalid To header".
+        let raw = RFC2822Builder.buildRawMessage(
+            from: "sender@test.com",
+            to: "Иван Петров <ivan@test.com>",
+            subject: "Hi",
+            body: "Test"
+        )
+        let message = decode(raw)
+        // No raw non-ASCII in the To header…
+        XCTAssertFalse(message.contains("To: Иван"))
+        XCTAssertFalse(message.contains("Иван Петров <ivan@test.com>"))
+        // …the display name is RFC 2047 encoded and the address preserved.
+        XCTAssertTrue(message.contains("=?UTF-8?Q?"))
+        XCTAssertTrue(message.contains("<ivan@test.com>"))
+    }
+
+    func testPlainEmailToHeaderPreserved() {
+        let raw = RFC2822Builder.buildRawMessage(
+            from: "a@b.com", to: "recipient@test.com", subject: "Hi", body: "x"
+        )
+        XCTAssertTrue(decode(raw).contains("To: recipient@test.com"))
+    }
+
+    func testASCIINameWithCommaIsQuoted() {
+        let raw = RFC2822Builder.buildRawMessage(
+            from: "a@b.com", to: "\"Doe, John\" <john@test.com>", subject: "Hi", body: "x"
+        )
+        let message = decode(raw)
+        XCTAssertTrue(message.contains("\"Doe, John\" <john@test.com>"))
+    }
+
+    func testMultipleRecipientsEncodedAndJoined() {
+        let raw = RFC2822Builder.buildRawMessage(
+            from: "a@b.com",
+            to: "plain@test.com, Анна <anna@test.com>",
+            subject: "Hi", body: "x"
+        )
+        let message = decode(raw)
+        XCTAssertTrue(message.contains("plain@test.com"))
+        XCTAssertTrue(message.contains("<anna@test.com>"))
+        XCTAssertFalse(message.contains("Анна"))
+    }
+
     func testASCIISubjectNotQEncoded() {
         let raw = RFC2822Builder.buildRawMessage(
             from: "a@b.com",

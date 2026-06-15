@@ -67,7 +67,7 @@ struct ThreadMessageView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(message.from)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .lineLimit(1)
                         Spacer()
                         // Per-message actions
@@ -77,18 +77,18 @@ struct ThreadMessageView: View {
                             actionButton(icon: "arrowshape.turn.up.right", tooltip: "Forward (\(ShortcutAction.forward.shortcutLabel))", action: onForward)
                         }
                         Text(message.date.shortRelative)
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                     if !message.to.isEmpty {
                         Text("To: \(message.to)")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if !message.cc.isEmpty {
                         Text("Cc: \(message.cc)")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -130,7 +130,7 @@ struct ThreadMessageView: View {
             .frame(width: 32, height: 32)
             .overlay(
                 Text(initial)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white)
             )
     }
@@ -146,7 +146,7 @@ struct ThreadMessageView: View {
             action?()
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
         }
         .buttonStyle(.borderless)
         .help(tooltip)
@@ -163,15 +163,15 @@ struct ThreadMessageView: View {
                             .frame(width: 14, height: 14)
                     } else {
                         Image(systemName: "doc")
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .foregroundStyle(.blue)
                     }
                     Text(att.name)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .lineLimit(1)
                     if !att.size.isEmpty {
                         Text(att.size)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
                 }

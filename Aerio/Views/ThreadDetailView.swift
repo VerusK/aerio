@@ -202,7 +202,7 @@ struct ThreadDetailView: View {
 
             if !threadMessages.isEmpty {
                 Text("\(threadMessages.count) messages")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
         }
@@ -212,7 +212,7 @@ struct ThreadDetailView: View {
 
     private var threadHeader: some View {
         Text(email.subject)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: 17, weight: .semibold))
             .textSelection(.enabled)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -223,7 +223,7 @@ struct ThreadDetailView: View {
             action?()
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
         }
         .buttonStyle(.borderless)
         .help(tooltip)

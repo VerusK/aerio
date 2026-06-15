@@ -3,6 +3,56 @@ import XCTest
 
 final class ComposeDraftTests: XCTestCase {
 
+    // MARK: - Recipient validation (pre-send)
+
+    func testBareNameRecipientIsRejected() {
+        // The actual bug: "Stonebraker" (no email) reached the To header → Gmail 400.
+        let problem = ComposeView.invalidRecipientMessage(to: "Stonebraker", cc: "")
+        XCTAssertNotNil(problem)
+        XCTAssertTrue(problem!.contains("Stonebraker"))
+    }
+
+    func testValidEmailRecipientPasses() {
+        XCTAssertNil(ComposeView.invalidRecipientMessage(to: "alice@example.com", cc: ""))
+    }
+
+    func testValidNamedRecipientPasses() {
+        XCTAssertNil(ComposeView.invalidRecipientMessage(to: "Alice <alice@example.com>", cc: ""))
+        XCTAssertNil(ComposeView.invalidRecipientMessage(to: "Иван <ivan@example.com>", cc: ""))
+    }
+
+    func testQuotedCommaNameRecipientPasses() {
+        // A "Last, First" contact, properly quoted, is ONE valid recipient.
+        XCTAssertNil(ComposeView.invalidRecipientMessage(
+            to: "\"Stonebraker, Kelli Elizabeth\" <kellistonebraker@synovus.com>", cc: ""))
+    }
+
+    func testEmptyToIsRejected() {
+        XCTAssertNotNil(ComposeView.invalidRecipientMessage(to: "", cc: ""))
+        XCTAssertNotNil(ComposeView.invalidRecipientMessage(to: "   ", cc: ""))
+    }
+
+    func testInvalidCcIsRejected() {
+        XCTAssertNotNil(ComposeView.invalidRecipientMessage(to: "alice@example.com", cc: "bob"))
+    }
+
+    func testOneBadAmongGoodRecipientsIsRejected() {
+        let problem = ComposeView.invalidRecipientMessage(to: "alice@example.com, Stonebraker", cc: "")
+        XCTAssertNotNil(problem)
+        XCTAssertTrue(problem!.contains("Stonebraker"))
+    }
+
+    func testIsValidEmail() {
+        XCTAssertTrue(ComposeView.isValidEmail("a@b.co"))
+        XCTAssertTrue(ComposeView.isValidEmail("alice.smith@mail.example.com"))
+        XCTAssertFalse(ComposeView.isValidEmail("Stonebraker"))
+        XCTAssertFalse(ComposeView.isValidEmail("no-at-sign.com"))
+        XCTAssertFalse(ComposeView.isValidEmail("missing@domain"))
+        XCTAssertFalse(ComposeView.isValidEmail("two@@at.com"))
+        XCTAssertFalse(ComposeView.isValidEmail("space in@email.com"))
+        XCTAssertFalse(ComposeView.isValidEmail("@example.com"))
+    }
+
     // MARK: - Draft Save Decision Logic (hasNonEmptyContent)
 
     func testAllFieldsEmpty_noDraft() {

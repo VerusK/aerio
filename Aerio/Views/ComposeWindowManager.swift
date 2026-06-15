@@ -26,7 +26,9 @@ final class ComposeWindowManager {
         contactsCache: ContactsCache?,
         composeType: ComposeType,
         replyToEmail: Email?,
-        preselectedAccountId: String?
+        preselectedAccountId: String?,
+        seed: ComposeSeed? = nil,
+        editingOutboxItemId: UUID? = nil
     ) {
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
@@ -34,7 +36,7 @@ final class ComposeWindowManager {
             backing: .buffered,
             defer: false
         )
-        panel.title = Self.windowTitle(for: composeType)
+        panel.title = seed != nil ? "Edit Message" : Self.windowTitle(for: composeType)
         panel.minSize = Self.minSize
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = false
@@ -51,6 +53,8 @@ final class ComposeWindowManager {
             composeType: composeType,
             replyToEmail: replyToEmail,
             preselectedAccountId: preselectedAccountId,
+            seed: seed,
+            editingOutboxItemId: editingOutboxItemId,
             onDismiss: { [weak self] in
                 guard let window = weakPanel.value else { return }
                 self?.closeWindow(window)

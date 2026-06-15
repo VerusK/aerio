@@ -1,7 +1,10 @@
 import SwiftUI
+import AppKit
 
 struct OutboxList: View {
     @EnvironmentObject var outboxService: OutboxService
+    /// Re-open a message in the compose editor to fix and resend it.
+    var onEdit: (OutboxItemSnapshot) -> Void = { _ in }
 
     var body: some View {
         if outboxService.items.isEmpty {
@@ -16,7 +19,7 @@ struct OutboxList: View {
         } else {
             List {
                 ForEach(outboxService.items, id: \.id) { item in
-                    OutboxRow(item: item)
+                    OutboxRow(item: item, onEdit: onEdit)
                 }
             }
         }
@@ -30,6 +33,7 @@ private let outboxRowTimer = Timer.publish(every: 1, on: .main, in: .common).aut
 
 private struct OutboxRow: View {
     let item: OutboxItemSnapshot
+    let onEdit: (OutboxItemSnapshot) -> Void
     @EnvironmentObject var outboxService: OutboxService
     @State private var nowTick = Date()
 
@@ -37,6 +41,7 @@ private struct OutboxRow: View {
         HStack(alignment: .top, spacing: 10) {
             statusIcon
                 .frame(width: 22)
+            // Click the message body to open it in the editor (fix & resend).
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.subject.isEmpty ? "(no subject)" : item.subject)
                     .font(.body)
@@ -48,14 +53,19 @@ private struct OutboxRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if let err = item.lastError, item.status == .failed {
-                    Text(err)
+                // A short status only — the full error is one click away via
+                // "Copy error" rather than dumped inline (it can be a long JSON blob).
+                if item.status == .failed {
+                    Text("Couldn’t send — click to edit & resend")
                         .font(.caption)
                         .foregroundStyle(.red)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { onEdit(item) }
+            .help("Click to open this message in the editor")
             actions
         }
         .padding(.vertical, 4)
@@ -95,16 +105,39 @@ private struct OutboxRow: View {
     @ViewBuilder
     private var actions: some View {
         HStack(spacing: 8) {
+            // Open in the editor to fix recipients/body and resend.
+            Button("Edit") {
+                onEdit(item)
+            }
+            .buttonStyle(.bordered)
+            .help("Open this message in the editor to fix and resend it")
+
+            if item.lastError != nil {
+                Button("Copy error") {
+                    copyToPasteboard(item.lastError ?? "")
+                }
+                .buttonStyle(.bordered)
+                .help("Copy the full send error to the clipboard")
+            }
+
             if item.status == .failed {
                 Button("Retry") {
                     Task { try? await outboxService.retry(itemId: item.id) }
                 }
                 .buttonStyle(.bordered)
+                .help("Send again as-is (use Edit instead if the recipient was wrong)")
             }
+
             Button("Cancel") {
                 Task { try? await outboxService.cancel(itemId: item.id) }
             }
             .buttonStyle(.bordered)
+            .help("Remove this message from the Outbox")
         }
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
     }
 }

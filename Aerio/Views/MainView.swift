@@ -203,7 +203,7 @@ struct MainView: View {
                 Color.accentColor.opacity(focusedPanel == .messageList ? 1 : 0).frame(height: 2)
                 Group {
                     if sidebarSelection.isOutbox {
-                        OutboxList()
+                        OutboxList(onEdit: { editOutboxItem($0) })
                     } else {
                         MessageList(
                             unifiedMailbox: unifiedMailbox,
@@ -746,6 +746,34 @@ struct MainView: View {
             replyToEmail: email,
             preselectedAccountId: email.accountId
         )
+    }
+
+    /// Re-open a stuck/failed Outbox message in the compose editor so the user can
+    /// fix it (e.g. a recipient with no email) and resend. The original item leaves
+    /// the Outbox; resending enqueues a fresh, corrected one. Closing the editor
+    /// without sending preserves the content as a draft.
+    private func editOutboxItem(_ item: OutboxItemSnapshot) {
+        let to = item.toRecipients.isEmpty ? item.recipientsPreview : item.toRecipients
+        let seed = ComposeSeed(
+            to: to,
+            cc: item.ccRecipients,
+            subject: item.subject,
+            body: item.bodyText
+        )
+        ComposeWindowManager.shared.open(
+            accountManager: accountManager,
+            apiManager: apiManager,
+            outboxService: outboxService,
+            contactsCache: contactsCache,
+            composeType: .new,
+            replyToEmail: nil,
+            preselectedAccountId: item.accountId,
+            seed: seed,
+            editingOutboxItemId: item.id
+        )
+        // The original stays in the Outbox while editing; it's removed only after a
+        // successful resend (see ComposeView.sendMessage), so closing without sending
+        // leaves it recoverable here rather than spawning a broken draft.
     }
 
     enum EmailAction: CustomStringConvertible {

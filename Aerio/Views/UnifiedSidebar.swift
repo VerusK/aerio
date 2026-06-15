@@ -160,7 +160,7 @@ struct UnifiedSidebar: View {
                     .strokeBorder(account.color.swiftUIColor.opacity(0.6), lineWidth: 1.5)
                     .frame(width: 22, height: 22)
                 Text(account.initials)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
             }
             Text(account.email)
@@ -209,7 +209,7 @@ struct UnifiedSidebar: View {
     private var buildLabel: some View {
         HStack(spacing: 0) {
             Text(BuildInfo.shortLabel)
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
