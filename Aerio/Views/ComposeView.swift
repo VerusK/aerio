@@ -141,7 +141,8 @@ struct ComposeView: View {
                 Text("From:")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 50, alignment: .leading)
+                    .lineLimit(1)
+                    .frame(width: 62, alignment: .leading)
                 FromPickerView(
                     accounts: accountManager.accounts,
                     selectedAccountId: $selectedAccountId,
@@ -217,7 +218,8 @@ struct ComposeView: View {
             Text(label)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 50, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: 62, alignment: .leading)
             TextField("", text: text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
@@ -234,7 +236,8 @@ struct ComposeView: View {
                 Text(label)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 50, alignment: .leading)
+                    .lineLimit(1)
+                    .frame(width: 62, alignment: .leading)
                 TextField("", text: text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
