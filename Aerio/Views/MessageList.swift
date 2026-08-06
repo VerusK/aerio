@@ -17,44 +17,65 @@ struct MessageList: View {
     var hasMoreEmails: Bool = false
 
     var body: some View {
+        // ScrollView + LazyVStack instead of List: the NSTableView bridge under
+        // macOS List intermittently failed to show newly inserted rows in
+        // long-running sessions (new mail invisible until a relayout). Three
+        // rounds of `.id()`-keyed List recreation either froze polling, missed
+        // non-top inserts, or reset scroll on every arrival. SwiftUI-native
+        // layout has no AppKit row cache to go stale, so no hack is needed.
         ScrollViewReader { proxy in
-            List {
-                ForEach(filteredEmails) { email in
-                    let isSelected = selectedEmailId == email.id
-                    MessageRow(
-                        email: email,
-                        account: accountManager.account(for: email.accountId),
-                        showAccountIndicator: selectedAccountId == nil
-                    )
-                    .id(email.id)
-                    .listRowBackground(
-                        isSelected
-                            ? Color.accentColor.opacity(0.25)
-                            : nil
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedEmailId = email.id
-                    }
-                    .contextMenu {
-                        contextMenuItems(for: email)
-                    }
-                }
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(filteredEmails) { email in
+                        let isSelected = selectedEmailId == email.id
+                        VStack(spacing: 0) {
+                            MessageRow(
+                                email: email,
+                                account: accountManager.account(for: email.accountId),
+                                showAccountIndicator: selectedAccountId == nil
+                            )
+                            .padding(.horizontal, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                isSelected
+                                    ? Color.accentColor.opacity(0.25)
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 5)
+                            )
+                            .padding(.horizontal, 6)
 
-                if hasMoreEmails {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .controlSize(.small)
-                        Spacer()
+                            Divider()
+                                .padding(.leading, 16)
+                        }
+                        .id(email.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedEmailId = email.id
+                        }
+                        .contextMenu {
+                            contextMenuItems(for: email)
+                        }
                     }
-                    .onAppear {
-                        onLoadMore?()
+
+                    if hasMoreEmails {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .onAppear {
+                            onLoadMore?()
+                        }
+                        .accessibilityIdentifier("load-more-sentinel")
                     }
-                    .accessibilityIdentifier("load-more-sentinel")
                 }
+                .padding(.vertical, 4)
             }
-            .listStyle(.inset)
+            // Match the content background the previous .listStyle(.inset) List drew;
+            // a bare ScrollView would show the window background instead.
+            .background(Color(nsColor: .controlBackgroundColor))
             .frame(minWidth: 250)
             .onChange(of: selectedEmailId) { _, newValue in
                 if let newValue {
@@ -78,10 +99,6 @@ struct MessageList: View {
                 }
             }
         }
-        // Recreate List only when the top row changes (new email arrived or top archived) —
-        // macOS List won't recalc content size on prepend otherwise, hiding new rows.
-        // Keyed on first id only, NOT on count — that's what made every poll/archive freeze.
-        .id(filteredEmails.first?.id ?? "")
     }
 
     @ViewBuilder
