@@ -297,7 +297,13 @@ struct MainView: View {
                         }
                         isNavigatingProgrammatically = true
                         sidebarSelection = .folder(email.folder)
-                        selectedAccountId = email.accountId
+                        // Keep an explicit account filter only if it already shows this
+                        // email; otherwise fall back to the unified view. Silently
+                        // switching the list to the email's account hid the account
+                        // indicator dots and read as data loss.
+                        if selectedAccountId != email.accountId {
+                            selectedAccountId = nil
+                        }
                         selectedEmailId = email.id
                         DispatchQueue.main.async { isNavigatingProgrammatically = false }
                     }
@@ -466,13 +472,19 @@ struct MainView: View {
            let email = emails.first(where: { $0.msgId == msgId }) {
             isNavigatingProgrammatically = true
             sidebarSelection = .folder(email.folder)
-            selectedAccountId = email.accountId
+            // Keep an explicit account filter only if it already shows this email;
+            // otherwise fall back to the unified view (see search navigation above).
+            if selectedAccountId != email.accountId {
+                selectedAccountId = nil
+            }
             selectedEmailId = email.id
             DispatchQueue.main.async { isNavigatingProgrammatically = false }
         } else {
             // Email not yet in memory — switch to inbox so next poll will show it
             sidebarSelection = .folder(.inbox)
-            selectedAccountId = accountId
+            if selectedAccountId != accountId {
+                selectedAccountId = nil
+            }
         }
     }
 
