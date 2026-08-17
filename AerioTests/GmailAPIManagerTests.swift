@@ -153,6 +153,38 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertTrue(emails.contains(where: { $0.msgId == "msg2" }))
     }
 
+    func testFetchEmailsPreservesPinnedEmailBeyondFetchWindow() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+        // A search jump injects an old email that the first fetch page won't return
+        let searchHit = makeEmail(msgId: "old-search-hit", isRead: true, date: Date(timeIntervalSinceNow: -86400 * 90))
+        manager.emailsByAccount[testAccountId] = [searchHit]
+        manager.pinnedEmailId = searchHit.id
+
+        setupMockForFetchEmails()
+        await manager.fetchEmails(for: testAccountId)
+
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertTrue(emails.contains(where: { $0.msgId == "old-search-hit" }),
+                      "pinned search-jump email must survive the folder refetch")
+        XCTAssertTrue(emails.contains(where: { $0.msgId == "msg1" }))
+        XCTAssertTrue(emails.contains(where: { $0.msgId == "msg2" }))
+    }
+
+    func testFetchEmailsDropsStaleEmailWithoutPin() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+        let stale = makeEmail(msgId: "stale-old", isRead: true, date: Date(timeIntervalSinceNow: -86400 * 90))
+        manager.emailsByAccount[testAccountId] = [stale]
+
+        setupMockForFetchEmails()
+        await manager.fetchEmails(for: testAccountId)
+
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertFalse(emails.contains(where: { $0.msgId == "stale-old" }),
+                       "unpinned emails outside the fetch window are replaced as before")
+    }
+
     func testFetchEmailsSetsClientStateToIdleOnSuccess() async {
         let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
         manager.addClient(for: account)

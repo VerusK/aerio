@@ -238,6 +238,11 @@ struct MainView: View {
             if !isNavigatingProgrammatically { selectedEmailId = nil }
         }
         .onChange(of: selectedEmailId) { _, newId in
+            // The pin only protects a programmatic jump target while it stays
+            // selected; moving the selection releases it for normal replacement.
+            if newId != apiManager.pinnedEmailId {
+                apiManager.pinnedEmailId = nil
+            }
             if let newId, let email = findEmail(by: newId), !email.isRead {
                 apiManager.markAsRead(emailId: email.id, accountId: email.accountId)
             }
@@ -296,6 +301,9 @@ struct MainView: View {
                             apiManager.emailsByAccount[accountId] = emails
                         }
                         isNavigatingProgrammatically = true
+                        // Pin the jump target so the folder refetch triggered by the
+                        // navigation below can't drop it from the paginated window.
+                        apiManager.pinnedEmailId = email.id
                         sidebarSelection = .folder(email.folder)
                         // Keep an explicit account filter only if it already shows this
                         // email; otherwise fall back to the unified view. Silently
@@ -471,6 +479,7 @@ struct MainView: View {
         if let emails = apiManager.emailsByAccount[accountId],
            let email = emails.first(where: { $0.msgId == msgId }) {
             isNavigatingProgrammatically = true
+            apiManager.pinnedEmailId = email.id
             sidebarSelection = .folder(email.folder)
             // Keep an explicit account filter only if it already shows this email;
             // otherwise fall back to the unified view (see search navigation above).
