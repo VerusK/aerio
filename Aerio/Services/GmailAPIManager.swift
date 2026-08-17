@@ -44,6 +44,10 @@ final class GmailAPIManager: ObservableObject {
     private(set) var accountsWithCompletedFetch = Set<String>()
     var pageTokens: [String: [Folder: String]] = [:]
     private var fetchingMore: Set<String> = []
+    /// Id of an email navigated to programmatically (search jump, notification click)
+    /// that may live beyond the paginated fetch window. While set, folder refetches
+    /// preserve it instead of dropping it with the wholesale window replacement.
+    var pinnedEmailId: String?
 
     // Factory closure for creating clients — allows test injection
     var clientFactory: ((String, OAuthManager) -> GmailAPIClient)?
@@ -271,6 +275,15 @@ final class GmailAPIManager: ObservableObject {
             let oldFolderEmails = current.filter { $0.folder == folder }
             current.removeAll { $0.folder == folder }
             current.append(contentsOf: batchEmails)
+            // Preserve a pinned jump target (search result / notification email older
+            // than the fetch window) through the replacement — dropping it emptied
+            // the user's selection and detail view seconds after they opened it.
+            // Explicit delete/archive mutate emailsByAccount directly and still win.
+            if let pinnedId = pinnedEmailId,
+               let pinned = oldFolderEmails.first(where: { $0.id == pinnedId }),
+               !batchEmails.contains(where: { $0.id == pinnedId }) {
+                current.append(pinned)
+            }
             // Skip update if data unchanged (avoids unnecessary re-render after cache load)
             if oldFolderEmails != batchEmails {
                 emailsByAccount[accountId] = current
