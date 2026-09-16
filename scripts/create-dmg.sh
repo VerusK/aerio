@@ -10,8 +10,10 @@ TEMP_DIR=$(mktemp -d)
 
 echo "Creating DMG: ${DMG_NAME}"
 
-# Create staging area with app and Applications symlink
-cp -R "${APP_PATH}" "${TEMP_DIR}/Aerio.app"
+# Create staging area with app and Applications symlink.
+# ditto, not cp -R: it is the only copy that reliably carries the bundle's
+# extended attributes across, including the stapled notarization ticket.
+ditto "${APP_PATH}" "${TEMP_DIR}/Aerio.app"
 ln -s /Applications "${TEMP_DIR}/Applications"
 
 # Create DMG

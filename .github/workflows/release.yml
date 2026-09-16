@@ -53,6 +53,7 @@ jobs:
           agvtool new-version -all "${VERSION//\.}"
 
       - name: Build Release
+        # Built ad-hoc on purpose; sign-and-notarize.sh re-signs with Developer ID.
         run: |
           xcodebuild -project $PROJECT \
             -scheme $SCHEME \
@@ -63,13 +64,53 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build
 
-      - name: Create DMG
+      - name: Import signing certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
-          ./scripts/create-dmg.sh \
-            "$RUNNER_TEMP/build/Build/Products/Release/Aerio.app" \
-            "${{ steps.version.outputs.version }}" \
-            "$RUNNER_TEMP"
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
 
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          # Without this codesign blocks on a GUI prompt that no runner can answer.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+
+          # Put the new keychain first in the search list, keeping the defaults.
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | tr -d '"')
+
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Sign, notarize and package
+        # Apple's notary queue is usually minutes but occasionally much longer;
+        # this is a backstop against a job that would otherwise hang for hours.
+        timeout-minutes: 150
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          EXPECT_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          trap 'rm -f "$RUNNER_TEMP/notary.p8"' EXIT
+          echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+
+          NOTARY_KEY="$RUNNER_TEMP/notary.p8" \
+            ./scripts/sign-and-notarize.sh \
+              "$RUNNER_TEMP/build/Build/Products/Release/Aerio.app" \
+              "${{ steps.version.outputs.version }}" \
+              "$RUNNER_TEMP"
+
+      # Must run after stapling — the staple rewrites the DMG and changes its hash.
       - name: Compute SHA256
         id: sha
         run: |

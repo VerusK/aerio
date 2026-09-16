@@ -79,12 +79,51 @@ git push origin main && git push origin v1.X.Y
 gh release create v1.X.Y --repo VerusK/aerio --title "Aerio 1.X.Y" --notes "..."
 ```
 
-- CI builds DMG and attaches it to the GitHub release automatically on tag push
+- CI builds, signs, notarizes and attaches the DMG to the GitHub release automatically on tag push
 - Release notes should describe **what was broken and how it's fixed** in user-facing language, not commit messages
 - Include Homebrew install/upgrade instructions in notes
 - Homebrew tap: `VerusK/tap/aerio`
 - **Never delete + re-push a tag after the release exists.** GitHub disassociates the existing release and marks it draft, breaking the canonical `releases/download/v.../...` URL. If a shipped tag needs a fix, bump to the next patch version (e.g., v1.5.0 → v1.5.1) instead of retagging.
 - If CI's `Update Homebrew tap` step fails (typically expired `TAP_GITHUB_TOKEN` PAT), run `scripts/update-tap.sh <version>` locally as a recovery step. The DMG itself is independent and gets uploaded regardless.
+
+## Code Signing & Notarization
+
+Releases are signed with Developer ID and notarized, so Gatekeeper opens them without the `xattr -cr` workaround. `scripts/sign-and-notarize.sh` owns the whole flow and runs both from CI and locally.
+
+- **Team ID `YP8Y455729`** (Roman Dubina) — the paid account. `77RBZYH4BN` is a *different*, free personal team; the `Apple Development` cert in the local Keychain belongs to it. Only the Developer ID cert is valid for distribution.
+- **Certificate: `Developer ID Application: Roman Dubina (YP8Y455729)`, G2 Sub-CA, expires 2031-09-17.** It signs with `--options runtime` (Hardened Runtime, required for notarization) and `--timestamp` — the timestamp is what keeps already-shipped builds launchable after the certificate expires.
+- **The app has no entitlements file and is not sandboxed.** Hardened Runtime with zero entitlements is the most restrictive setup that still works; network, Keychain, WKWebView and `ASWebAuthenticationSession` need no exceptions. Add entitlements only if notarization or the runtime actually rejects something.
+- **Both the .app and the DMG are notarized and stapled.** Stapling only the DMG leaves the copied-out app ticketless, so its first launch needs network access and fails offline. This is why the script submits twice.
+- **Compute the DMG's SHA256 only after stapling** — `stapler staple` rewrites the file, so a hash taken earlier points the Homebrew cask at bytes that no longer exist.
+- `create-dmg.sh` uses `ditto`, not `cp -R`: only `ditto` reliably carries the bundle's extended attributes, the stapled ticket included.
+- Developer ID certificates **can't be issued via the App Store Connect API** (`This operation can only be performed by the Account Holder`). Renewal means the web portal or Xcode → Settings → Accounts → Manage Certificates.
+- Local end-to-end run (notarizes for real, and Apple's queue can take an hour):
+  ```bash
+  NOTARY_KEY=~/path/AuthKey_XXXXXXXXXX.p8 NOTARY_KEY_ID=XXXXXXXXXX \
+  NOTARY_ISSUER_ID=<uuid> EXPECT_TEAM_ID=YP8Y455729 \
+    ./scripts/sign-and-notarize.sh <path-to-Aerio.app> <version> <output-dir>
+  ```
+- `xcrun notarytool store-credentials <profile>` (which would shorten the above to
+  `NOTARY_PROFILE=<profile>`) **only works from an interactive Terminal.** Run from an
+  agent or any non-TTY shell it fails with `An error occurred while accessing the
+  keychain. User interaction is not allowed` — and it reports that *after* printing
+  `Credentials validated`, so it looks like it worked. Same goes for reading the
+  profile back: a stored profile that a non-interactive shell can't unlock is reported
+  as `No Keychain password item found`, not as a permissions error. Prefer the explicit
+  `NOTARY_KEY` form in anything scripted.
+
+### CI secrets
+
+| Secret | Contents |
+|---|---|
+| `MACOS_CERT_P12` | Developer ID cert + private key + G2 intermediate, base64 `.p12` |
+| `MACOS_CERT_PASSWORD` | password for that `.p12` |
+| `APPLE_TEAM_ID` | `YP8Y455729`; the signature is asserted against it |
+| `NOTARY_KEY_P8` | App Store Connect API key, base64 `.p8` |
+| `NOTARY_KEY_ID` | key ID |
+| `NOTARY_ISSUER_ID` | issuer UUID |
+
+The `Import signing certificate` step builds a throwaway keychain in `$RUNNER_TEMP`. `security set-key-partition-list` is mandatory there — without it `codesign` blocks on a GUI prompt no runner can answer.
 
 ## Memory & Knowledge Management
 

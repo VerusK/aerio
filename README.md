@@ -60,13 +60,8 @@ brew tap VerusK/aerio
 brew install --cask aerio
 ```
 
-On first launch macOS may block the app because it's not signed. To fix:
-
-```bash
-xattr -cr /Applications/Aerio.app
-```
-
-Or: right-click Aerio.app → Open → Open.
+Releases are signed with a Developer ID certificate and notarized by Apple, so the
+app opens normally — no `xattr` workaround, no right-click → Open.
 
 ### Build from source
 
