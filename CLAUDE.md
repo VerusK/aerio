@@ -82,7 +82,7 @@ gh release create v1.X.Y --repo VerusK/aerio --title "Aerio 1.X.Y" --notes "..."
 - CI builds, signs, notarizes and attaches the DMG to the GitHub release automatically on tag push
 - Release notes should describe **what was broken and how it's fixed** in user-facing language, not commit messages
 - Include Homebrew install/upgrade instructions in notes
-- Homebrew tap: `VerusK/tap/aerio`
+- Homebrew tap: `VerusK/aerio` (repo `VerusK/homebrew-aerio`) — one-line install is `brew install --cask VerusK/aerio/aerio`; `VerusK/tap/aerio` does not exist
 - **Never delete + re-push a tag after the release exists.** GitHub disassociates the existing release and marks it draft, breaking the canonical `releases/download/v.../...` URL. If a shipped tag needs a fix, bump to the next patch version (e.g., v1.5.0 → v1.5.1) instead of retagging.
 - If CI's `Update Homebrew tap` step fails (typically expired `TAP_GITHUB_TOKEN` PAT), run `scripts/update-tap.sh <version>` locally as a recovery step. The DMG itself is independent and gets uploaded regardless.
 
