@@ -565,7 +565,7 @@ struct ComposeView: View {
                 }
             }
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(isLoadingRecipients || isLoadingDraft || toField.isEmpty)
+            .disabled(isLoadingRecipients || isLoadingDraft || toField.isEmpty || isSendingViaOutbox)
             .help("Send message (⌘Return)")
         }
         .padding()
@@ -934,6 +934,8 @@ struct ComposeView: View {
     }
 
     private func sendMessage() {
+        // Queueing is async now; a second ⌘Return in that window would queue it twice.
+        guard !isSendingViaOutbox else { return }
         guard !toField.isEmpty,
               let fromEmail = accountManager.accounts.first(where: { $0.id == selectedAccountId })?.email
         else {
@@ -1003,25 +1005,39 @@ struct ComposeView: View {
             bodyText: bodyText
         )
 
-        Task { try? await outboxService.enqueue(item) }
+        // Close the window only once the message is durably queued. Enqueue failing
+        // used to be swallowed after the window had already closed, losing the message
+        // outright — and an Outbox edit's original was cancelled regardless.
+        Task {
+            do {
+                try await outboxService.enqueue(item)
+            } catch {
+                logger.error("Enqueue failed: \(error.localizedDescription, privacy: .public)")
+                // Nothing was queued: keep the window and its content, and let closing
+                // it save a draft as usual.
+                isSendingViaOutbox = false
+                hasSent = false
+                sendError = "Couldn’t queue the message: \(error.localizedDescription)"
+                return
+            }
 
-        // If this was an Outbox edit, remove the original now that the corrected
-        // message is queued.
-        if let editingOutboxItemId {
-            Task { try? await outboxService.cancel(itemId: editingOutboxItemId) }
+            // Only now is it safe to drop the original of an Outbox edit.
+            if let editingOutboxItemId {
+                try? await outboxService.cancel(itemId: editingOutboxItemId)
+            }
+
+            // Update contact frequency for autocomplete (was previously inside the post-send block).
+            let allRecipients = ContactsCache.parseAddressList(toField) + ContactsCache.parseAddressList(ccField)
+            for recipient in allRecipients {
+                contactsCache?.addContact(email: recipient.email, displayName: recipient.displayName)
+            }
+
+            // Remember which account wrote to these recipients so a future new compose
+            // can auto-select this sender (captures manual From overrides too).
+            SentAccountMap.shared.recordRecipients(to: toField, cc: ccField, accountId: selectedAccountId)
+
+            onDismiss?()
         }
-
-        // Update contact frequency for autocomplete (was previously inside the post-send block).
-        let allRecipients = ContactsCache.parseAddressList(toField) + ContactsCache.parseAddressList(ccField)
-        for recipient in allRecipients {
-            contactsCache?.addContact(email: recipient.email, displayName: recipient.displayName)
-        }
-
-        // Remember which account wrote to these recipients so a future new compose
-        // can auto-select this sender (captures manual From overrides too).
-        SentAccountMap.shared.recordRecipients(to: toField, cc: ccField, accountId: selectedAccountId)
-
-        onDismiss?()
     }
 }
 
