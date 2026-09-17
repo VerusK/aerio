@@ -46,20 +46,25 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             || exit 1
 
-      - name: Set version
+      - name: Set build number
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          agvtool new-marketing-version "$VERSION"
           agvtool new-version -all "${VERSION//\.}"
 
       - name: Build Release
         # Built ad-hoc on purpose; sign-and-notarize.sh re-signs with Developer ID.
+        #
+        # MARKETING_VERSION goes in as a build setting: Info.plist is generated
+        # (GENERATE_INFOPLIST_FILE), so `agvtool new-marketing-version` had no
+        # CFBundleShortVersionString key to edit and every release through 1.7.0
+        # shipped as "1.0.1" in Finder and the About panel.
         run: |
           xcodebuild -project $PROJECT \
             -scheme $SCHEME \
             -configuration Release \
             -derivedDataPath $RUNNER_TEMP/build \
             OAUTH_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
+            MARKETING_VERSION=${{ steps.version.outputs.version }} \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
             build
