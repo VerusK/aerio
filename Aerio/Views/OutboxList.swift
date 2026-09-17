@@ -56,7 +56,7 @@ private struct OutboxRow: View {
                 // A short status only — the full error is one click away via
                 // "Copy error" rather than dumped inline (it can be a long JSON blob).
                 if item.status == .failed {
-                    Text("Couldn’t send — click to edit & resend")
+                    Text(failureHint)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .lineLimit(1)
@@ -64,8 +64,8 @@ private struct OutboxRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { onEdit(item) }
-            .help("Click to open this message in the editor")
+            .onTapGesture { if item.canEdit { onEdit(item) } }
+            .help(item.canEdit ? "Click to open this message in the editor" : editUnavailableReason)
             actions
         }
         .padding(.vertical, 4)
@@ -86,6 +86,17 @@ private struct OutboxRow: View {
             return "Retrying in \(secondsLeft)s"
         }
         return "Sending in \(secondsLeft)s"
+    }
+
+    private var failureHint: String {
+        if item.isPausedForEditing { return "Paused for editing — Retry sends it as-is" }
+        return item.canEdit ? "Couldn’t send — click to edit & resend" : "Couldn’t send — use Retry or Cancel"
+    }
+
+    private var editUnavailableReason: String {
+        item.status == .sending
+            ? "Already sending — it can’t be edited now"
+            : "Messages with attachments or inline images can’t be edited here — use Retry or Cancel"
     }
 
     @ViewBuilder
@@ -110,7 +121,8 @@ private struct OutboxRow: View {
                 onEdit(item)
             }
             .buttonStyle(.bordered)
-            .help("Open this message in the editor to fix and resend it")
+            .disabled(!item.canEdit)
+            .help(item.canEdit ? "Open this message in the editor to fix and resend it" : editUnavailableReason)
 
             if item.lastError != nil {
                 Button("Copy error") {

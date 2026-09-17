@@ -552,6 +552,131 @@ final class OutboxServiceCancelRetryTests: XCTestCase {
     }
 }
 
+// MARK: - Editing a queued message
+
+@MainActor
+final class OutboxServiceEditTests: XCTestCase {
+    private let pdf = RFC2822Builder.Attachment(
+        filename: "a.pdf", mimeType: "application/pdf", data: Data(repeating: 1, count: 64))
+    private let png = RFC2822Builder.InlineImage(
+        cid: "img1", mimeType: "image/png", data: Data(repeating: 2, count: 64))
+
+    /// An item whose rawMime is what compose really produces for this content.
+    private func queuedItem(
+        status: OutboxStatus = .pending,
+        cc: String? = nil,
+        htmlBody: String? = nil,
+        attachments: [RFC2822Builder.Attachment] = [],
+        inlineImages: [RFC2822Builder.InlineImage] = []
+    ) -> OutboxItem {
+        let raw = RFC2822Builder.build(ComposePayload(
+            from: "me@example.com", to: "you@example.com", cc: cc, subject: "s", body: "body",
+            inReplyTo: nil, references: nil, htmlBody: htmlBody,
+            attachments: attachments, inlineImages: inlineImages, messageId: "<m@aerio.local>"
+        ))
+        let item = makeItem(account: "a", status: status)
+        item.rawMime = Data(raw.utf8)
+        return item
+    }
+
+    private func makeService(store: OutboxStore, sender: MockOutboxSender) -> OutboxService {
+        OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+    }
+
+    // MARK: pauseForEditing
+
+    func testPauseForEditing_pendingItemIsNoLongerSentAutomatically() async throws {
+        // Otherwise the original goes out when its delay elapses, and the edited copy
+        // follows it — the recipient gets both.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        let service = makeService(store: store, sender: sender)
+        let item = queuedItem()
+        let id = item.id
+        try await store.insert(item)
+
+        let paused = try await service.pauseForEditing(itemId: id)
+        await service.processOnce()
+
+        XCTAssertTrue(paused)
+        let sendCount = await sender.sendMessageCalls.count
+        XCTAssertEqual(sendCount, 0)
+        let stored = try await store.item(byId: id)
+        XCTAssertEqual(stored?.status, .failed, "a paused item stays in the Outbox, recoverable via Retry")
+    }
+
+    func testPauseForEditing_refusesItemAlreadySending() async throws {
+        let store = OutboxStore(inMemory: true)
+        let service = makeService(store: store, sender: MockOutboxSender())
+        let item = queuedItem(status: .sending)
+        let id = item.id
+        try await store.insert(item)
+
+        let paused = try await service.pauseForEditing(itemId: id)
+
+        XCTAssertFalse(paused, "a send in flight can't be stopped, so editing would produce a duplicate")
+        let stored = try await store.item(byId: id)
+        XCTAssertEqual(stored?.status, .sending)
+    }
+
+    func testPauseForEditing_allowsFailedItem() async throws {
+        let store = OutboxStore(inMemory: true)
+        let service = makeService(store: store, sender: MockOutboxSender())
+        let item = queuedItem(status: .failed)
+        let id = item.id
+        try await store.insert(item)
+
+        let paused = try await service.pauseForEditing(itemId: id)
+
+        XCTAssertTrue(paused)
+    }
+
+    func testPauseForEditing_refusesItemThatIsGone() async throws {
+        // The row can outlive its item by a moment (e.g. it was just sent and deleted);
+        // opening an editor for it would let the user send the message a second time.
+        let store = OutboxStore(inMemory: true)
+        let service = makeService(store: store, sender: MockOutboxSender())
+
+        let paused = try await service.pauseForEditing(itemId: UUID())
+
+        XCTAssertFalse(paused)
+    }
+
+    // MARK: canEdit
+
+    func testCanEdit_plainTextMessage() {
+        XCTAssertTrue(OutboxItemSnapshot(queuedItem()).canEdit)
+    }
+
+    func testCanEdit_htmlMessage() {
+        XCTAssertTrue(OutboxItemSnapshot(queuedItem(htmlBody: "<b>hi</b>")).canEdit)
+    }
+
+    func testCanEdit_falseWhenMessageHasAttachment() {
+        // The editor only gets recipients, subject and plain text back, so resending
+        // from it would silently drop the file and delete the original.
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(attachments: [pdf])).canEdit)
+    }
+
+    func testCanEdit_falseWhenMessageHasInlineImage() {
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(inlineImages: [png])).canEdit)
+    }
+
+    func testCanEdit_falseForAttachmentBehindLongRecipientList() {
+        // The Content-Type header comes after To/Cc, so a big Cc list pushes it far
+        // from the start of the message.
+        let cc = (1...300).map { "person\($0)@example.com" }.joined(separator: ", ")
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(cc: cc, attachments: [pdf])).canEdit)
+    }
+
+    func testCanEdit_falseWhileSending() {
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(status: .sending)).canEdit)
+    }
+}
+
 // MARK: - processLoop driver
 
 @MainActor

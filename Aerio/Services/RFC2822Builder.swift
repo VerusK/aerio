@@ -299,6 +299,25 @@ struct RFC2822Builder {
     static func base64URLDecode(_ string: String) -> Data? {
         Data.fromBase64URL(string)
     }
+
+    /// Whether a message this builder produced carries attachments or inline images,
+    /// read from its top-level Content-Type (multipart/mixed or multipart/related).
+    /// Takes the stored form — the base64url text as bytes — and decodes only a
+    /// prefix, so a message with large attachments is never decoded whole.
+    static func carriesFiles(base64URLMessage: Data) -> Bool {
+        // Headers come first; 64 KB of base64 (~48 KB decoded) covers even a very long
+        // To/Cc list. Trim to a whole 4-character group so the prefix decodes.
+        let prefix = base64URLMessage.prefix(64_000)
+        let usable = prefix.prefix(prefix.count / 4 * 4)
+        guard let head = base64URLDecode(String(decoding: usable, as: UTF8.self)) else { return false }
+        // Lenient decoding: the prefix may end mid-character in the body, which must not
+        // turn a message with attachments into one that looks editable.
+        let text = String(decoding: head, as: UTF8.self)
+        let headerEnd = text.range(of: "\r\n\r\n")?.lowerBound ?? text.endIndex
+        let headers = text[..<headerEnd].lowercased()
+        return headers.contains("content-type: multipart/mixed")
+            || headers.contains("content-type: multipart/related")
+    }
 }
 
 extension RFC2822Builder {

@@ -26,7 +26,20 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
     let bodyText: String
 
     @MainActor
+    /// Attachments or inline images — things the compose editor can't get back.
+    let carriesFiles: Bool
+
+    /// Whether the message can be reopened in the compose editor. The editor only gets
+    /// recipients, subject and plain text back, so a message carrying files would lose
+    /// them on resend; a message already sending can't be stopped.
+    var canEdit: Bool { status != .sending && !carriesFiles }
+
+    var isPausedForEditing: Bool {
+        status == .failed && lastError == OutboxService.pausedForEditingError
+    }
+
     init(_ item: OutboxItem) {
+        self.carriesFiles = RFC2822Builder.carriesFiles(base64URLMessage: item.rawMime)
         self.id = item.id
         self.accountId = item.accountId
         self.subject = item.subject
@@ -49,8 +62,10 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         lastError: String?, nextAttemptAt: Date,
         draftIdToConsume: String?,
         archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?,
-        toRecipients: String = "", ccRecipients: String = "", bodyText: String = ""
+        toRecipients: String = "", ccRecipients: String = "", bodyText: String = "",
+        carriesFiles: Bool = false
     ) {
+        self.carriesFiles = carriesFiles
         self.id = id
         self.accountId = accountId
         self.subject = subject
@@ -281,6 +296,30 @@ extension OutboxService {
     func cancel(itemId: UUID) async throws {
         try await store.delete(id: itemId)
         await reloadItems()
+    }
+
+    /// `lastError` of an item paused by `pauseForEditing` — how the Outbox tells a pause
+    /// apart from a real send failure.
+    nonisolated static let pausedForEditingError = "Paused for editing"
+
+    /// Takes a queued message out of automatic sending so it can be edited without the
+    /// original going out too. Returns false when editing can't be made safe: the send
+    /// is already in flight, or the item is gone (typically just sent and deleted).
+    /// A paused item stays in the Outbox as failed, so Retry still sends it as-is.
+    func pauseForEditing(itemId: UUID) async throws -> Bool {
+        guard let item = try await store.item(byId: itemId) else { return false }
+        switch item.status {
+        case .sending:
+            return false
+        case .failed:
+            return true
+        case .pending:
+            item.status = .failed
+            item.lastError = Self.pausedForEditingError
+            try store.save()
+            await reloadItems()
+            return true
+        }
     }
 
     func retry(itemId: UUID) async throws {
