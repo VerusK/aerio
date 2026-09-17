@@ -96,6 +96,8 @@ Releases are signed with Developer ID and notarized, so Gatekeeper opens them wi
 - **Both the .app and the DMG are notarized and stapled.** Stapling only the DMG leaves the copied-out app ticketless, so its first launch needs network access and fails offline. This is why the script submits twice.
 - **Compute the DMG's SHA256 only after stapling** — `stapler staple` rewrites the file, so a hash taken earlier points the Homebrew cask at bytes that no longer exist.
 - `create-dmg.sh` uses `ditto`, not `cp -R`: only `ditto` reliably carries the bundle's extended attributes, the stapled ticket included.
+- **`codesign --timestamp` has no timeout of its own.** It fetches the timestamp from `timestamp.apple.com` over plain HTTP:80; if that port is silently swallowed (e.g. a proxy/VPN that only passes 443) signing hangs for hours and finally fails with `timestamps differ by N seconds - check your system clock` — the clock is fine, N is just how long it hung. Before a local run: `curl -sI --max-time 10 http://timestamp.apple.com/ts01` should answer in seconds.
+- A brand-new team's **first** notarizations can sit `In Progress` for many hours (ours: ~16 h). Apple holds them for deeper analysis and then releases the team; every submission after that clears in under a minute. Don't cut a first release on a new team until one submission is `Accepted`.
 - Developer ID certificates **can't be issued via the App Store Connect API** (`This operation can only be performed by the Account Holder`). Renewal means the web portal or Xcode → Settings → Accounts → Manage Certificates.
 - Local end-to-end run (notarizes for real, and Apple's queue can take an hour):
   ```bash
