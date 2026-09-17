@@ -26,7 +26,20 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
     let bodyText: String
 
     @MainActor
+    /// Attachments or inline images — things the compose editor can't get back.
+    let carriesFiles: Bool
+
+    /// Whether the message can be reopened in the compose editor. The editor only gets
+    /// recipients, subject and plain text back, so a message carrying files would lose
+    /// them on resend; a message already sending can't be stopped.
+    var canEdit: Bool { status != .sending && !carriesFiles }
+
+    var isPausedForEditing: Bool {
+        status == .failed && lastError == OutboxService.pausedForEditingError
+    }
+
     init(_ item: OutboxItem) {
+        self.carriesFiles = RFC2822Builder.carriesFiles(base64URLMessage: item.rawMime)
         self.id = item.id
         self.accountId = item.accountId
         self.subject = item.subject
@@ -49,8 +62,10 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         lastError: String?, nextAttemptAt: Date,
         draftIdToConsume: String?,
         archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?,
-        toRecipients: String = "", ccRecipients: String = "", bodyText: String = ""
+        toRecipients: String = "", ccRecipients: String = "", bodyText: String = "",
+        carriesFiles: Bool = false
     ) {
+        self.carriesFiles = carriesFiles
         self.id = id
         self.accountId = accountId
         self.subject = subject
@@ -215,6 +230,11 @@ extension OutboxService {
         let snapshot = OutboxItemSnapshot(item)
         let sender = sendersByAccount[snapshot.accountId]
 
+        // Gmail has the message: take it out of the queue *before* the best-effort
+        // side effects below. They are more network calls, and quitting during them
+        // with the item still stored would send it again on the next launch.
+        try? await store.delete(id: snapshot.id)
+
         // 1. Delete consumed draft (best-effort).
         if let draftId = snapshot.draftIdToConsume, let sender {
             do { try await sender.deleteDraft(draftId: draftId) }
@@ -235,7 +255,6 @@ extension OutboxService {
             catch { logger.error("self-send INBOX strip failed (ignored): \(error.localizedDescription)") }
         }
 
-        try? await store.delete(id: snapshot.id)
         await notifier.notifySuccess(snapshot: snapshot)
         await postSendRefresh()
     }
@@ -279,10 +298,38 @@ extension OutboxService {
         await reloadItems()
     }
 
+    /// `lastError` of an item paused by `pauseForEditing` — how the Outbox tells a pause
+    /// apart from a real send failure.
+    nonisolated static let pausedForEditingError = "Paused for editing"
+
+    /// Takes a queued message out of automatic sending so it can be edited without the
+    /// original going out too. Returns false when editing can't be made safe: the send
+    /// is already in flight, or the item is gone (typically just sent and deleted).
+    /// A paused item stays in the Outbox as failed, so Retry still sends it as-is.
+    func pauseForEditing(itemId: UUID) async throws -> Bool {
+        guard let item = try await store.item(byId: itemId) else { return false }
+        switch item.status {
+        case .sending:
+            return false
+        case .failed:
+            return true
+        case .pending:
+            item.status = .failed
+            item.lastError = Self.pausedForEditingError
+            try store.save()
+            await reloadItems()
+            return true
+        }
+    }
+
     func retry(itemId: UUID) async throws {
         guard let item = try await store.item(byId: itemId) else { return }
         item.status = .pending
-        item.attemptCount = 0
+        // 1, not 0: a failed send can still have reached Gmail (a timeout after the
+        // server accepted it), and a non-zero count is what triggers the SENT lookup
+        // before resending. The cost is two automatic attempts after a manual retry
+        // instead of three.
+        item.attemptCount = 1
         item.lastError = nil
         item.nextAttemptAt = now()
         try store.save()

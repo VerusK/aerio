@@ -769,32 +769,38 @@ struct MainView: View {
         )
     }
 
-    /// Re-open a stuck/failed Outbox message in the compose editor so the user can
-    /// fix it (e.g. a recipient with no email) and resend. The original item leaves
-    /// the Outbox; resending enqueues a fresh, corrected one. Closing the editor
-    /// without sending preserves the content as a draft.
+    /// Re-open a queued or failed Outbox message in the compose editor so the user can
+    /// fix it (e.g. a recipient with no email) and resend; resending enqueues a fresh,
+    /// corrected one.
     private func editOutboxItem(_ item: OutboxItemSnapshot) {
-        let to = item.toRecipients.isEmpty ? item.recipientsPreview : item.toRecipients
-        let seed = ComposeSeed(
-            to: to,
-            cc: item.ccRecipients,
-            subject: item.subject,
-            body: item.bodyText
-        )
-        ComposeWindowManager.shared.open(
-            accountManager: accountManager,
-            apiManager: apiManager,
-            outboxService: outboxService,
-            contactsCache: contactsCache,
-            composeType: .new,
-            replyToEmail: nil,
-            preselectedAccountId: item.accountId,
-            seed: seed,
-            editingOutboxItemId: item.id
-        )
-        // The original stays in the Outbox while editing; it's removed only after a
-        // successful resend (see ComposeView.sendMessage), so closing without sending
-        // leaves it recoverable here rather than spawning a broken draft.
+        Task {
+            // Pause the original first. A pending one would otherwise still go out when
+            // its delay elapses, followed by the edited copy. Refused once it's sending
+            // or gone, since editing then could only produce a duplicate.
+            guard (try? await outboxService.pauseForEditing(itemId: item.id)) == true else { return }
+
+            let to = item.toRecipients.isEmpty ? item.recipientsPreview : item.toRecipients
+            let seed = ComposeSeed(
+                to: to,
+                cc: item.ccRecipients,
+                subject: item.subject,
+                body: item.bodyText
+            )
+            ComposeWindowManager.shared.open(
+                accountManager: accountManager,
+                apiManager: apiManager,
+                outboxService: outboxService,
+                contactsCache: contactsCache,
+                composeType: .new,
+                replyToEmail: nil,
+                preselectedAccountId: item.accountId,
+                seed: seed,
+                editingOutboxItemId: item.id
+            )
+        }
+        // The paused original stays in the Outbox while editing; it's removed only after
+        // the corrected copy is queued (see ComposeView.sendMessage), so closing without
+        // sending leaves it here — Retry still sends it as-is.
     }
 
     enum EmailAction: CustomStringConvertible {

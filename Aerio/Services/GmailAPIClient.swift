@@ -223,7 +223,14 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
             queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
         }
         let request = try buildRequest(path: "/history", queryItems: queryItems)
-        return try await execute(request: request)
+        do {
+            return try await execute(request: request)
+        } catch GmailAPIError.notFound {
+            // Gmail answers an out-of-date startHistoryId with 404 (not 410), and the
+            // documented recovery is a full sync. Mapped here rather than in execute()
+            // so a 404 from any other endpoint keeps meaning "no such resource".
+            throw GmailAPIError.historyExpired
+        }
     }
 
     // MARK: - Request Building

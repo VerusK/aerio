@@ -28,6 +28,12 @@ func makeItem(
     )
 }
 
+/// Holds a value written from inside a MainActor hook so the test can assert on it afterwards.
+@MainActor
+final class ObservedValue<T> {
+    var value: T?
+}
+
 actor NoopNotifier: OutboxNotifying {
     func notifySuccess(snapshot: OutboxItemSnapshot) { }
     func notifyFailure(snapshot: OutboxItemSnapshot, permanent: Bool) { }
@@ -291,6 +297,31 @@ final class OutboxServiceProcessTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
+    func testResumeOnLaunch_recoveredItemIsCheckedInSentInsteadOfResent() async throws {
+        // Still `.sending` at launch means the app died mid-send, so Gmail may already
+        // have the message. It must be looked up in SENT rather than sent a second time.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setFindInSent(true)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+        let interrupted = makeItem(account: "a", status: .sending, attemptCount: 0)
+        let messageId = interrupted.messageIdHeader
+        try await store.insert(interrupted)
+
+        try await service.resumeOnLaunch()
+        await service.processOnce()
+
+        let sendCount = await sender.sendMessageCalls.count
+        XCTAssertEqual(sendCount, 0, "a message Gmail already has must not be sent twice")
+        let probes = await sender.findInSentCalls
+        XCTAssertEqual(probes, [messageId])
+        let remaining = try await store.allItems()
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
     // MARK: - Side effects
 
     func testSideEffects_deletesDraftWhenDraftIdToConsumeSet() async throws {
@@ -391,6 +422,28 @@ final class OutboxServiceProcessTests: XCTestCase {
         XCTAssertTrue(stored.isEmpty)
     }
 
+    func testSuccess_itemLeavesOutboxBeforeSideEffectsRun() async throws {
+        // Side effects are extra network calls made after Gmail accepted the message.
+        // If the app quits during them, the item must already be gone — otherwise the
+        // next launch picks it up and the message goes out again.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        let itemsDuringSideEffects = ObservedValue<Int>()
+        await sender.setOnDeleteDraft { @MainActor in
+            itemsDuringSideEffects.value = (try? await store.allItems())?.count
+        }
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+        try await store.insert(makeItem(account: "a", draftIdToConsume: "d-1"))
+
+        await service.processOnce()
+
+        XCTAssertEqual(itemsDuringSideEffects.value, 0,
+                       "the item must be deleted before the draft-cleanup call starts")
+    }
+
     // MARK: - Corrupt item resilience
 
     func testProcess_corruptItemDoesNotStallQueue() async throws {
@@ -453,7 +506,174 @@ final class OutboxServiceCancelRetryTests: XCTestCase {
         let stored = try await store.allItems()
         XCTAssertEqual(stored.first?.status, .pending)
         XCTAssertEqual(stored.first?.nextAttemptAt, Date(timeIntervalSince1970: 5000))
-        XCTAssertEqual(stored.first?.attemptCount, 0, "retry resets attempt count")
+    }
+
+    func testRetry_checksSentBeforeSendingAgain() async throws {
+        // A failed item can still have reached Gmail — e.g. a timeout after the server
+        // accepted it — so a manual retry must look it up in SENT before resending.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setFindInSent(true)
+        let failed = makeItem(account: "a", status: .failed, attemptCount: 3)
+        let failedId = failed.id
+        try await store.insert(failed)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+
+        try await service.retry(itemId: failedId)
+        await service.processOnce()
+
+        let sendCount = await sender.sendMessageCalls.count
+        XCTAssertEqual(sendCount, 0, "a message already in SENT must not be sent again")
+        let probeCount = await sender.findInSentCalls.count
+        XCTAssertEqual(probeCount, 1)
+    }
+
+    func testRetry_transientFailureAfterRetryReschedulesInsteadOfFailing() async throws {
+        // A manual retry must buy further automatic attempts, not a single shot.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setSendBehavior(.throwError(GmailAPIError.networkError("offline")))
+        let failed = makeItem(account: "a", status: .failed, attemptCount: 3)
+        let failedId = failed.id
+        try await store.insert(failed)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+
+        try await service.retry(itemId: failedId)
+        await service.processOnce()
+
+        let stored = try await store.item(byId: failedId)
+        XCTAssertEqual(stored?.status, .pending)
+    }
+}
+
+// MARK: - Editing a queued message
+
+@MainActor
+final class OutboxServiceEditTests: XCTestCase {
+    private let pdf = RFC2822Builder.Attachment(
+        filename: "a.pdf", mimeType: "application/pdf", data: Data(repeating: 1, count: 64))
+    private let png = RFC2822Builder.InlineImage(
+        cid: "img1", mimeType: "image/png", data: Data(repeating: 2, count: 64))
+
+    /// An item whose rawMime is what compose really produces for this content.
+    private func queuedItem(
+        status: OutboxStatus = .pending,
+        cc: String? = nil,
+        htmlBody: String? = nil,
+        attachments: [RFC2822Builder.Attachment] = [],
+        inlineImages: [RFC2822Builder.InlineImage] = []
+    ) -> OutboxItem {
+        let raw = RFC2822Builder.build(ComposePayload(
+            from: "me@example.com", to: "you@example.com", cc: cc, subject: "s", body: "body",
+            inReplyTo: nil, references: nil, htmlBody: htmlBody,
+            attachments: attachments, inlineImages: inlineImages, messageId: "<m@aerio.local>"
+        ))
+        let item = makeItem(account: "a", status: status)
+        item.rawMime = Data(raw.utf8)
+        return item
+    }
+
+    private func makeService(store: OutboxStore, sender: MockOutboxSender) -> OutboxService {
+        OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+    }
+
+    // MARK: pauseForEditing
+
+    func testPauseForEditing_pendingItemIsNoLongerSentAutomatically() async throws {
+        // Otherwise the original goes out when its delay elapses, and the edited copy
+        // follows it — the recipient gets both.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        let service = makeService(store: store, sender: sender)
+        let item = queuedItem()
+        let id = item.id
+        try await store.insert(item)
+
+        let paused = try await service.pauseForEditing(itemId: id)
+        await service.processOnce()
+
+        XCTAssertTrue(paused)
+        let sendCount = await sender.sendMessageCalls.count
+        XCTAssertEqual(sendCount, 0)
+        let stored = try await store.item(byId: id)
+        XCTAssertEqual(stored?.status, .failed, "a paused item stays in the Outbox, recoverable via Retry")
+    }
+
+    func testPauseForEditing_refusesItemAlreadySending() async throws {
+        let store = OutboxStore(inMemory: true)
+        let service = makeService(store: store, sender: MockOutboxSender())
+        let item = queuedItem(status: .sending)
+        let id = item.id
+        try await store.insert(item)
+
+        let paused = try await service.pauseForEditing(itemId: id)
+
+        XCTAssertFalse(paused, "a send in flight can't be stopped, so editing would produce a duplicate")
+        let stored = try await store.item(byId: id)
+        XCTAssertEqual(stored?.status, .sending)
+    }
+
+    func testPauseForEditing_allowsFailedItem() async throws {
+        let store = OutboxStore(inMemory: true)
+        let service = makeService(store: store, sender: MockOutboxSender())
+        let item = queuedItem(status: .failed)
+        let id = item.id
+        try await store.insert(item)
+
+        let paused = try await service.pauseForEditing(itemId: id)
+
+        XCTAssertTrue(paused)
+    }
+
+    func testPauseForEditing_refusesItemThatIsGone() async throws {
+        // The row can outlive its item by a moment (e.g. it was just sent and deleted);
+        // opening an editor for it would let the user send the message a second time.
+        let store = OutboxStore(inMemory: true)
+        let service = makeService(store: store, sender: MockOutboxSender())
+
+        let paused = try await service.pauseForEditing(itemId: UUID())
+
+        XCTAssertFalse(paused)
+    }
+
+    // MARK: canEdit
+
+    func testCanEdit_plainTextMessage() {
+        XCTAssertTrue(OutboxItemSnapshot(queuedItem()).canEdit)
+    }
+
+    func testCanEdit_htmlMessage() {
+        XCTAssertTrue(OutboxItemSnapshot(queuedItem(htmlBody: "<b>hi</b>")).canEdit)
+    }
+
+    func testCanEdit_falseWhenMessageHasAttachment() {
+        // The editor only gets recipients, subject and plain text back, so resending
+        // from it would silently drop the file and delete the original.
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(attachments: [pdf])).canEdit)
+    }
+
+    func testCanEdit_falseWhenMessageHasInlineImage() {
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(inlineImages: [png])).canEdit)
+    }
+
+    func testCanEdit_falseForAttachmentBehindLongRecipientList() {
+        // The Content-Type header comes after To/Cc, so a big Cc list pushes it far
+        // from the start of the message.
+        let cc = (1...300).map { "person\($0)@example.com" }.joined(separator: ", ")
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(cc: cc, attachments: [pdf])).canEdit)
+    }
+
+    func testCanEdit_falseWhileSending() {
+        XCTAssertFalse(OutboxItemSnapshot(queuedItem(status: .sending)).canEdit)
     }
 }
 

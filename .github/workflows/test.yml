@@ -27,14 +27,5 @@ jobs:
         run: ./scripts/gen-buildinfo.sh
 
       - name: Build and Test
-        run: |
-          xcodebuild test \
-            -project Aerio.xcodeproj \
-            -scheme Aerio \
-            -destination 'platform=macOS' \
-            -skip-testing:AerioTests/GmailAPIClientTests/testConcurrent401sCoalesceIntoSingleRefresh \
-            OAUTH_CLIENT_ID=test-ci-placeholder \
-            CODE_SIGN_IDENTITY=- \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            || exit 1
+        # Fails when zero tests ran — xcodebuild alone reports success in that case.
+        run: ./scripts/test.sh

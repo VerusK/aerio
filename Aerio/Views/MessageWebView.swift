@@ -635,6 +635,13 @@ struct NativeMessageDetail: View {
     }
 }
 
+/// CSP for any page that renders email HTML: inline styles plus data:/https images,
+/// nothing else — no external stylesheets, fonts, frames or media. Shared by the
+/// single-message and thread views so the two can't drift apart.
+let emailContentSecurityPolicyMeta = """
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src 'none';">
+"""
+
 /// Wraps email body HTML in a full document with light-only styling (no dark mode).
 func wrapEmailHTML(_ body: String, subject: String) -> String {
     """
@@ -643,7 +650,7 @@ func wrapEmailHTML(_ body: String, subject: String) -> String {
     <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src 'none';">
+    \(emailContentSecurityPolicyMeta)
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

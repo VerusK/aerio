@@ -1,4 +1,5 @@
 import XCTest
+import WebKit
 @testable import Aerio
 
 @MainActor
@@ -462,5 +463,80 @@ final class ViewTests: XCTestCase {
         XCTAssertTrue(ShortcutAction.archiveMessage.shortcutLabel.contains("⌘"), "Archive shortcut should contain Cmd symbol")
         XCTAssertTrue(ShortcutAction.deleteMessage.shortcutLabel.contains("⌘"), "Delete shortcut should contain Cmd symbol")
         XCTAssertTrue(ShortcutAction.spamMessage.shortcutLabel.contains("⌘"), "Spam shortcut should contain Cmd symbol")
+    }
+}
+
+// MARK: - Thread page rendering
+
+@MainActor
+final class ThreadHTMLTests: XCTestCase {
+    /// Records every request WebKit makes for the probe scheme and fails it.
+    private final class ProbeSchemeHandler: NSObject, WKURLSchemeHandler {
+        private(set) var requestedURLs: [URL] = []
+        func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+            if let url = urlSchemeTask.request.url { requestedURLs.append(url) }
+            urlSchemeTask.didFailWithError(URLError(.resourceUnavailable))
+        }
+        func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) { }
+    }
+
+    /// Resumes once the page and its subresources (stylesheets, frames) have loaded.
+    private final class LoadWaiter: NSObject, WKNavigationDelegate {
+        var continuation: CheckedContinuation<Void, Never>?
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finish() }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish() }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish() }
+        private func finish() { continuation?.resume(); continuation = nil }
+    }
+
+    private func message(body: String, attachments: [MessageContentData.AttachmentInfo] = []) -> ThreadMessage {
+        ThreadMessage(
+            id: "m1", from: "sender@example.com", to: "me@example.com", cc: "",
+            date: Date(timeIntervalSince1970: 0), subject: "s", bodyHTML: body,
+            attachments: attachments, inlineImages: [], accountId: "acc", msgId: "m1",
+            messageId: nil, folder: .inbox, isRead: true
+        )
+    }
+
+    private func load(_ html: String, in webView: WKWebView) async {
+        let waiter = LoadWaiter()
+        webView.navigationDelegate = waiter
+        await withCheckedContinuation { continuation in
+            waiter.continuation = continuation
+            webView.loadHTMLString(html, baseURL: nil)
+        }
+    }
+
+    func testThreadPage_doesNotLoadExternalContentEmbeddedInAnEmail() async {
+        // The single-message view blocks an email's external stylesheets and frames with
+        // a CSP; a thread shows the same emails and must too. Those fetches reveal that
+        // the mail was opened and can pull arbitrary pages into the reading pane.
+        let body = """
+        <html><head><link rel="stylesheet" href="aerio-probe://tracker/style.css"></head>
+        <body><p>Hello</p><iframe src="aerio-probe://tracker/frame"></iframe></body></html>
+        """
+        let config = WKWebViewConfiguration()
+        let probe = ProbeSchemeHandler()
+        config.setURLSchemeHandler(probe, forURLScheme: "aerio-probe")
+        let webView = WKWebView(frame: .zero, configuration: config)
+
+        await load(ThreadDetailView.buildThreadHTML(messages: [message(body: body)]), in: webView)
+
+        XCTAssertEqual(probe.requestedURLs, [], "the thread page fetched content the email embedded")
+    }
+
+    func testThreadPage_appScriptsStillRunUnderThePagePolicy() async throws {
+        // Attachment chips are updated by the app via evaluateJavaScript. Locking the
+        // page down must not stop that — checked in the real web view store the thread
+        // uses, where content JavaScript is disabled.
+        let attachment = MessageContentData.AttachmentInfo(
+            name: "report.pdf", size: "1 KB", attachmentId: "att1", messageId: "m1", mimeType: "application/pdf")
+        let store = BodyWebViewStore()
+
+        await load(ThreadDetailView.buildThreadHTML(messages: [message(body: "<p>Hi</p>", attachments: [attachment])]),
+                   in: store.webView)
+
+        let chipCount = try await store.webView.evaluateJavaScript("document.querySelectorAll('#att-att1').length")
+        XCTAssertEqual(chipCount as? Int, 1)
     }
 }

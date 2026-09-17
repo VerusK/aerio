@@ -684,24 +684,36 @@ final class GmailAPIManagerTests: XCTestCase {
     }
 
     func testIncrementalSync410FallsBackToFullFetch() async {
+        await assertExpiredHistoryFallsBackToFullFetch(historyStatus: 410)
+    }
+
+    /// Gmail's documented response to an out-of-date `startHistoryId` is 404, not 410
+    /// (developers.google.com/workspace/gmail/api/guides/sync). Treating it as a plain
+    /// error left every later poll failing the same way, so new mail stopped arriving
+    /// after a long sleep until the user refreshed by hand.
+    func testIncrementalSync404FallsBackToFullFetch() async {
+        await assertExpiredHistoryFallsBackToFullFetch(historyStatus: 404)
+    }
+
+    private func assertExpiredHistoryFallsBackToFullFetch(
+        historyStatus: Int, file: StaticString = #filePath, line: UInt = #line
+    ) async {
         let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
         manager.addClient(for: account)
 
         manager.historyIds[testAccountId] = "old_expired_id"
         manager.emailsByAccount[testAccountId] = []
 
-        let requestCount = RequestCounter()
         MockURLProtocol.requestHandler = { request in
             let url = request.url!.absoluteString
-            requestCount.increment()
 
-            // First call to /history returns 410
+            // The history call reports the start id as expired
             if url.contains("/history") {
-                let response = HTTPURLResponse(url: request.url!, statusCode: 410, httpVersion: nil, headerFields: nil)!
-                return (response, "Gone".data(using: .utf8)!)
+                let response = HTTPURLResponse(url: request.url!, statusCode: historyStatus, httpVersion: nil, headerFields: nil)!
+                return (response, "expired".data(using: .utf8)!)
             }
 
-            // After 410, it should fall back to full fetch
+            // Everything below is the full fetch it should fall back to
             if url.contains("/labels/INBOX") {
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
                 let json = """
@@ -734,12 +746,11 @@ final class GmailAPIManagerTests: XCTestCase {
 
         await manager.incrementalSync(for: testAccountId)
 
-        // After 410 fallback, should have done a full fetch
         let emails = manager.emailsByAccount[testAccountId] ?? []
-        XCTAssertEqual(emails.count, 1)
-        XCTAssertEqual(emails.first?.msgId, "msg1")
-        // historyId should be updated from fresh fetch
-        XCTAssertEqual(manager.historyIds[testAccountId], "99999")
+        XCTAssertEqual(emails.count, 1, "expected a full re-fetch after HTTP \(historyStatus)", file: file, line: line)
+        XCTAssertEqual(emails.first?.msgId, "msg1", file: file, line: line)
+        XCTAssertEqual(manager.historyIds[testAccountId], "99999",
+                       "history id should come from the fresh fetch", file: file, line: line)
     }
 
     func testIncrementalSyncLabelChanges() async {
