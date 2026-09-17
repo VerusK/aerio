@@ -255,7 +255,7 @@ struct ThreadDetailView: View {
                 if let cached = Self.threadHTMLCache[htmlCacheKey] {
                     html = cached
                 } else {
-                    html = buildThreadHTML(messages: messages)
+                    html = Self.buildThreadHTML(messages: messages)
                     Self.threadHTMLCache[htmlCacheKey] = html
                     // Evict old entries
                     if Self.threadHTMLCache.count > 20 {
@@ -271,7 +271,8 @@ struct ThreadDetailView: View {
         }
     }
 
-    private func buildThreadHTML(messages: [ThreadMessage]) -> String {
+    /// The whole thread as one HTML page. Static and state-free so it can be tested.
+    static func buildThreadHTML(messages: [ThreadMessage]) -> String {
         var sections: [String] = []
 
         for message in messages {
@@ -287,9 +288,9 @@ struct ThreadDetailView: View {
             let btnStyle = "color:#888;text-decoration:none;padding:3px 5px;border-radius:4px;display:inline-flex;align-items:center;vertical-align:middle;"
             let msgActions = """
             <span style="display:inline-flex;gap:2px;margin-right:8px;align-items:center;vertical-align:middle;">
-                <a href="aerio://action/reply/\(message.id)" style="\(btnStyle)" title="Reply" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">\(replyIcon)</a>
-                <a href="aerio://action/replyall/\(message.id)" style="\(btnStyle)" title="Reply All" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">\(replyAllIcon)</a>
-                <a href="aerio://action/forward/\(message.id)" style="\(btnStyle)" title="Forward" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">\(forwardIcon)</a>
+                <a href="aerio://action/reply/\(message.id)" class="msg-action" style="\(btnStyle)" title="Reply">\(replyIcon)</a>
+                <a href="aerio://action/replyall/\(message.id)" class="msg-action" style="\(btnStyle)" title="Reply All">\(replyAllIcon)</a>
+                <a href="aerio://action/forward/\(message.id)" class="msg-action" style="\(btnStyle)" title="Forward">\(forwardIcon)</a>
             </span>
             """
             let toLine = message.to.isEmpty ? "" : "<div style=\"font-size:11px;color:#888;margin-top:2px;\">To: \(escapeHTML(message.to))</div>"
@@ -348,6 +349,7 @@ struct ThreadDetailView: View {
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        \(emailContentSecurityPolicyMeta)
         <style>
             body {
                 font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -367,6 +369,8 @@ struct ThreadDetailView: View {
                 color: #888;
             }
             a { color: #6cb4ff; }
+            /* Hover in CSS: content JavaScript is disabled, so inline onmouseover never ran. */
+            a.msg-action:hover { background: #333; }
             pre, code {
                 background: #2a2a2a;
                 border-radius: 4px;
@@ -382,7 +386,7 @@ struct ThreadDetailView: View {
         """
     }
 
-    private func stripQuotedContent(_ html: String) -> String {
+    private static func stripQuotedContent(_ html: String) -> String {
         var result = html
 
         // 1. Gmail HTML quote blocks
@@ -419,13 +423,13 @@ struct ThreadDetailView: View {
         return result
     }
 
-    private func avatarColor(for email: String) -> String {
+    private static func avatarColor(for email: String) -> String {
         let hash = abs(email.hashValue)
         let colors = ["#4a7aff", "#7c3aed", "#e67e22", "#27ae60", "#e84393", "#00b894", "#4b0082", "#00cec9"]
         return colors[hash % colors.count]
     }
 
-    private func escapeHTML(_ text: String) -> String {
+    private static func escapeHTML(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
