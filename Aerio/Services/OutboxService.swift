@@ -215,6 +215,11 @@ extension OutboxService {
         let snapshot = OutboxItemSnapshot(item)
         let sender = sendersByAccount[snapshot.accountId]
 
+        // Gmail has the message: take it out of the queue *before* the best-effort
+        // side effects below. They are more network calls, and quitting during them
+        // with the item still stored would send it again on the next launch.
+        try? await store.delete(id: snapshot.id)
+
         // 1. Delete consumed draft (best-effort).
         if let draftId = snapshot.draftIdToConsume, let sender {
             do { try await sender.deleteDraft(draftId: draftId) }
@@ -235,7 +240,6 @@ extension OutboxService {
             catch { logger.error("self-send INBOX strip failed (ignored): \(error.localizedDescription)") }
         }
 
-        try? await store.delete(id: snapshot.id)
         await notifier.notifySuccess(snapshot: snapshot)
         await postSendRefresh()
     }
@@ -282,7 +286,11 @@ extension OutboxService {
     func retry(itemId: UUID) async throws {
         guard let item = try await store.item(byId: itemId) else { return }
         item.status = .pending
-        item.attemptCount = 0
+        // 1, not 0: a failed send can still have reached Gmail (a timeout after the
+        // server accepted it), and a non-zero count is what triggers the SENT lookup
+        // before resending. The cost is two automatic attempts after a manual retry
+        // instead of three.
+        item.attemptCount = 1
         item.lastError = nil
         item.nextAttemptAt = now()
         try store.save()

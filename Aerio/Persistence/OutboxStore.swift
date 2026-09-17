@@ -69,6 +69,10 @@ final class OutboxStore {
         let stuck = try context.fetch(descriptor)
         for item in stuck {
             item.status = .pending
+            // The app died mid-send, so Gmail may already have this message. Counting
+            // the interrupted attempt makes OutboxService look it up in SENT before
+            // sending again — attemptCount alone only grows on a *reported* failure.
+            item.attemptCount = max(item.attemptCount, 1)
         }
         try context.save()
         return stuck.count

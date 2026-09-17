@@ -28,6 +28,12 @@ func makeItem(
     )
 }
 
+/// Holds a value written from inside a MainActor hook so the test can assert on it afterwards.
+@MainActor
+final class ObservedValue<T> {
+    var value: T?
+}
+
 actor NoopNotifier: OutboxNotifying {
     func notifySuccess(snapshot: OutboxItemSnapshot) { }
     func notifyFailure(snapshot: OutboxItemSnapshot, permanent: Bool) { }
@@ -291,6 +297,31 @@ final class OutboxServiceProcessTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
+    func testResumeOnLaunch_recoveredItemIsCheckedInSentInsteadOfResent() async throws {
+        // Still `.sending` at launch means the app died mid-send, so Gmail may already
+        // have the message. It must be looked up in SENT rather than sent a second time.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setFindInSent(true)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+        let interrupted = makeItem(account: "a", status: .sending, attemptCount: 0)
+        let messageId = interrupted.messageIdHeader
+        try await store.insert(interrupted)
+
+        try await service.resumeOnLaunch()
+        await service.processOnce()
+
+        let sendCount = await sender.sendMessageCalls.count
+        XCTAssertEqual(sendCount, 0, "a message Gmail already has must not be sent twice")
+        let probes = await sender.findInSentCalls
+        XCTAssertEqual(probes, [messageId])
+        let remaining = try await store.allItems()
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
     // MARK: - Side effects
 
     func testSideEffects_deletesDraftWhenDraftIdToConsumeSet() async throws {
@@ -391,6 +422,28 @@ final class OutboxServiceProcessTests: XCTestCase {
         XCTAssertTrue(stored.isEmpty)
     }
 
+    func testSuccess_itemLeavesOutboxBeforeSideEffectsRun() async throws {
+        // Side effects are extra network calls made after Gmail accepted the message.
+        // If the app quits during them, the item must already be gone — otherwise the
+        // next launch picks it up and the message goes out again.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        let itemsDuringSideEffects = ObservedValue<Int>()
+        await sender.setOnDeleteDraft { @MainActor in
+            itemsDuringSideEffects.value = (try? await store.allItems())?.count
+        }
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+        try await store.insert(makeItem(account: "a", draftIdToConsume: "d-1"))
+
+        await service.processOnce()
+
+        XCTAssertEqual(itemsDuringSideEffects.value, 0,
+                       "the item must be deleted before the draft-cleanup call starts")
+    }
+
     // MARK: - Corrupt item resilience
 
     func testProcess_corruptItemDoesNotStallQueue() async throws {
@@ -453,7 +506,49 @@ final class OutboxServiceCancelRetryTests: XCTestCase {
         let stored = try await store.allItems()
         XCTAssertEqual(stored.first?.status, .pending)
         XCTAssertEqual(stored.first?.nextAttemptAt, Date(timeIntervalSince1970: 5000))
-        XCTAssertEqual(stored.first?.attemptCount, 0, "retry resets attempt count")
+    }
+
+    func testRetry_checksSentBeforeSendingAgain() async throws {
+        // A failed item can still have reached Gmail — e.g. a timeout after the server
+        // accepted it — so a manual retry must look it up in SENT before resending.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setFindInSent(true)
+        let failed = makeItem(account: "a", status: .failed, attemptCount: 3)
+        let failedId = failed.id
+        try await store.insert(failed)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+
+        try await service.retry(itemId: failedId)
+        await service.processOnce()
+
+        let sendCount = await sender.sendMessageCalls.count
+        XCTAssertEqual(sendCount, 0, "a message already in SENT must not be sent again")
+        let probeCount = await sender.findInSentCalls.count
+        XCTAssertEqual(probeCount, 1)
+    }
+
+    func testRetry_transientFailureAfterRetryReschedulesInsteadOfFailing() async throws {
+        // A manual retry must buy further automatic attempts, not a single shot.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setSendBehavior(.throwError(GmailAPIError.networkError("offline")))
+        let failed = makeItem(account: "a", status: .failed, attemptCount: 3)
+        let failedId = failed.id
+        try await store.insert(failed)
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+
+        try await service.retry(itemId: failedId)
+        await service.processOnce()
+
+        let stored = try await store.item(byId: failedId)
+        XCTAssertEqual(stored?.status, .pending)
     }
 }
 

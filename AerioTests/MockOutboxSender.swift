@@ -17,6 +17,9 @@ actor MockOutboxSender: OutboxSender {
     var findInSentReturns: Bool = false
     var deleteDraftThrows: Error?
     var modifyMessageThrows: Error?
+    /// Runs when deleteDraft is called, before it returns — lets a test observe
+    /// what the service has already committed at the moment side effects start.
+    var onDeleteDraft: (@Sendable @MainActor () async -> Void)?
 
     private(set) var sendMessageCalls: [(raw: String, threadId: String?)] = []
     private(set) var findInSentCalls: [String] = []
@@ -27,6 +30,7 @@ actor MockOutboxSender: OutboxSender {
     func setFindInSent(_ v: Bool) { findInSentReturns = v }
     func setDeleteDraftThrows(_ e: Error?) { deleteDraftThrows = e }
     func setModifyMessageThrows(_ e: Error?) { modifyMessageThrows = e }
+    func setOnDeleteDraft(_ hook: (@Sendable @MainActor () async -> Void)?) { onDeleteDraft = hook }
 
     func sendMessage(rawBase64URL: String, threadId: String?) async throws -> GmailMessage {
         sendMessageCalls.append((rawBase64URL, threadId))
@@ -43,6 +47,7 @@ actor MockOutboxSender: OutboxSender {
 
     func deleteDraft(draftId: String) async throws {
         deleteDraftCalls.append(draftId)
+        if let hook = onDeleteDraft { await hook() }
         if let e = deleteDraftThrows { throw e }
     }
 
