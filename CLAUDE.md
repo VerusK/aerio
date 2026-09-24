@@ -60,6 +60,7 @@ xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Debug build
 - **Email cache**: SwiftData `~/Library/Application Support/<bundle id>/EmailCache.store` (`StoreLocation` in `DataStore.swift`)
 - **Outbox**: SwiftData `~/Library/Application Support/<bundle id>/Outbox.store`; the release app moves a legacy root-level `Outbox.store` there on first launch
 - **Never use SwiftData's default store URL.** It is `Application Support/default.store`, shared by every unsandboxed SwiftData app; on 2026-09-23 another app migrated it to its own schema, every cache save failed, and failed saves piled up in `mainContext` until the app crawled. Give every container an explicit URL via `StoreLocation`. Release (`com.aerio.Aerio`) and Debug (`com.aerio.Aerio.dev`) get separate directories.
+- **Never call `ModelContext.rollback()` after a failed save.** On macOS 14 (our deployment target and the CI runner) it traps inside SwiftData when the failed save held inserts (`Attempted to remove ... but it was not found in the inserted objects set`); macOS 26 doesn't, so local tests stay green. `EmailCache` owns a replaceable `ModelContext` (not `mainContext`) and swaps in a fresh one instead.
 - **Window frame**: `UserDefaults` (key `mainWindowFrame`)
 - **Split positions**: `UserDefaults` (autosave key `AerioMainSplit`)
 - **Compose window size**: `NSWindow.frameAutosaveName` (key `AerioComposeWindow`)

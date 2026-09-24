@@ -174,12 +174,12 @@ final class EmailCache: ObservableObject {
             // If even in-memory fails, there's nothing we can do
             self.modelContainer = try! ModelContainer(for: schema, configurations: [fallbackConfig])
         }
-        self.modelContext = modelContainer.mainContext
+        self.modelContext = ModelContext(modelContainer)
     }
 
     init(container: ModelContainer) {
         self.modelContainer = container
-        self.modelContext = container.mainContext
+        self.modelContext = ModelContext(container)
     }
 
     func saveEmails(_ emails: [Email]) {
@@ -409,9 +409,12 @@ final class EmailCache: ObservableObject {
         save("Failed to clear content cache")
     }
 
-    /// Saves pending changes, and on failure logs and rolls the context back. Without the
-    /// rollback a failed save leaves its inserts and deletes pending, every later save retries
-    /// the whole growing pile, and a long-running app gets slower by the hour.
+    /// Saves pending changes, and on failure logs and discards the context. Keeping it would leave
+    /// the failed inserts and deletes pending, every later save would retry the whole growing pile,
+    /// and a long-running app would get slower by the hour. The context is replaced rather than
+    /// rolled back: on macOS 14, `rollback()` after a failed save with inserts traps inside
+    /// SwiftData ("Attempted to remove ... but it was not found in the inserted objects set").
+    /// That's also why EmailCache uses its own context and not `mainContext`, which can't be replaced.
     @discardableResult
     private func save(_ failureMessage: String) -> Bool {
         do {
@@ -419,10 +422,12 @@ final class EmailCache: ObservableObject {
             return true
         } catch {
             logger.error("\(failureMessage): \(error.localizedDescription)")
-            modelContext.rollback()
+            modelContext = ModelContext(modelContainer)
             return false
         }
     }
+
+    var hasUnsavedChanges: Bool { modelContext.hasChanges }
 
     var contentCacheCount: Int {
         let descriptor = FetchDescriptor<CachedEmailContent>()

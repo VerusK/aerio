@@ -672,6 +672,8 @@ final class EmailCacheFailedSaveTests: XCTestCase {
 
         cache.saveEmails([email("m2")])
 
-        XCTAssertFalse(container.mainContext.hasChanges, "a failed save must not leave its inserts pending for every later save to retry")
+        XCTAssertFalse(cache.hasUnsavedChanges, "a failed save must not leave its inserts pending for every later save to retry")
+        // The cache stays usable after the failure (on macOS 14 rolling the context back trapped).
+        _ = cache.loadEmails(for: "acc1")
     }
 }
