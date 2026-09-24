@@ -779,6 +779,52 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertEqual(archive.count, GmailAPIManager.closedFolderEmailCap)
     }
 
+    /// The folder being left may hold many infinite-scroll pages, and neither an empty fetch of
+    /// the new folder nor an unchanged one rewrites `emailsByAccount`.
+    func testNavigatingAwayTrimsThePreviousFolder() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+        manager.emailsByAccount[testAccountId] = readEmails(80, folder: .inbox, prefix: "i")
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, #"{"resultSizeEstimate": 0}"#.data(using: .utf8)!)
+        }
+
+        await manager.navigateAllToFolder(.sent)
+
+        let inbox = (manager.emailsByAccount[testAccountId] ?? []).filter { $0.folder == .inbox }
+        XCTAssertEqual(inbox.count, GmailAPIManager.closedFolderEmailCap)
+    }
+
+    /// A page requested in one folder can arrive after the user has moved to another.
+    func testFetchMoreForAClosedFolderKeepsItBounded() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+        manager.emailsByAccount[testAccountId] = readEmails(50, folder: .archive, prefix: "a")
+        manager.pageTokens[testAccountId] = [.archive: "page2"]
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if url.path.hasSuffix("/messages") {
+                let ids = (0..<50).map { #"{"id": "n\#($0)", "threadId": "t"}"# }.joined(separator: ",")
+                return (response, #"{"messages": [\#(ids)], "resultSizeEstimate": 50}"#.data(using: .utf8)!)
+            }
+            let id = url.lastPathComponent
+            return (response, """
+            {"id": "\(id)", "threadId": "t", "labelIds": [], "snippet": "",
+             "payload": {"headers": [{"name": "From", "value": "a@b.com"}, {"name": "Subject", "value": "Hi"}]},
+             "internalDate": "1600000000000"}
+            """.data(using: .utf8)!)
+        }
+
+        await manager.fetchMoreEmails(accountId: testAccountId, folder: .archive)
+
+        let archive = (manager.emailsByAccount[testAccountId] ?? []).filter { $0.folder == .archive }
+        XCTAssertEqual(archive.count, GmailAPIManager.closedFolderEmailCap)
+    }
+
     func testIncrementalSyncNoChanges() async {
         let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
         manager.addClient(for: account)

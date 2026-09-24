@@ -168,17 +168,17 @@ struct SettingsView: View {
     }
 
     private func calculateCacheSize() {
+        let storeURL = try? EmailCache.defaultStoreURL()
         Task.detached {
             let fm = FileManager.default
             var items: [(name: String, path: String, size: Int64)] = []
 
-            // SwiftData store files (default.store*)
-            if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-                let storeSize = Self.directorySize(at: appSupport, matching: { $0.lastPathComponent.hasPrefix("default.store") })
+            if let storeURL {
+                let storeSize = Self.emailDatabaseSize(storeURL: storeURL)
                 if storeSize > 0 {
                     items.append((
                         name: "Email database (SwiftData)",
-                        path: (appSupport.path as NSString).abbreviatingWithTildeInPath,
+                        path: (storeURL.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath,
                         size: storeSize
                     ))
                 }
@@ -207,7 +207,14 @@ struct SettingsView: View {
         }
     }
 
-    private static func directorySize(at url: URL, matching filter: ((URL) -> Bool)? = nil) -> Int64 {
+    /// Size of the email cache's SQLite files (store, -wal, -shm). Nothing else in that directory
+    /// counts: Outbox.store holds unsent mail, not cache.
+    nonisolated static func emailDatabaseSize(storeURL: URL) -> Int64 {
+        let names = Set(StoreLocation.storeFileSuffixes.map { storeURL.lastPathComponent + $0 })
+        return directorySize(at: storeURL.deletingLastPathComponent(), matching: { names.contains($0.lastPathComponent) })
+    }
+
+    private nonisolated static func directorySize(at url: URL, matching filter: ((URL) -> Bool)? = nil) -> Int64 {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return 0 }
         var total: Int64 = 0
@@ -232,28 +239,26 @@ struct SettingsView: View {
     }
 
     private func clearCache() {
-        let fm = FileManager.default
-
-        // Remove SwiftData store files
-        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
-           let contents = try? fm.contentsOfDirectory(at: appSupport, includingPropertiesForKeys: nil) {
-            for fileURL in contents where fileURL.lastPathComponent.hasPrefix("default.store") {
-                try? fm.removeItem(at: fileURL)
-            }
-        }
-
-        // Remove app caches
-        if let cachesDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            let bundleId = Bundle.main.bundleIdentifier ?? "com.aerio.Aerio"
-            let appCacheDir = cachesDir.appendingPathComponent(bundleId)
-            try? fm.removeItem(at: appCacheDir)
-        }
-
-        emailCache.clearContent()
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.aerio.Aerio"
+        let appCacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent(bundleId)
+        Self.clearCaches(emailCache: emailCache, appCacheDirectory: appCacheDir)
 
         cacheDetails = []
         cacheTotal = "0 bytes"
         contentCacheCount = 0
+    }
+
+    /// Empties the email cache through its own container — deleting SQLite files under an open
+    /// container corrupts it — and removes the network/WebKit cache directory.
+    static func clearCaches(emailCache: EmailCache, appCacheDirectory: URL?) {
+        emailCache.clearEmails()
+        emailCache.clearContent()
+
+        // Remove app caches
+        if let appCacheDirectory {
+            try? FileManager.default.removeItem(at: appCacheDirectory)
+        }
     }
 
     static func resolvedDownloadsDirectory() -> URL {

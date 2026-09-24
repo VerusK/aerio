@@ -294,6 +294,45 @@ final class ViewTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: AppState.showDockBadgeKey))
     }
 
+    // MARK: - Settings cache tests
+
+    /// `default.store` belongs to whichever unsandboxed SwiftData app claimed it, and Outbox.store
+    /// holds unsent mail — neither is Aerio's cache.
+    func testEmailDatabaseSizeCountsOnlyTheEmailCacheStoreFiles() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SettingsCacheTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let files = [
+            "EmailCache.store": 100, "EmailCache.store-wal": 20, "EmailCache.store-shm": 3,
+            "default.store": 5000, "default.store-wal": 600,
+            "Outbox.store": 70000, "Outbox.store-wal": 800000,
+        ]
+        for (name, size) in files {
+            try Data(count: size).write(to: dir.appendingPathComponent(name))
+        }
+
+        let size = SettingsView.emailDatabaseSize(storeURL: dir.appendingPathComponent("EmailCache.store"))
+
+        XCTAssertEqual(size, 123)
+    }
+
+    func testClearCachesEmptiesTheEmailCacheThroughItsContainer() throws {
+        let cache = EmailCache(inMemory: true)
+        cache.saveEmails([Email(msgId: "m1", from: "a@test.com", subject: "s", date: Date(), snippet: "",
+                                isRead: true, accountId: "acc1", folder: .inbox)])
+        cache.saveContent(accountId: "acc1", msgId: "m1", bodyHTML: "<p>hi</p>", headers: [:], attachments: [])
+        let appCacheDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SettingsCacheTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: appCacheDir, withIntermediateDirectories: true)
+
+        SettingsView.clearCaches(emailCache: cache, appCacheDirectory: appCacheDir)
+
+        XCTAssertTrue(cache.loadEmails().isEmpty)
+        XCTAssertEqual(cache.contentCacheCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: appCacheDir.path))
+    }
+
     // MARK: - ComposeView tests
 
     func testComposeTypeEnum() {

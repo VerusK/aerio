@@ -193,6 +193,11 @@ final class GmailAPIManager: ObservableObject {
 
     func navigateAllToFolder(_ folder: Folder) async {
         currentFolder = folder
+        // Trim the folder being left now: the fetch below may not rewrite emailsByAccount
+        // (empty or unchanged response), and it may hold many infinite-scroll pages.
+        for (accountId, emails) in emailsByAccount {
+            emailsByAccount[accountId] = Self.boundedEmails(emails, openFolder: folder, pinnedId: pinnedEmailId)
+        }
         historyIds.removeAll()
         pageTokens.removeAll()
         accountsWithCompletedFetch.removeAll()
@@ -543,7 +548,8 @@ final class GmailAPIManager: ObservableObject {
             let existingMsgIds = Set(current.filter { $0.folder == folder }.map(\.msgId))
             let uniqueNewEmails = newEmails.filter { !existingMsgIds.contains($0.msgId) }
             current.append(contentsOf: uniqueNewEmails)
-            emailsByAccount[accountId] = current
+            // The user may have left `folder` while this page loaded
+            emailsByAccount[accountId] = Self.boundedEmails(current, openFolder: currentFolder, pinnedId: pinnedEmailId)
 
             dataStore?.saveEmails(uniqueNewEmails)
             logger.debug("[\(accountId)] fetchMoreEmails: appended \(uniqueNewEmails.count) emails, hasMore=\(nextPageToken != nil)")

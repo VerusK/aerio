@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: "Aerio", category: "DataStore")
 /// The bundle id also keeps Debug builds (`com.aerio.Aerio.dev`) off the release app's stores.
 enum StoreLocation {
     static let releaseBundleId = "com.aerio.Aerio"
-    private static let storeFileSuffixes = ["", "-wal", "-shm"]
+    static let storeFileSuffixes = ["", "-wal", "-shm"]
 
     /// Creates the per-bundle directory and returns the store URL inside it.
     /// With `migratingLegacyStore`, the release app moves `Application Support/<name>.store`
