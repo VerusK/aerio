@@ -442,6 +442,78 @@ final class EmailCacheTests: XCTestCase {
         XCTAssertEqual(loaded[2].msgId, "msg2")
     }
 
+    // MARK: - Batched writes
+
+    func testSaveEmailsMixedBatchUpdatesExistingAndInsertsNew() {
+        let store = makeStore()
+        store.saveEmails([makeEmail(msgId: "m1", subject: "Old", isRead: false)])
+
+        store.saveEmails([
+            makeEmail(msgId: "m1", subject: "New", isRead: true),
+            makeEmail(msgId: "m2", subject: "Second"),
+        ])
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 2)
+        let m1 = loaded.first { $0.msgId == "m1" }
+        XCTAssertEqual(m1?.subject, "New")
+        XCTAssertEqual(m1?.isRead, true)
+    }
+
+    func testSaveEmailsWithDuplicateIdsInOneBatchKeepsOneRow() {
+        let store = makeStore()
+
+        store.saveEmails([
+            makeEmail(msgId: "m1", subject: "First"),
+            makeEmail(msgId: "m1", subject: "Last"),
+        ])
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?.subject, "Last")
+    }
+
+    func testApplyChangesDeletesRemovedMessagesInEveryFolderAndUpsertsFetched() {
+        let store = makeStore()
+        store.saveEmails([
+            makeEmail(msgId: "m1", folder: .inbox),
+            makeEmail(msgId: "m2", folder: .inbox),
+            makeEmail(msgId: "m3", folder: .archive),
+        ])
+
+        // m1 deleted on the server; m3 moved from archive back to inbox.
+        store.applyChanges(accountId: "acc1", removedMsgIds: ["m1", "m3"],
+                           upserted: [makeEmail(msgId: "m3", folder: .inbox)])
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(Set(loaded.map(\.id)), [
+            makeEmail(msgId: "m2", folder: .inbox).id,
+            makeEmail(msgId: "m3", folder: .inbox).id,
+        ])
+    }
+
+    func testApplyChangesLeavesOtherAccountsAlone() {
+        let store = makeStore()
+        store.saveEmails([
+            makeEmail(msgId: "m1", accountId: "acc1"),
+            makeEmail(msgId: "m1", accountId: "acc2"),
+        ])
+
+        store.applyChanges(accountId: "acc1", removedMsgIds: ["m1"], upserted: [])
+
+        XCTAssertTrue(store.loadEmails(for: "acc1").isEmpty)
+        XCTAssertEqual(store.loadEmails(for: "acc2").count, 1)
+    }
+
+    func testPurgeOldEmailsBelowLimitKeepsEverything() {
+        let store = makeStore()
+        store.saveEmails([makeEmail(msgId: "m1"), makeEmail(msgId: "m2")])
+
+        store.purgeOldEmails(keepLast: 2)
+
+        XCTAssertEqual(store.emailCount, 2)
+    }
+
     // MARK: - All folders
 
     func testAllFoldersRoundTrip() {

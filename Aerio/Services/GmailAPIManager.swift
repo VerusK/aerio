@@ -412,6 +412,7 @@ final class GmailAPIManager: ObservableObject {
 
             // Remove messages that will be re-fetched (they may have changed)
             messageIdsToFetch.subtract(messageIdsToRemove)
+            var fetchedEmails: [Email] = []
             if !messageIdsToFetch.isEmpty {
                 currentEmails.removeAll { messageIdsToFetch.contains($0.msgId) }
 
@@ -435,6 +436,7 @@ final class GmailAPIManager: ObservableObject {
                     return convertGmailMessageToEmail(msg, accountId: accountId, folder: folder)
                 }
                 currentEmails.append(contentsOf: newEmails)
+                fetchedEmails = newEmails
 
                 // Trigger notifications for new inbox+unread emails
                 let notifiable = NotificationManager.newInboxUnreadEmails(
@@ -452,24 +454,20 @@ final class GmailAPIManager: ObservableObject {
                 }
             }
 
-            // Track which folders had emails before the sync
-            let foldersBefore = Set((emailsByAccount[accountId] ?? []).map(\.folder))
-
             emailsByAccount[accountId] = currentEmails
             contactsCache?.addContacts(from: currentEmails)
             await fetchUnreadCount(for: accountId, client: client)
             client.state = .idle
 
-            // Persist all folders that currently have emails OR previously had emails
-            let foldersAfter = Set(currentEmails.map(\.folder))
-            let allAffectedFolders = foldersBefore.union(foldersAfter)
-            for folder in allAffectedFolders {
-                dataStore?.replaceEmails(for: accountId, folder: folder, with: currentEmails.filter { $0.folder == folder })
-            }
+            // Persist only what this sync changed. Rewriting every folder of the account made
+            // each poll cost as much as everything held in memory, which grew with uptime.
+            dataStore?.applyChanges(
+                accountId: accountId,
+                removedMsgIds: messageIdsToRemove.union(messageIdsToFetch),
+                upserted: fetchedEmails
+            )
             dataStore?.purgeOldEmails(keepLast: 1000)
 
-            // Runs after per-folder persistence so its own saveEmails calls aren't
-            // wiped by the replaceEmails loop above.
             await loadMissingUnreadInbox(for: accountId, client: client)
         } catch let apiError as GmailAPIError {
             switch apiError {

@@ -654,6 +654,51 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertEqual(manager.historyIds[testAccountId], "12347")
     }
 
+    func testIncrementalSyncWritesOnlyTheChangedMessagesToTheCache() async {
+        let cache = EmailCache(inMemory: true)
+        manager.dataStore = cache
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+
+        let cachedOnly = makeEmail(msgId: "cachedOnly")
+        let memoryOnly = makeEmail(msgId: "memoryOnly")
+        cache.saveEmails([makeEmail(msgId: "msg1"), makeEmail(msgId: "msg2"), cachedOnly])
+        manager.historyIds[testAccountId] = "12345"
+        manager.emailsByAccount[testAccountId] = [makeEmail(msgId: "msg1"), makeEmail(msgId: "msg2"), memoryOnly]
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if url.contains("/history") {
+                return (response, """
+                {"history": [{"id": "12346",
+                  "messagesAdded": [{"message": {"id": "msg3", "threadId": "t3"}}],
+                  "messagesDeleted": [{"message": {"id": "msg1", "threadId": "t1"}}]}],
+                 "historyId": "12347"}
+                """.data(using: .utf8)!)
+            }
+            if url.contains("/messages/msg3") {
+                return (response, """
+                {"id": "msg3", "threadId": "t3", "labelIds": ["INBOX"], "snippet": "New",
+                 "payload": {"headers": [{"name": "From", "value": "new@test.com"}, {"name": "Subject", "value": "New Msg"}]},
+                 "internalDate": "1711000002000", "historyId": "12347"}
+                """.data(using: .utf8)!)
+            }
+            if url.contains("/labels/INBOX") {
+                return (response, #"{"id": "INBOX", "name": "INBOX", "messagesUnread": 0}"#.data(using: .utf8)!)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+
+        await manager.incrementalSync(for: testAccountId)
+
+        let cachedIds = Set(cache.loadEmails(for: testAccountId).map(\.msgId))
+        XCTAssertFalse(cachedIds.contains("msg1"), "deleted on the server")
+        XCTAssertTrue(cachedIds.contains("msg3"), "added on the server")
+        XCTAssertTrue(cachedIds.contains("cachedOnly"), "an unchanged cached row must not be rewritten or dropped")
+        XCTAssertFalse(cachedIds.contains("memoryOnly"), "unchanged in-memory emails must not be rewritten")
+    }
+
     func testIncrementalSyncNoChanges() async {
         let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
         manager.addClient(for: account)

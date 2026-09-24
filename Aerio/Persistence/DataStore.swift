@@ -91,6 +91,21 @@ final class CachedEmail {
         self.threadId = email.threadId
     }
 
+    /// Copies `email` into the row, assigning only fields that differ — every assignment
+    /// marks the row dirty and turns into an UPDATE on save.
+    func update(from email: Email) {
+        if from != email.from { from = email.from }
+        if subject != email.subject { subject = email.subject }
+        if date != email.date { date = email.date }
+        if snippet != email.snippet { snippet = email.snippet }
+        if isRead != email.isRead { isRead = email.isRead }
+        if folderRaw != email.folder.rawValue { folderRaw = email.folder.rawValue }
+        if messageId != email.messageId { messageId = email.messageId }
+        if to != email.to { to = email.to }
+        if cc != email.cc { cc = email.cc }
+        if threadId != email.threadId { threadId = email.threadId }
+    }
+
     func toEmail() -> Email? {
         guard let folder = Folder(rawValue: folderRaw) else { return nil }
         return Email(
@@ -168,29 +183,31 @@ final class EmailCache: ObservableObject {
     }
 
     func saveEmails(_ emails: [Email]) {
-        for email in emails {
-            let emailId = email.id
-            let descriptor = FetchDescriptor<CachedEmail>(
-                predicate: #Predicate { $0.id == emailId }
-            )
-            let existing = (try? modelContext.fetch(descriptor))?.first
+        upsert(emails)
+        save("Failed to save emails")
+    }
 
-            if let existing {
-                existing.from = email.from
-                existing.subject = email.subject
-                existing.date = email.date
-                existing.snippet = email.snippet
-                existing.isRead = email.isRead
-                existing.folderRaw = email.folder.rawValue
-                existing.messageId = email.messageId
-                existing.to = email.to
-                existing.cc = email.cc
-                existing.threadId = email.threadId
+    /// Inserts or updates rows with one fetch per batch instead of one per email, and assigns
+    /// only fields that changed so unchanged rows aren't rewritten on save.
+    private func upsert(_ emails: [Email]) {
+        guard !emails.isEmpty else { return }
+        let ids = Array(Set(emails.map(\.id)))
+        let descriptor = FetchDescriptor<CachedEmail>(
+            predicate: #Predicate { ids.contains($0.id) }
+        )
+        var rowsById: [String: CachedEmail] = [:]
+        for row in (try? modelContext.fetch(descriptor)) ?? [] {
+            rowsById[row.id] = row
+        }
+        for email in emails {
+            if let row = rowsById[email.id] {
+                row.update(from: email)
             } else {
-                modelContext.insert(CachedEmail(from: email))
+                let row = CachedEmail(from: email)
+                modelContext.insert(row)
+                rowsById[email.id] = row
             }
         }
-        save("Failed to save emails")
     }
 
     func replaceEmails(for accountId: String, folder: Folder, with emails: [Email]) {
@@ -208,7 +225,27 @@ final class EmailCache: ObservableObject {
         for item in cached where !freshIds.contains(item.id) {
             modelContext.delete(item)
         }
-        saveEmails(emails)
+        upsert(emails)
+        save("Failed to replace emails")
+    }
+
+    /// Persists one incremental sync: drops the account's rows for removed or re-fetched
+    /// messages in every folder (a label change moves a message to another folder, which is
+    /// another row id), then upserts what was fetched. Cost follows the number of changes,
+    /// not the size of the mailbox.
+    func applyChanges(accountId: String, removedMsgIds: Set<String>, upserted: [Email]) {
+        if !removedMsgIds.isEmpty {
+            let msgIds = Array(removedMsgIds)
+            let keptIds = Set(upserted.map(\.id))
+            let descriptor = FetchDescriptor<CachedEmail>(
+                predicate: #Predicate { $0.accountId == accountId && msgIds.contains($0.msgId) }
+            )
+            for row in (try? modelContext.fetch(descriptor)) ?? [] where !keptIds.contains(row.id) {
+                modelContext.delete(row)
+            }
+        }
+        upsert(upserted)
+        save("Failed to apply sync changes")
     }
 
     func loadEmails(for accountId: String? = nil) -> [Email] {
@@ -240,12 +277,13 @@ final class EmailCache: ObservableObject {
     }
 
     func purgeOldEmails(keepLast: Int) {
-        let descriptor = FetchDescriptor<CachedEmail>(
+        let total = (try? modelContext.fetchCount(FetchDescriptor<CachedEmail>())) ?? 0
+        guard total > keepLast else { return }
+        var descriptor = FetchDescriptor<CachedEmail>(
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        let all = (try? modelContext.fetch(descriptor)) ?? []
-        guard all.count > keepLast else { return }
-        let toDelete = all.dropFirst(keepLast)
+        descriptor.fetchOffset = keepLast
+        let toDelete = (try? modelContext.fetch(descriptor)) ?? []
         for item in toDelete {
             modelContext.delete(item)
         }
