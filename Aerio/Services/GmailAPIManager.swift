@@ -341,7 +341,7 @@ final class GmailAPIManager: ObservableObject {
     }
 
     /// How many emails a folder that isn't open keeps in memory — one page.
-    static let closedFolderEmailCap = 50
+    nonisolated static let closedFolderEmailCap = 50
 
     /// Caps every folder except the open one and drafts at its newest `cap` emails, keeping
     /// unread ones (sidebar counts come from memory) and the pinned jump target. Without it,
