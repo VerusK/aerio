@@ -286,7 +286,7 @@ final class GmailAPIManager: ObservableObject {
             }
             // Skip update if data unchanged (avoids unnecessary re-render after cache load)
             if oldFolderEmails != batchEmails {
-                emailsByAccount[accountId] = current
+                emailsByAccount[accountId] = Self.boundedEmails(current, openFolder: folder, pinnedId: pinnedEmailId)
             }
 
             // Update historyId from messages in this batch
@@ -332,6 +332,27 @@ final class GmailAPIManager: ObservableObject {
         } catch {
             logger.error("[\(accountId)] fetchEmails failed (unexpected): \(error.localizedDescription) — folder=\(self.currentFolder.displayName)")
             client.state = .error(error.localizedDescription)
+        }
+    }
+
+    /// How many emails a folder that isn't open keeps in memory — one page.
+    static let closedFolderEmailCap = 50
+
+    /// Caps every folder except the open one and drafts at its newest `cap` emails, keeping
+    /// unread ones (sidebar counts come from memory) and the pinned jump target. Without it,
+    /// incremental syncs and infinite scroll only ever added emails, and everything derived
+    /// from `emailsByAccount` got slower with uptime. Order is preserved.
+    nonisolated static func boundedEmails(_ emails: [Email], openFolder: Folder, pinnedId: String?, cap: Int = closedFolderEmailCap) -> [Email] {
+        var keptIds = Set<String>()
+        let closed = Dictionary(grouping: emails.filter { $0.folder != openFolder && $0.folder != .drafts }, by: \.folder)
+        for (_, folderEmails) in closed where folderEmails.count > cap {
+            for email in folderEmails.sorted(by: { $0.date > $1.date }).prefix(cap) {
+                keptIds.insert(email.id)
+            }
+        }
+        return emails.filter { email in
+            guard let folderEmails = closed[email.folder], folderEmails.count > cap else { return true }
+            return keptIds.contains(email.id) || !email.isRead || email.id == pinnedId
         }
     }
 
@@ -454,7 +475,7 @@ final class GmailAPIManager: ObservableObject {
                 }
             }
 
-            emailsByAccount[accountId] = currentEmails
+            emailsByAccount[accountId] = Self.boundedEmails(currentEmails, openFolder: currentFolder, pinnedId: pinnedEmailId)
             contactsCache?.addContacts(from: currentEmails)
             await fetchUnreadCount(for: accountId, client: client)
             client.state = .idle

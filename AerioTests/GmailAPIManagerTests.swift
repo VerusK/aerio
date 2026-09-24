@@ -699,6 +699,86 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertFalse(cachedIds.contains("memoryOnly"), "unchanged in-memory emails must not be rewritten")
     }
 
+    // MARK: - Bounded in-memory folders
+
+    private func readEmails(_ count: Int, folder: Folder, prefix: String) -> [Email] {
+        (0..<count).map { i in
+            makeEmail(msgId: "\(prefix)\(i)", isRead: true, folder: folder,
+                      date: Date(timeIntervalSince1970: 1_700_000_000 - Double(i) * 60))
+        }
+    }
+
+    func testBoundedEmailsKeepsNewestInClosedFolders() {
+        let archive = readEmails(60, folder: .archive, prefix: "a")
+
+        let bounded = GmailAPIManager.boundedEmails(archive.shuffled(), openFolder: .inbox, pinnedId: nil, cap: 50)
+
+        XCTAssertEqual(Set(bounded.map(\.msgId)), Set(archive.prefix(50).map(\.msgId)))
+    }
+
+    func testBoundedEmailsKeepsUnreadBeyondTheCap() {
+        let archive = readEmails(60, folder: .archive, prefix: "a")
+        let oldUnread = makeEmail(msgId: "unread", isRead: false, folder: .archive, date: Date(timeIntervalSince1970: 0))
+
+        let bounded = GmailAPIManager.boundedEmails(archive + [oldUnread], openFolder: .inbox, pinnedId: nil, cap: 50)
+
+        XCTAssertEqual(bounded.count, 51)
+        XCTAssertTrue(bounded.contains { $0.msgId == "unread" })
+    }
+
+    func testBoundedEmailsNeverTrimsTheOpenFolder() {
+        let inbox = readEmails(60, folder: .inbox, prefix: "i")
+
+        let bounded = GmailAPIManager.boundedEmails(inbox, openFolder: .inbox, pinnedId: nil, cap: 50)
+
+        XCTAssertEqual(bounded.count, 60)
+    }
+
+    func testBoundedEmailsNeverTrimsDrafts() {
+        let drafts = readEmails(60, folder: .drafts, prefix: "d")
+
+        let bounded = GmailAPIManager.boundedEmails(drafts, openFolder: .inbox, pinnedId: nil, cap: 50)
+
+        XCTAssertEqual(bounded.count, 60)
+    }
+
+    func testBoundedEmailsKeepsThePinnedEmail() {
+        let archive = readEmails(60, folder: .archive, prefix: "a")
+        let pinned = archive[59]
+
+        let bounded = GmailAPIManager.boundedEmails(archive, openFolder: .inbox, pinnedId: pinned.id, cap: 50)
+
+        XCTAssertEqual(bounded.count, 51)
+        XCTAssertTrue(bounded.contains { $0.id == pinned.id })
+    }
+
+    func testIncrementalSyncTrimsClosedFolders() async {
+        let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
+        manager.addClient(for: account)
+        manager.historyIds[testAccountId] = "12345"
+        manager.emailsByAccount[testAccountId] = readEmails(80, folder: .archive, prefix: "a")
+
+        MockURLProtocol.requestHandler = { request in
+            let url = request.url!.absoluteString
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if url.contains("/history") {
+                return (response, """
+                {"history": [{"id": "12346", "messagesDeleted": [{"message": {"id": "a0", "threadId": "t"}}]}],
+                 "historyId": "12347"}
+                """.data(using: .utf8)!)
+            }
+            if url.contains("/labels/INBOX") {
+                return (response, #"{"id": "INBOX", "name": "INBOX", "messagesUnread": 0}"#.data(using: .utf8)!)
+            }
+            return (response, "{}".data(using: .utf8)!)
+        }
+
+        await manager.incrementalSync(for: testAccountId)
+
+        let archive = (manager.emailsByAccount[testAccountId] ?? []).filter { $0.folder == .archive }
+        XCTAssertEqual(archive.count, GmailAPIManager.closedFolderEmailCap)
+    }
+
     func testIncrementalSyncNoChanges() async {
         let account = Account(id: testAccountId, email: testAccountId, displayName: "Test")
         manager.addClient(for: account)
