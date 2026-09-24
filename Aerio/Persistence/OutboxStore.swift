@@ -9,12 +9,27 @@ final class OutboxStore {
     let container: ModelContainer
     private var context: ModelContext { container.mainContext }
 
-    init(inMemory: Bool = false) {
-        let schema = Schema([OutboxItem.self])
-        // Same default location as EmailCache, but a separately-named store file ("Outbox").
-        // SwiftData picks the per-app default URL; we just give the configuration a unique name
-        // so it doesn't collide with EmailCache's default-named container.
-        let config = ModelConfiguration("Outbox", schema: schema, isStoredInMemoryOnly: inMemory)
+    /// Persistent stores live in `Application Support/<bundle id>/Outbox.store` (see `StoreLocation`);
+    /// the release app moves a pre-existing root-level `Outbox.store` there so queued mail survives.
+    convenience init(inMemory: Bool = false) {
+        if !inMemory, let url = try? StoreLocation.storeURL(named: "Outbox", migratingLegacyStore: true) {
+            self.init(configuration: ModelConfiguration("Outbox", schema: Self.schema, url: url))
+        } else {
+            if !inMemory {
+                logger.error("Failed to create the outbox store directory. Falling back to in-memory.")
+            }
+            self.init(configuration: ModelConfiguration("Outbox", schema: Self.schema, isStoredInMemoryOnly: true))
+        }
+    }
+
+    convenience init(url: URL) {
+        self.init(configuration: ModelConfiguration("Outbox", schema: Self.schema, url: url))
+    }
+
+    private static let schema = Schema([OutboxItem.self])
+
+    private init(configuration config: ModelConfiguration) {
+        let schema = Self.schema
         do {
             self.container = try ModelContainer(for: schema, configurations: [config])
         } catch {
