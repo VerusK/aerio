@@ -442,6 +442,78 @@ final class EmailCacheTests: XCTestCase {
         XCTAssertEqual(loaded[2].msgId, "msg2")
     }
 
+    // MARK: - Batched writes
+
+    func testSaveEmailsMixedBatchUpdatesExistingAndInsertsNew() {
+        let store = makeStore()
+        store.saveEmails([makeEmail(msgId: "m1", subject: "Old", isRead: false)])
+
+        store.saveEmails([
+            makeEmail(msgId: "m1", subject: "New", isRead: true),
+            makeEmail(msgId: "m2", subject: "Second"),
+        ])
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 2)
+        let m1 = loaded.first { $0.msgId == "m1" }
+        XCTAssertEqual(m1?.subject, "New")
+        XCTAssertEqual(m1?.isRead, true)
+    }
+
+    func testSaveEmailsWithDuplicateIdsInOneBatchKeepsOneRow() {
+        let store = makeStore()
+
+        store.saveEmails([
+            makeEmail(msgId: "m1", subject: "First"),
+            makeEmail(msgId: "m1", subject: "Last"),
+        ])
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?.subject, "Last")
+    }
+
+    func testApplyChangesDeletesRemovedMessagesInEveryFolderAndUpsertsFetched() {
+        let store = makeStore()
+        store.saveEmails([
+            makeEmail(msgId: "m1", folder: .inbox),
+            makeEmail(msgId: "m2", folder: .inbox),
+            makeEmail(msgId: "m3", folder: .archive),
+        ])
+
+        // m1 deleted on the server; m3 moved from archive back to inbox.
+        store.applyChanges(accountId: "acc1", removedMsgIds: ["m1", "m3"],
+                           upserted: [makeEmail(msgId: "m3", folder: .inbox)])
+
+        let loaded = store.loadEmails(for: "acc1")
+        XCTAssertEqual(Set(loaded.map(\.id)), [
+            makeEmail(msgId: "m2", folder: .inbox).id,
+            makeEmail(msgId: "m3", folder: .inbox).id,
+        ])
+    }
+
+    func testApplyChangesLeavesOtherAccountsAlone() {
+        let store = makeStore()
+        store.saveEmails([
+            makeEmail(msgId: "m1", accountId: "acc1"),
+            makeEmail(msgId: "m1", accountId: "acc2"),
+        ])
+
+        store.applyChanges(accountId: "acc1", removedMsgIds: ["m1"], upserted: [])
+
+        XCTAssertTrue(store.loadEmails(for: "acc1").isEmpty)
+        XCTAssertEqual(store.loadEmails(for: "acc2").count, 1)
+    }
+
+    func testPurgeOldEmailsBelowLimitKeepsEverything() {
+        let store = makeStore()
+        store.saveEmails([makeEmail(msgId: "m1"), makeEmail(msgId: "m2")])
+
+        store.purgeOldEmails(keepLast: 2)
+
+        XCTAssertEqual(store.emailCount, 2)
+    }
+
     // MARK: - All folders
 
     func testAllFoldersRoundTrip() {
@@ -456,5 +528,150 @@ final class EmailCacheTests: XCTestCase {
         let loadedFolders = Set(loaded.map { $0.folder })
         let expectedFolders = Set(Folder.allCases)
         XCTAssertEqual(loadedFolders, expectedFolders)
+    }
+}
+
+// MARK: - Store location
+
+@MainActor
+final class StoreLocationTests: XCTestCase {
+    private var appSupport: URL!
+
+    override func setUpWithError() throws {
+        appSupport = FileManager.default.temporaryDirectory
+            .appendingPathComponent("StoreLocationTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: appSupport)
+    }
+
+    private func writeLegacyOutboxFiles() throws {
+        for suffix in ["", "-wal", "-shm"] {
+            try Data("legacy\(suffix)".utf8).write(to: appSupport.appendingPathComponent("Outbox.store\(suffix)"))
+        }
+    }
+
+    func testStoreURLIsInsidePerBundleIdDirectory() throws {
+        let url = try StoreLocation.storeURL(named: "EmailCache", applicationSupport: appSupport, bundleId: "com.example.app")
+
+        XCTAssertEqual(url, appSupport.appendingPathComponent("com.example.app/EmailCache.store"))
+        var isDir: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path, isDirectory: &isDir))
+        XCTAssertTrue(isDir.boolValue)
+    }
+
+    func testEmailCacheDefaultStoreIsNotSharedDefaultStore() throws {
+        let url = try EmailCache.defaultStoreURL()
+
+        XCTAssertNotEqual(url.lastPathComponent, "default.store")
+        XCTAssertEqual(url.lastPathComponent, "EmailCache.store")
+        XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, Bundle.main.bundleIdentifier)
+    }
+
+    func testReleaseBundleMovesLegacyStoreFilesIntoItsDirectory() throws {
+        try writeLegacyOutboxFiles()
+
+        let url = try StoreLocation.storeURL(named: "Outbox", applicationSupport: appSupport,
+                                             bundleId: StoreLocation.releaseBundleId, migratingLegacyStore: true)
+
+        for suffix in ["", "-wal", "-shm"] {
+            let moved = URL(fileURLWithPath: url.path + suffix)
+            XCTAssertEqual(try String(contentsOf: moved, encoding: .utf8), "legacy\(suffix)")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: appSupport.appendingPathComponent("Outbox.store\(suffix)").path))
+        }
+    }
+
+    func testDebugBundleLeavesLegacyStoreFilesAlone() throws {
+        try writeLegacyOutboxFiles()
+
+        let url = try StoreLocation.storeURL(named: "Outbox", applicationSupport: appSupport,
+                                             bundleId: "com.aerio.Aerio.dev", migratingLegacyStore: true)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: appSupport.appendingPathComponent("Outbox.store").path))
+    }
+
+    func testMigrationNeverOverwritesAnExistingStore() throws {
+        try writeLegacyOutboxFiles()
+        let dir = appSupport.appendingPathComponent(StoreLocation.releaseBundleId, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("current".utf8).write(to: dir.appendingPathComponent("Outbox.store"))
+
+        let url = try StoreLocation.storeURL(named: "Outbox", applicationSupport: appSupport,
+                                             bundleId: StoreLocation.releaseBundleId, migratingLegacyStore: true)
+
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "current")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: appSupport.appendingPathComponent("Outbox.store").path))
+    }
+
+    func testQueuedOutboxItemSurvivesMigration() async throws {
+        let legacyURL = appSupport.appendingPathComponent("Outbox.store")
+        let itemId = UUID()
+        do {
+            let legacy = OutboxStore(url: legacyURL)
+            try await legacy.insert(OutboxItem(
+                id: itemId, accountId: "acct1", rawMime: Data("RAW".utf8),
+                messageIdHeader: "<m@aerio.local>", threadId: nil, draftIdToConsume: nil,
+                subject: "queued", recipientsPreview: "to@example.com", status: .pending,
+                attemptCount: 0, createdAt: Date(), nextAttemptAt: Date(),
+                archiveOnSuccessForMsgId: nil, archiveOnSuccessForAccountId: nil
+            ))
+        }
+
+        let url = try StoreLocation.storeURL(named: "Outbox", applicationSupport: appSupport,
+                                             bundleId: StoreLocation.releaseBundleId, migratingLegacyStore: true)
+        let migrated = OutboxStore(url: url)
+
+        let item = try await migrated.item(byId: itemId)
+        XCTAssertEqual(item?.subject, "queued")
+    }
+}
+
+// MARK: - Failed saves
+
+/// Stands in for the unrelated app that migrated the shared default.store on 2026-09-23.
+@Model
+final class ForeignAppModel {
+    var name: String
+    init(name: String) { self.name = name }
+}
+
+@MainActor
+final class EmailCacheFailedSaveTests: XCTestCase {
+    private var storeDir: URL!
+
+    override func setUpWithError() throws {
+        storeDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EmailCacheFailedSaveTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: storeDir)
+    }
+
+    private func email(_ msgId: String) -> Email {
+        Email(msgId: msgId, from: "a@test.com", subject: "s", date: Date(), snippet: "",
+              isRead: false, accountId: "acc1", folder: .inbox)
+    }
+
+    func testFailedSaveLeavesNoPendingChanges() throws {
+        let url = storeDir.appendingPathComponent("shared.store")
+        let schema = Schema([CachedEmail.self, CachedEmailContent.self])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let cache = EmailCache(container: container)
+        cache.saveEmails([email("m1")])
+
+        // Another app opens the same file with its own schema and migrates Aerio's tables away.
+        let foreignSchema = Schema([ForeignAppModel.self])
+        let foreign = try ModelContainer(for: foreignSchema, configurations: [ModelConfiguration(schema: foreignSchema, url: url)])
+        foreign.mainContext.insert(ForeignAppModel(name: "x"))
+        try foreign.mainContext.save()
+
+        cache.saveEmails([email("m2")])
+
+        XCTAssertFalse(container.mainContext.hasChanges, "a failed save must not leave its inserts pending for every later save to retry")
     }
 }

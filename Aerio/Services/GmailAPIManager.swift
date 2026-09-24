@@ -193,6 +193,11 @@ final class GmailAPIManager: ObservableObject {
 
     func navigateAllToFolder(_ folder: Folder) async {
         currentFolder = folder
+        // Trim the folder being left now: the fetch below may not rewrite emailsByAccount
+        // (empty or unchanged response), and it may hold many infinite-scroll pages.
+        for (accountId, emails) in emailsByAccount {
+            emailsByAccount[accountId] = Self.boundedEmails(emails, openFolder: folder, pinnedId: pinnedEmailId)
+        }
         historyIds.removeAll()
         pageTokens.removeAll()
         accountsWithCompletedFetch.removeAll()
@@ -286,7 +291,7 @@ final class GmailAPIManager: ObservableObject {
             }
             // Skip update if data unchanged (avoids unnecessary re-render after cache load)
             if oldFolderEmails != batchEmails {
-                emailsByAccount[accountId] = current
+                emailsByAccount[accountId] = Self.boundedEmails(current, openFolder: folder, pinnedId: pinnedEmailId)
             }
 
             // Update historyId from messages in this batch
@@ -332,6 +337,27 @@ final class GmailAPIManager: ObservableObject {
         } catch {
             logger.error("[\(accountId)] fetchEmails failed (unexpected): \(error.localizedDescription) — folder=\(self.currentFolder.displayName)")
             client.state = .error(error.localizedDescription)
+        }
+    }
+
+    /// How many emails a folder that isn't open keeps in memory — one page.
+    static let closedFolderEmailCap = 50
+
+    /// Caps every folder except the open one and drafts at its newest `cap` emails, keeping
+    /// unread ones (sidebar counts come from memory) and the pinned jump target. Without it,
+    /// incremental syncs and infinite scroll only ever added emails, and everything derived
+    /// from `emailsByAccount` got slower with uptime. Order is preserved.
+    nonisolated static func boundedEmails(_ emails: [Email], openFolder: Folder, pinnedId: String?, cap: Int = closedFolderEmailCap) -> [Email] {
+        var keptIds = Set<String>()
+        let closed = Dictionary(grouping: emails.filter { $0.folder != openFolder && $0.folder != .drafts }, by: \.folder)
+        for (_, folderEmails) in closed where folderEmails.count > cap {
+            for email in folderEmails.sorted(by: { $0.date > $1.date }).prefix(cap) {
+                keptIds.insert(email.id)
+            }
+        }
+        return emails.filter { email in
+            guard let folderEmails = closed[email.folder], folderEmails.count > cap else { return true }
+            return keptIds.contains(email.id) || !email.isRead || email.id == pinnedId
         }
     }
 
@@ -412,6 +438,7 @@ final class GmailAPIManager: ObservableObject {
 
             // Remove messages that will be re-fetched (they may have changed)
             messageIdsToFetch.subtract(messageIdsToRemove)
+            var fetchedEmails: [Email] = []
             if !messageIdsToFetch.isEmpty {
                 currentEmails.removeAll { messageIdsToFetch.contains($0.msgId) }
 
@@ -435,6 +462,7 @@ final class GmailAPIManager: ObservableObject {
                     return convertGmailMessageToEmail(msg, accountId: accountId, folder: folder)
                 }
                 currentEmails.append(contentsOf: newEmails)
+                fetchedEmails = newEmails
 
                 // Trigger notifications for new inbox+unread emails
                 let notifiable = NotificationManager.newInboxUnreadEmails(
@@ -452,24 +480,20 @@ final class GmailAPIManager: ObservableObject {
                 }
             }
 
-            // Track which folders had emails before the sync
-            let foldersBefore = Set((emailsByAccount[accountId] ?? []).map(\.folder))
-
-            emailsByAccount[accountId] = currentEmails
+            emailsByAccount[accountId] = Self.boundedEmails(currentEmails, openFolder: currentFolder, pinnedId: pinnedEmailId)
             contactsCache?.addContacts(from: currentEmails)
             await fetchUnreadCount(for: accountId, client: client)
             client.state = .idle
 
-            // Persist all folders that currently have emails OR previously had emails
-            let foldersAfter = Set(currentEmails.map(\.folder))
-            let allAffectedFolders = foldersBefore.union(foldersAfter)
-            for folder in allAffectedFolders {
-                dataStore?.replaceEmails(for: accountId, folder: folder, with: currentEmails.filter { $0.folder == folder })
-            }
+            // Persist only what this sync changed. Rewriting every folder of the account made
+            // each poll cost as much as everything held in memory, which grew with uptime.
+            dataStore?.applyChanges(
+                accountId: accountId,
+                removedMsgIds: messageIdsToRemove.union(messageIdsToFetch),
+                upserted: fetchedEmails
+            )
             dataStore?.purgeOldEmails(keepLast: 1000)
 
-            // Runs after per-folder persistence so its own saveEmails calls aren't
-            // wiped by the replaceEmails loop above.
             await loadMissingUnreadInbox(for: accountId, client: client)
         } catch let apiError as GmailAPIError {
             switch apiError {
@@ -524,7 +548,8 @@ final class GmailAPIManager: ObservableObject {
             let existingMsgIds = Set(current.filter { $0.folder == folder }.map(\.msgId))
             let uniqueNewEmails = newEmails.filter { !existingMsgIds.contains($0.msgId) }
             current.append(contentsOf: uniqueNewEmails)
-            emailsByAccount[accountId] = current
+            // The user may have left `folder` while this page loaded
+            emailsByAccount[accountId] = Self.boundedEmails(current, openFolder: currentFolder, pinnedId: pinnedEmailId)
 
             dataStore?.saveEmails(uniqueNewEmails)
             logger.debug("[\(accountId)] fetchMoreEmails: appended \(uniqueNewEmails.count) emails, hasMore=\(nextPageToken != nil)")

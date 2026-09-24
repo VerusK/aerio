@@ -216,7 +216,7 @@ final class AppState: ObservableObject {
     init(accountManager: AccountManager, apiManager: GmailAPIManager, defaults: UserDefaults = .standard, notificationManager: NotificationManager? = nil, keychainStore: KeychainStore = KeychainHelper.shared) {
         self.accountManager = accountManager
         self.oauthManager = OAuthManager(keychainStore: keychainStore)
-        self.emailCache = EmailCache()
+        self.emailCache = EmailCache(inMemory: true)
         self.apiManager = apiManager
         self.unifiedMailbox = UnifiedMailbox(apiManager: apiManager)
         let contacts = ContactsCache()

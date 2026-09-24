@@ -4,6 +4,61 @@ import SwiftData
 
 private let logger = Logger(subsystem: "Aerio", category: "DataStore")
 
+/// Where Aerio's SwiftData stores live: `Application Support/<bundle id>/<name>.store`.
+///
+/// SwiftData's default URL is `Application Support/default.store`, and Aerio isn't sandboxed,
+/// so that file is shared with every other unsandboxed SwiftData app. On 2026-09-23 one of them
+/// migrated it to its own schema, dropping Aerio's tables; every cache save failed from then on.
+/// The bundle id also keeps Debug builds (`com.aerio.Aerio.dev`) off the release app's stores.
+enum StoreLocation {
+    static let releaseBundleId = "com.aerio.Aerio"
+    static let storeFileSuffixes = ["", "-wal", "-shm"]
+
+    /// Creates the per-bundle directory and returns the store URL inside it.
+    /// With `migratingLegacyStore`, the release app moves `Application Support/<name>.store`
+    /// (written before stores had their own directory) into place. If that copy fails, the
+    /// legacy URL is returned so nothing already in the store goes missing.
+    static func storeURL(
+        named name: String,
+        applicationSupport: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0],
+        bundleId: String = Bundle.main.bundleIdentifier ?? releaseBundleId,
+        migratingLegacyStore: Bool = false
+    ) throws -> URL {
+        let directory = applicationSupport.appendingPathComponent(bundleId, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(name).store")
+
+        let legacyURL = applicationSupport.appendingPathComponent("\(name).store")
+        let fm = FileManager.default
+        guard migratingLegacyStore, bundleId == releaseBundleId,
+              !fm.fileExists(atPath: url.path), fm.fileExists(atPath: legacyURL.path) else {
+            return url
+        }
+
+        // Copy all three SQLite files before deleting any: a store moved without its WAL
+        // loses every transaction not yet checkpointed.
+        var copied: [URL] = []
+        do {
+            for suffix in storeFileSuffixes {
+                let source = URL(fileURLWithPath: legacyURL.path + suffix)
+                guard fm.fileExists(atPath: source.path) else { continue }
+                let destination = URL(fileURLWithPath: url.path + suffix)
+                try fm.copyItem(at: source, to: destination)
+                copied.append(destination)
+            }
+        } catch {
+            logger.error("Failed to migrate \(name).store into \(bundleId): \(error.localizedDescription). Keeping the legacy location.")
+            for file in copied { try? fm.removeItem(at: file) }
+            return legacyURL
+        }
+        for suffix in storeFileSuffixes {
+            try? fm.removeItem(at: URL(fileURLWithPath: legacyURL.path + suffix))
+        }
+        logger.info("Migrated \(name).store into \(bundleId)")
+        return url
+    }
+}
+
 @Model
 final class CachedEmail {
     @Attribute(.unique) var id: String
@@ -34,6 +89,21 @@ final class CachedEmail {
         self.to = email.to
         self.cc = email.cc
         self.threadId = email.threadId
+    }
+
+    /// Copies `email` into the row, assigning only fields that differ — every assignment
+    /// marks the row dirty and turns into an UPDATE on save.
+    func update(from email: Email) {
+        if from != email.from { from = email.from }
+        if subject != email.subject { subject = email.subject }
+        if date != email.date { date = email.date }
+        if snippet != email.snippet { snippet = email.snippet }
+        if isRead != email.isRead { isRead = email.isRead }
+        if folderRaw != email.folder.rawValue { folderRaw = email.folder.rawValue }
+        if messageId != email.messageId { messageId = email.messageId }
+        if to != email.to { to = email.to }
+        if cc != email.cc { cc = email.cc }
+        if threadId != email.threadId { threadId = email.threadId }
     }
 
     func toEmail() -> Email? {
@@ -81,12 +151,21 @@ final class EmailCache: ObservableObject {
     private let modelContainer: ModelContainer
     private var modelContext: ModelContext
 
+    static func defaultStoreURL() throws -> URL {
+        try StoreLocation.storeURL(named: "EmailCache")
+    }
+
     init(inMemory: Bool = false) {
         let schema = Schema([CachedEmail.self, CachedEmailContent.self])
-        let config = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: inMemory
-        )
+        let config: ModelConfiguration
+        if !inMemory, let url = try? Self.defaultStoreURL() {
+            config = ModelConfiguration(schema: schema, url: url)
+        } else {
+            if !inMemory {
+                logger.error("Failed to create the cache store directory. Falling back to in-memory store.")
+            }
+            config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        }
         do {
             self.modelContainer = try ModelContainer(for: schema, configurations: [config])
         } catch {
@@ -104,32 +183,30 @@ final class EmailCache: ObservableObject {
     }
 
     func saveEmails(_ emails: [Email]) {
-        for email in emails {
-            let emailId = email.id
-            let descriptor = FetchDescriptor<CachedEmail>(
-                predicate: #Predicate { $0.id == emailId }
-            )
-            let existing = (try? modelContext.fetch(descriptor))?.first
+        upsert(emails)
+        save("Failed to save emails")
+    }
 
-            if let existing {
-                existing.from = email.from
-                existing.subject = email.subject
-                existing.date = email.date
-                existing.snippet = email.snippet
-                existing.isRead = email.isRead
-                existing.folderRaw = email.folder.rawValue
-                existing.messageId = email.messageId
-                existing.to = email.to
-                existing.cc = email.cc
-                existing.threadId = email.threadId
-            } else {
-                modelContext.insert(CachedEmail(from: email))
-            }
+    /// Inserts or updates rows with one fetch per batch instead of one per email, and assigns
+    /// only fields that changed so unchanged rows aren't rewritten on save.
+    private func upsert(_ emails: [Email]) {
+        guard !emails.isEmpty else { return }
+        let ids = Array(Set(emails.map(\.id)))
+        let descriptor = FetchDescriptor<CachedEmail>(
+            predicate: #Predicate { ids.contains($0.id) }
+        )
+        var rowsById: [String: CachedEmail] = [:]
+        for row in (try? modelContext.fetch(descriptor)) ?? [] {
+            rowsById[row.id] = row
         }
-        do {
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to save emails: \(error.localizedDescription)")
+        for email in emails {
+            if let row = rowsById[email.id] {
+                row.update(from: email)
+            } else {
+                let row = CachedEmail(from: email)
+                modelContext.insert(row)
+                rowsById[email.id] = row
+            }
         }
     }
 
@@ -148,7 +225,27 @@ final class EmailCache: ObservableObject {
         for item in cached where !freshIds.contains(item.id) {
             modelContext.delete(item)
         }
-        saveEmails(emails)
+        upsert(emails)
+        save("Failed to replace emails")
+    }
+
+    /// Persists one incremental sync: drops the account's rows for removed or re-fetched
+    /// messages in every folder (a label change moves a message to another folder, which is
+    /// another row id), then upserts what was fetched. Cost follows the number of changes,
+    /// not the size of the mailbox.
+    func applyChanges(accountId: String, removedMsgIds: Set<String>, upserted: [Email]) {
+        if !removedMsgIds.isEmpty {
+            let msgIds = Array(removedMsgIds)
+            let keptIds = Set(upserted.map(\.id))
+            let descriptor = FetchDescriptor<CachedEmail>(
+                predicate: #Predicate { $0.accountId == accountId && msgIds.contains($0.msgId) }
+            )
+            for row in (try? modelContext.fetch(descriptor)) ?? [] where !keptIds.contains(row.id) {
+                modelContext.delete(row)
+            }
+        }
+        upsert(upserted)
+        save("Failed to apply sync changes")
     }
 
     func loadEmails(for accountId: String? = nil) -> [Email] {
@@ -180,20 +277,18 @@ final class EmailCache: ObservableObject {
     }
 
     func purgeOldEmails(keepLast: Int) {
-        let descriptor = FetchDescriptor<CachedEmail>(
+        let total = (try? modelContext.fetchCount(FetchDescriptor<CachedEmail>())) ?? 0
+        guard total > keepLast else { return }
+        var descriptor = FetchDescriptor<CachedEmail>(
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        let all = (try? modelContext.fetch(descriptor)) ?? []
-        guard all.count > keepLast else { return }
-        let toDelete = all.dropFirst(keepLast)
+        descriptor.fetchOffset = keepLast
+        let toDelete = (try? modelContext.fetch(descriptor)) ?? []
         for item in toDelete {
             modelContext.delete(item)
         }
-        do {
-            try modelContext.save()
+        if save("Failed to purge old emails") {
             logger.info("Purged \(toDelete.count) old cached emails, keeping \(keepLast)")
-        } catch {
-            logger.error("Failed to purge old emails: \(error.localizedDescription)")
         }
     }
 
@@ -201,30 +296,22 @@ final class EmailCache: ObservableObject {
         let descriptor = FetchDescriptor<CachedEmail>(
             predicate: #Predicate { $0.id == id }
         )
-        do {
-            let cached = try modelContext.fetch(descriptor)
-            for item in cached {
-                modelContext.delete(item)
-            }
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to delete email \(id): \(error.localizedDescription)")
+        let cached = (try? modelContext.fetch(descriptor)) ?? []
+        for item in cached {
+            modelContext.delete(item)
         }
+        save("Failed to delete email \(id)")
     }
 
     func deleteEmails(msgId: String, accountId: String) {
         let descriptor = FetchDescriptor<CachedEmail>(
             predicate: #Predicate { $0.msgId == msgId && $0.accountId == accountId }
         )
-        do {
-            let cached = try modelContext.fetch(descriptor)
-            for item in cached {
-                modelContext.delete(item)
-            }
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to delete emails for msgId \(msgId): \(error.localizedDescription)")
+        let cached = (try? modelContext.fetch(descriptor)) ?? []
+        for item in cached {
+            modelContext.delete(item)
         }
+        save("Failed to delete emails for msgId \(msgId)")
     }
 
     func clearEmails(for accountId: String? = nil) {
@@ -241,11 +328,7 @@ final class EmailCache: ObservableObject {
         for item in cached {
             modelContext.delete(item)
         }
-        do {
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to clear emails: \(error.localizedDescription)")
-        }
+        save("Failed to clear emails")
     }
 
     var emailCount: Int {
@@ -276,11 +359,7 @@ final class EmailCache: ObservableObject {
                 bodyHTML: bodyHTML, headersJSON: headersJSON, attachmentsJSON: attachmentsJSON
             ))
         }
-        do {
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to save content cache: \(error.localizedDescription)")
-        }
+        save("Failed to save content cache")
     }
 
     func loadContent(accountId: String, msgId: String) -> (bodyHTML: String, headers: [String: String], attachments: [[String: String]])? {
@@ -304,11 +383,8 @@ final class EmailCache: ObservableObject {
         for item in old {
             modelContext.delete(item)
         }
-        do {
-            try modelContext.save()
+        if save("Failed to purge old content") {
             logger.info("Purged \(old.count) old content cache entries")
-        } catch {
-            logger.error("Failed to purge old content: \(error.localizedDescription)")
         }
     }
 
@@ -317,15 +393,11 @@ final class EmailCache: ObservableObject {
         let descriptor = FetchDescriptor<CachedEmailContent>(
             predicate: #Predicate { $0.contentKey == key }
         )
-        do {
-            let cached = try modelContext.fetch(descriptor)
-            for item in cached {
-                modelContext.delete(item)
-            }
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to delete content for \(key): \(error.localizedDescription)")
+        let cached = (try? modelContext.fetch(descriptor)) ?? []
+        for item in cached {
+            modelContext.delete(item)
         }
+        save("Failed to delete content for \(key)")
     }
 
     func clearContent() {
@@ -334,10 +406,21 @@ final class EmailCache: ObservableObject {
         for item in all {
             modelContext.delete(item)
         }
+        save("Failed to clear content cache")
+    }
+
+    /// Saves pending changes, and on failure logs and rolls the context back. Without the
+    /// rollback a failed save leaves its inserts and deletes pending, every later save retries
+    /// the whole growing pile, and a long-running app gets slower by the hour.
+    @discardableResult
+    private func save(_ failureMessage: String) -> Bool {
         do {
             try modelContext.save()
+            return true
         } catch {
-            logger.error("Failed to clear content cache: \(error.localizedDescription)")
+            logger.error("\(failureMessage): \(error.localizedDescription)")
+            modelContext.rollback()
+            return false
         }
     }
 
