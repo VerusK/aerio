@@ -1852,6 +1852,31 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertFalse(emails.contains { $0.folder == .trash })
     }
 
+    func testApplyMoveToInboxFromTrashReTrashesAMemberWhoseModifyFailedAfterUntrash() async {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        manager.emailsByAccount[testAccountId] = [
+            makeThreadEmail("m1", folder: .trash), makeThreadEmail("m2", folder: .trash),
+        ]
+        let log = RequestLog()
+        MockURLProtocol.requestHandler = { request in
+            log.record(request)
+            let failing = request.httpMethod == "POST" && request.url!.path.hasSuffix("/messages/m2/modify")
+            let response = HTTPURLResponse(url: request.url!, statusCode: failing ? 403 : 200, httpVersion: nil, headerFields: nil)!
+            return (response, #"{"id": "x", "threadId": "t1", "labelIds": []}"#.data(using: .utf8)!)
+        }
+
+        await manager.apply(.moveToInbox, to: manager.emailsByAccount[testAccountId]!)
+
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertTrue(emails.contains { $0.msgId == "m1" && $0.folder == .inbox })
+        XCTAssertFalse(emails.contains { $0.msgId == "m1" && $0.folder == .trash })
+        XCTAssertTrue(emails.contains { $0.msgId == "m2" && $0.folder == .trash }, "failed member is reverted")
+        XCTAssertFalse(emails.contains { $0.msgId == "m2" && $0.folder == .inbox })
+        XCTAssertEqual(log.entries.filter { $0.hasPrefix("POST m2/") },
+                       ["POST m2/untrash", "POST m2/modify +INBOX -", "POST m2/trash"],
+                       "an untrash whose follow-up modify failed is compensated by re-trashing")
+    }
+
     func testApplyMoveToInboxFromSpamSwapsLabels() async {
         let (log, emails) = await runConversationAction(.moveToInbox, from: .spam)
 

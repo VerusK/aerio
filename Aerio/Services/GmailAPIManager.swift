@@ -844,6 +844,9 @@ final class GmailAPIManager: ObservableObject {
             throw GmailAPIError.unauthorized
         }
 
+        // Set once `untrashMessage` succeeds: a later failure must re-trash on the server,
+        // or the local revert to Trash would disagree with a server that no longer has TRASH.
+        var untrashed = false
         do {
             switch action {
             case .archive:
@@ -856,6 +859,7 @@ final class GmailAPIManager: ObservableObject {
                 switch staged.folder {
                 case .trash:
                     _ = try await client.untrashMessage(id: msgId)
+                    untrashed = true
                     _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
                 case .spam:
                     _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox], removeLabels: [GmailLabelId.spam])
@@ -869,6 +873,13 @@ final class GmailAPIManager: ObservableObject {
                 _ = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
                 persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
                 return
+            }
+            if untrashed {
+                do {
+                    _ = try await client.trashMessage(id: msgId)
+                } catch let compensationError {
+                    logger.error("[\(accountId)] moveToInbox: re-trash of msgId=\(msgId) after a failed modify also failed: \(compensationError.localizedDescription)")
+                }
             }
             revertOptimisticUpdate(removal: staged.removal, movedEmail: staged.movedEmail, accountId: accountId)
             throw error
