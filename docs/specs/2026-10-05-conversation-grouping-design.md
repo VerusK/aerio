@@ -125,8 +125,10 @@ New pure helpers, unit-tested, in `Conversation.swift` (extension on
 `EmailAction` moves from `MainView` to `GmailAPIManager.swift` (same cases).
 New `GmailAPIManager.apply(_ action: EmailAction, to emails: [Email]) async`
 calls the existing per-message method (`archiveEmail`, `deleteEmail`,
-`spamEmail`, `moveToInbox`) once per email, sequentially, continuing after a
-failure and logging each error as `MainView` does today. Each call keeps its
+`spamEmail`, `moveToInbox`) once per email, started together as MainActor
+child tasks (each optimistic move lands before any network reply, so the row
+leaves at once), continuing after a failure and logging each error as
+`MainView` does today. Each call keeps its
 own optimistic update and failure handling:
 
 - a non-404 failure reverts that member alone; it reappears as a smaller row;
