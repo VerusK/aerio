@@ -134,10 +134,19 @@ own optimistic update and failure handling:
   `performMove` behaviour): the member is dropped, not reverted, and no error
   surfaces.
 
-All entry points (context menu, keyboard shortcuts, detail-panel buttons) go
-through this path, so they all act on the whole conversation in the current
-folder. Messages of the thread in other folders (e.g. the user's reply in Sent)
-are not touched.
+The members to act on come from a pure helper
+`[Conversation].actionTargets(for email: Email) -> [Email]` (in
+`Conversation.swift`): the messages of the conversation containing `email`, or
+`[email]` when none does. All entry points (context menu, keyboard shortcuts,
+detail-panel buttons) call `executeActionOnEmail`, which uses this helper, so
+they all act on the whole conversation in the current folder.
+
+Server-side, messages of the thread in other folders (e.g. the user's reply in
+Sent) are not touched. In memory, the existing `performMove` /
+`removeEmailFromMemory` drop every folder copy of an acted-on `msgId`, so a
+message that is in two folders at once (a self-addressed message with both
+INBOX and SENT labels) loses its other-folder row until that folder is fetched
+again. This is existing per-message behaviour and is not changed here.
 
 Reply / Reply All / Forward from the list, the context menu or the keyboard
 target `selectedConversation.newest` (keyboard: `selectedEmailMsgId` becomes
@@ -146,8 +155,9 @@ are unchanged.
 
 ### Mark as read
 
-A `MainView` helper `markConversationRead(_:)` calls the existing
-`apiManager.markAsRead(emailId:accountId:)` for every unread member. It runs
+New `GmailAPIManager.markAllAsRead(_ emails: [Email])` calls the existing
+`markAsRead(emailId:accountId:)` for every unread email in the list. `MainView`'s
+`markConversationRead(_:)` passes the conversation's messages to it. It runs
 from `onChange(of: selectedEmailId)` (for the conversation containing the new
 id) and from `onReselect` (tap on the already-selected row). An already-read
 conversation makes no calls.
@@ -176,9 +186,12 @@ Replace the condition at `MainView.swift:382`:
 - New `ThreadDetailView` parameter `focusMessageId: String?`: the selected
   email's `msgId` when it is not the newest member, else nil.
   `buildThreadHTML` gives every message section an `id="msg-<msgId>"` anchor;
-  after the page loads, `ThreadDetailView` runs JS `scrollIntoView` on the
-  focused anchor. A notification click or search jump to an older member opens
-  the thread scrolled to that message.
+  `ThreadDetailView` applies the focus after every page load and on every
+  change of `focusMessageId` while mounted (`onChange`; when the page is still
+  loading, the pending focus is applied when it finishes): a non-nil value runs
+  JS `scrollIntoView` on that anchor, nil scrolls to the top. So two
+  successive jumps into the same mounted thread each land on their message,
+  and a later row tap (focus nil) returns to the top.
 - `threadHasMultipleMessages` gains an `accountId` parameter and counts
   **distinct `msgId`s** of that account with that threadId, so one message
   present in two folders no longer counts as two.
@@ -213,7 +226,11 @@ Unit tests (XCTest, run with `./scripts/test.sh`):
   `adjacentSelection` (down, up, clamp at both ends, no selection, moving down
   and up from a selected older member); `selectionAfterRemoving` (middle, last,
   only row); `conversation(containing:)` on an older member returns the
-  conversation whose `newest` is the reply/forward target.
+  conversation whose `newest` is the reply/forward target; `actionTargets(for:)`
+  returns both folder-local members of a two-member conversation when given
+  either member, and `[email]` for an email not in the list; the same thread
+  in Inbox and Sent yields two conversations; `isUnread` is true when only the
+  older member is unread.
 - `UnifiedMailboxTests`: `conversations` reflects the folder view, updates when
   a new message joins an existing thread (incremental path), when `isRead`
   changes, and after a folder switch that takes the full-sort path (no rows
@@ -224,6 +241,9 @@ Unit tests (XCTest, run with `./scripts/test.sh`):
   mock client archiving the first and failing the second with a non-404 error
   leaves the first in Archive and the second back in Inbox; the same with a
   404 on the second drops it from Inbox without revert.
+- `GmailAPIManagerTests`: `markAllAsRead` on two unread members and one read
+  member issues exactly two `modify` requests (distinct ids, via
+  `MockURLProtocol`) and marks both read in memory.
 - `ThreadHTMLTests`: `buildThreadHTML` emits one `msg-<msgId>` anchor per
   message.
 - `MessageListTests`: existing ordering/filtering tests adapted to
@@ -234,7 +254,12 @@ row with count 2, opens in `ThreadDetailView` with the user's Sent original,
 selecting it marks both read, archiving it removes the row and leaves the Sent
 message in Sent. A search jump to the older `Fw:` message opens the thread
 scrolled to it. With two accounts, switching between their conversations
-always shows the selected account's thread content.
+always shows the selected account's thread content. Two successive search
+jumps to different messages of one thread each scroll to their message; a row
+tap afterwards shows the top. Archive, Delete, Spam and Move to Inbox each
+invoked from the context menu, the keyboard and the detail-panel button move
+both members of a two-member conversation. With the conversation selected, a
+new unread reply joins it (row turns bold); tapping the row clears the bold.
 
 ## Decisions
 
@@ -390,3 +415,25 @@ accepted without the judge: [P2] O(n) claim wrong with sorting — cost restated
 Mode: `user` — A (user delegated; Claude's recommendation taken). Left as is: one published grouping shared by `MessageList` and `MainView` instead of regrouping per render in both, and the Re:-prefix removal stays because a grouped row with an `Fw:`/`RE:` newest member would otherwise open one message out of several.
 
 accepted without the judge: [P2] tests miss reply target, navigation from an older member and account-qualified detail — added `conversation(containing:)` / `adjacentSelection` cases from an older member and a manual two-account check.
+
+## Spec review decisions (round 2)
+
+Reviewer: codex-exec. Report: `docs/specs/2026-10-05-conversation-grouping-design.review.md` (round 1 kept as `.review.md.round1.md`).
+
+```
+Решение (Jev): How should the optimistic removal of a message's other folder copies (e.g. a self-sent message in Inbox and Sent) during conversation actions be fixed?
+  A. Preserve unaffected folder copies       99%
+  B. Correct the spec claim, keep behaviour  1%
+  Рекомендация Claude: B
+  Данных достаточно: 55%
+  Выбрано: A, confidence 0.99, данных 0.55, порог 0.7 → спросить пользователя (Jev ≠ рекомендация)
+```
+Mode: `user` — B (user delegated all decisions; Claude's recommendation taken). The spec claim is corrected; the in-memory removal of other-folder copies is pre-existing per-message behaviour, affects only messages carrying two folder labels, and self-heals on the next fetch of that folder. Changing `performMove` semantics is left for a separate fix.
+
+accepted without the judge: [P1] repeated jumps within one mounted thread never refocus — `ThreadDetailView.swift:166-179,237-271` has no focus-change path; focus now applied on every `focusMessageId` change (nil → top), deferred until load finishes; manual check of two jumps then a tap.
+
+accepted without the judge: [P1] UI routing to whole-conversation actions unproven — added pure `actionTargets(for:)` used by `executeActionOnEmail` with tests, plus a manual check of every entry point.
+
+accepted without the judge: [P2] no test for multi-member mark-read or reselect — added `GmailAPIManager.markAllAsRead` with a two-request `MockURLProtocol` test and a manual reselect check.
+
+accepted without the judge: [P2] missing tests for the same thread in two folders and unread styling from an older member — added `ConversationTests` cases for both.
