@@ -1777,6 +1777,243 @@ final class GmailAPIManagerTests: XCTestCase {
         XCTAssertEqual(email?.threadId, "thread_abc")
     }
 
+    // MARK: - Conversations
+
+    private func makeThreadEmail(_ msgId: String, thread: String = "t1", folder: Folder = .inbox, isRead: Bool = false) -> Email {
+        Email(
+            msgId: msgId, from: "a@test.com", subject: "S", date: Date(), snippet: "",
+            isRead: isRead, accountId: testAccountId, folder: folder,
+            to: "me@test.com", cc: "cc@test.com", threadId: thread
+        )
+    }
+
+    nonisolated private static func okResponse(_ request: URLRequest) -> (HTTPURLResponse, Data) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (response, #"{"id": "x", "threadId": "t1", "labelIds": []}"#.data(using: .utf8)!)
+    }
+
+    /// Runs `action` on a two-member conversation in `folder`, recording every request.
+    private func runConversationAction(_ action: EmailAction, from folder: Folder) async -> (log: [String], emails: [Email]) {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        manager.emailsByAccount[testAccountId] = [
+            makeThreadEmail("m1", folder: folder), makeThreadEmail("m2", folder: folder),
+        ]
+        let log = RequestLog()
+        MockURLProtocol.requestHandler = { request in
+            log.record(request)
+            return Self.okResponse(request)
+        }
+        await manager.apply(action, to: manager.emailsByAccount[testAccountId]!)
+        return (log.entries, manager.emailsByAccount[testAccountId] ?? [])
+    }
+
+    func testArchivedEmailKeepsThreadIdToAndCc() async throws {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        manager.emailsByAccount[testAccountId] = [makeThreadEmail("m1")]
+        setupMockForModifyMessage()
+
+        try await manager.archiveEmail(msgId: "m1", accountId: testAccountId, folder: .inbox)
+
+        let archived = manager.emailsByAccount[testAccountId]?.first { $0.folder == .archive }
+        XCTAssertEqual(archived?.threadId, "t1")
+        XCTAssertEqual(archived?.to, "me@test.com")
+        XCTAssertEqual(archived?.cc, "cc@test.com")
+    }
+
+    func testApplyArchiveSendsOneRequestPerMemberAndGroupsThemInArchive() async {
+        let (log, emails) = await runConversationAction(.archive, from: .inbox)
+
+        XCTAssertEqual(Set(log), ["POST m1/modify + -INBOX", "POST m2/modify + -INBOX"])
+        XCTAssertFalse(emails.contains { $0.folder == .inbox })
+        XCTAssertEqual(Conversation.group(emails.filter { $0.folder == .archive }).count, 1)
+    }
+
+    func testApplyDeleteTrashesEveryMember() async {
+        let (log, emails) = await runConversationAction(.delete, from: .inbox)
+
+        XCTAssertEqual(Set(log), ["POST m1/trash", "POST m2/trash"])
+        XCTAssertEqual(Set(emails.filter { $0.folder == .trash }.map(\.msgId)), ["m1", "m2"])
+        XCTAssertFalse(emails.contains { $0.folder == .inbox })
+    }
+
+    func testApplySpamMovesEveryMemberToSpam() async {
+        let (log, emails) = await runConversationAction(.spam, from: .inbox)
+
+        XCTAssertEqual(Set(log), ["POST m1/modify +SPAM -INBOX", "POST m2/modify +SPAM -INBOX"])
+        XCTAssertEqual(Set(emails.filter { $0.folder == .spam }.map(\.msgId)), ["m1", "m2"])
+    }
+
+    func testApplyMoveToInboxFromTrashUntrashesThenAddsInbox() async {
+        let (log, emails) = await runConversationAction(.moveToInbox, from: .trash)
+
+        XCTAssertEqual(log.filter { $0.hasPrefix("POST m1/") }, ["POST m1/untrash", "POST m1/modify +INBOX -"])
+        XCTAssertEqual(log.filter { $0.hasPrefix("POST m2/") }, ["POST m2/untrash", "POST m2/modify +INBOX -"])
+        XCTAssertEqual(Set(emails.filter { $0.folder == .inbox }.map(\.msgId)), ["m1", "m2"])
+        XCTAssertFalse(emails.contains { $0.folder == .trash })
+    }
+
+    func testApplyMoveToInboxFromSpamSwapsLabels() async {
+        let (log, emails) = await runConversationAction(.moveToInbox, from: .spam)
+
+        XCTAssertEqual(Set(log), ["POST m1/modify +INBOX -SPAM", "POST m2/modify +INBOX -SPAM"])
+        XCTAssertEqual(Set(emails.filter { $0.folder == .inbox }.map(\.msgId)), ["m1", "m2"])
+    }
+
+    func testApplyMoveToInboxFromArchiveAddsInbox() async {
+        let (log, emails) = await runConversationAction(.moveToInbox, from: .archive)
+
+        XCTAssertEqual(Set(log), ["POST m1/modify +INBOX -", "POST m2/modify +INBOX -"])
+        XCTAssertEqual(Set(emails.filter { $0.folder == .inbox }.map(\.msgId)), ["m1", "m2"])
+    }
+
+    func testApplyRevertsOnlyTheMemberWhoseCallFailed() async {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        manager.emailsByAccount[testAccountId] = [makeThreadEmail("m1"), makeThreadEmail("m2")]
+        MockURLProtocol.requestHandler = { request in
+            let status = request.url!.path.contains("/messages/m2/") ? 403 : 200
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            return (response, #"{"id": "x", "threadId": "t1", "labelIds": []}"#.data(using: .utf8)!)
+        }
+
+        await manager.apply(.archive, to: manager.emailsByAccount[testAccountId]!)
+
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertTrue(emails.contains { $0.msgId == "m1" && $0.folder == .archive })
+        XCTAssertFalse(emails.contains { $0.msgId == "m1" && $0.folder == .inbox })
+        XCTAssertTrue(emails.contains { $0.msgId == "m2" && $0.folder == .inbox }, "failed member is reverted")
+        XCTAssertFalse(emails.contains { $0.msgId == "m2" && $0.folder == .archive })
+    }
+
+    func testApplyDropsAMemberTheServerNoLongerHas() async {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        manager.emailsByAccount[testAccountId] = [makeThreadEmail("m1"), makeThreadEmail("m2")]
+        MockURLProtocol.requestHandler = { request in
+            let status = request.url!.path.contains("/messages/m2/") ? 404 : 200
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            return (response, #"{"id": "x", "threadId": "t1", "labelIds": []}"#.data(using: .utf8)!)
+        }
+
+        await manager.apply(.archive, to: manager.emailsByAccount[testAccountId]!)
+
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertTrue(emails.contains { $0.msgId == "m1" && $0.folder == .archive })
+        XCTAssertFalse(emails.contains { $0.msgId == "m2" }, "404 drops the member, no revert")
+    }
+
+    func testApplyStagesEveryMemberBeforeAnyRequestReturns() async {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        let members = [makeThreadEmail("m1"), makeThreadEmail("m2"), makeThreadEmail("m3")]
+        manager.emailsByAccount[testAccountId] = members
+        let gate = DispatchSemaphore(value: 0)
+        let started = RequestCounter()
+        MockURLProtocol.requestHandler = { request in
+            started.increment()
+            gate.wait()  // hold every request open until the test has looked
+            return Self.okResponse(request)
+        }
+
+        let action = Task { await manager.apply(.archive, to: members) }
+        let deadline = Date().addingTimeInterval(3)
+        while started.value == 0 && Date() < deadline { await Task.yield() }
+
+        XCTAssertGreaterThan(started.value, 0, "no request went out")
+        let emails = manager.emailsByAccount[testAccountId] ?? []
+        XCTAssertFalse(emails.contains { $0.folder == .inbox }, "every member left Inbox before any reply")
+        XCTAssertEqual(emails.filter { $0.folder == .archive }.count, 3)
+
+        for _ in members { gate.signal() }
+        await action.value
+    }
+
+    func testApplyKeepsAtMostFourRequestsInFlight() async {
+        // MockURLProtocol answers every request on one loading thread, so a count kept in
+        // the handler never exceeds 1. Count at the session instead: a request is in flight
+        // from the moment its task is created until its handler has answered.
+        let gauge = InFlightGauge()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let countingSession = URLSession(
+            configuration: config, delegate: TaskCreationObserver { gauge.enter() }, delegateQueue: nil
+        )
+        defer { countingSession.finishTasksAndInvalidate() }
+        manager.clientFactory = { [mockKeychain] accountId, oauthManager in
+            GmailAPIClient(accountId: accountId, oauthManager: oauthManager, session: countingSession, keychainStore: mockKeychain!)
+        }
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        let members = (1...9).map { makeThreadEmail("m\($0)") }
+        manager.emailsByAccount[testAccountId] = members
+        MockURLProtocol.requestHandler = { request in
+            Thread.sleep(forTimeInterval: 0.05)
+            gauge.leave()
+            return Self.okResponse(request)
+        }
+
+        await manager.apply(.archive, to: members)
+
+        XCTAssertGreaterThan(gauge.peak, 0, "no task creation observed")
+        XCTAssertLessThanOrEqual(gauge.peak, GmailAPIManager.actionConcurrency)
+        XCTAssertEqual(manager.emailsByAccount[testAccountId]?.filter { $0.folder == .archive }.count, 9)
+    }
+
+    func testMarkAllAsReadMarksOnlyUnreadMembers() async {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        let emails = [
+            makeThreadEmail("m1", isRead: false),
+            makeThreadEmail("m2", isRead: false),
+            makeThreadEmail("m3", isRead: true),
+        ]
+        manager.emailsByAccount[testAccountId] = emails
+        manager.unreadCountsByAccount[testAccountId] = 2
+
+        let requests = expectation(description: "two modify requests")
+        requests.expectedFulfillmentCount = 2
+        let log = RequestLog()
+        MockURLProtocol.requestHandler = { request in
+            log.record(request)
+            requests.fulfill()
+            return Self.okResponse(request)
+        }
+
+        manager.markAllAsRead(emails)
+
+        XCTAssertTrue(manager.emailsByAccount[testAccountId]!.allSatisfy(\.isRead))
+        XCTAssertEqual(manager.unreadCountsByAccount[testAccountId], 0)
+        await fulfillment(of: [requests], timeout: 2)
+        XCTAssertEqual(Set(log.entries), ["POST m1/modify + -UNREAD", "POST m2/modify + -UNREAD"])
+    }
+
+    func testMarkAllAsReadOnAReadConversationMakesNoRequests() async {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        let emails = [makeThreadEmail("m1", isRead: true), makeThreadEmail("m2", isRead: true)]
+        manager.emailsByAccount[testAccountId] = emails
+        let counter = RequestCounter()
+        MockURLProtocol.requestHandler = { request in
+            counter.increment()
+            return Self.okResponse(request)
+        }
+
+        manager.markAllAsRead(emails)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(counter.value, 0)
+    }
+
+    func testThreadHasMultipleMessagesCountsDistinctMessagesOfThatAccount() {
+        // One message present in Inbox and Sent (self-addressed) is still one message.
+        manager.emailsByAccount[testAccountId] = [
+            makeThreadEmail("m1", folder: .inbox), makeThreadEmail("m1", folder: .sent),
+        ]
+        manager.emailsByAccount["other@gmail.com"] = [
+            Email(msgId: "x1", from: "a", subject: "S", date: Date(), snippet: "",
+                  accountId: "other@gmail.com", folder: .inbox, threadId: "t1"),
+        ]
+        XCTAssertFalse(manager.threadHasMultipleMessages("t1", accountId: testAccountId))
+
+        manager.emailsByAccount[testAccountId]!.append(makeThreadEmail("m2", folder: .sent))
+        XCTAssertTrue(manager.threadHasMultipleMessages("t1", accountId: testAccountId))
+        XCTAssertFalse(manager.threadHasMultipleMessages("", accountId: testAccountId))
+    }
+
     // MARK: - Helpers
 
     private func setupMockForModifyMessage() {
@@ -1845,4 +2082,39 @@ final class GmailAPIManagerTests: XCTestCase {
             return (response, "{}".data(using: .utf8)!)
         }
     }
+}
+
+/// Thread-safe record of requests seen by `MockURLProtocol`, one line each:
+/// `METHOD <id>/<verb>` plus ` +ADD -REMOVE` for a modify body.
+final class RequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _entries: [String] = []
+    var entries: [String] { lock.lock(); defer { lock.unlock() }; return _entries }
+
+    func record(_ request: URLRequest) {
+        let path = request.url!.path
+        var entry = "\(request.httpMethod ?? "GET") \(path.components(separatedBy: "/messages/").last ?? path)"
+        if let body = request.httpBody,
+           let modify = try? JSONDecoder().decode(GmailModifyRequest.self, from: body) {
+            entry += " +\((modify.addLabelIds ?? []).joined(separator: ",")) -\((modify.removeLabelIds ?? []).joined(separator: ","))"
+        }
+        lock.lock(); _entries.append(entry); lock.unlock()
+    }
+}
+
+/// Highest number of `MockURLProtocol` requests open at the same time.
+final class InFlightGauge: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = 0
+    private var _peak = 0
+    var peak: Int { lock.lock(); defer { lock.unlock() }; return _peak }
+    func enter() { lock.lock(); current += 1; _peak = max(_peak, current); lock.unlock() }
+    func leave() { lock.lock(); current -= 1; lock.unlock() }
+}
+
+/// Session delegate that reports every task the session creates.
+final class TaskCreationObserver: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onCreate: @Sendable () -> Void
+    init(onCreate: @escaping @Sendable () -> Void) { self.onCreate = onCreate }
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) { onCreate() }
 }

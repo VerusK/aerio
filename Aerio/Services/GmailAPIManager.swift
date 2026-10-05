@@ -21,6 +21,19 @@ struct ThreadMessage: Identifiable {
     let isRead: Bool
 }
 
+/// A move applied to a message, or to every message of a conversation row.
+enum EmailAction: CustomStringConvertible {
+    case archive, delete, spam, moveToInbox
+    var description: String {
+        switch self {
+        case .archive: return "archive"
+        case .delete: return "delete"
+        case .spam: return "spam"
+        case .moveToInbox: return "move to inbox"
+        }
+    }
+}
+
 @MainActor
 final class GmailAPIManager: ObservableObject {
     @Published private(set) var clients: [String: GmailAPIClient] = [:]
@@ -681,6 +694,13 @@ final class GmailAPIManager: ObservableObject {
         }
     }
 
+    /// Marks every unread email in the list read — all members of a conversation row.
+    func markAllAsRead(_ emails: [Email]) {
+        for email in emails where !email.isRead {
+            markAsRead(emailId: email.id, accountId: email.accountId)
+        }
+    }
+
     func removeEmail(id: String, accountId: String, msgId: String, allFolders: Bool = false) {
         let unreadInboxRemoved: Int
         if allFolders {
@@ -701,24 +721,73 @@ final class GmailAPIManager: ObservableObject {
     // MARK: - Optimistic Email Actions
 
     func archiveEmail(msgId: String, accountId: String, folder: Folder) async throws {
-        try await performMove(msgId: msgId, accountId: accountId, folder: folder, targetFolder: .archive) { client in
-            _ = try await client.modifyMessage(id: msgId, removeLabels: [GmailLabelId.inbox])
-        }
+        try await move(.archive, msgId: msgId, accountId: accountId, folder: folder)
     }
 
     func deleteEmail(msgId: String, accountId: String, folder: Folder) async throws {
-        try await performMove(msgId: msgId, accountId: accountId, folder: folder, targetFolder: .trash) { client in
-            _ = try await client.trashMessage(id: msgId)
-        }
+        try await move(.delete, msgId: msgId, accountId: accountId, folder: folder)
     }
 
     func spamEmail(msgId: String, accountId: String, folder: Folder) async throws {
-        try await performMove(msgId: msgId, accountId: accountId, folder: folder, targetFolder: .spam) { client in
-            _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.spam], removeLabels: [GmailLabelId.inbox])
+        try await move(.spam, msgId: msgId, accountId: accountId, folder: folder)
+    }
+
+    func moveToInbox(msgId: String, accountId: String, folder: Folder) async throws {
+        try await move(.moveToInbox, msgId: msgId, accountId: accountId, folder: folder)
+    }
+
+    /// Most member requests in flight at once for one conversation action.
+    static let actionConcurrency = 4
+
+    /// Runs `action` on each email — the members of a conversation row in one folder.
+    /// Every member is staged first, in this main-actor turn, so the whole row leaves
+    /// the list before any request goes out instead of shrinking one reply at a time.
+    /// Then the requests go out a few at a time; each member keeps its own revert.
+    func apply(_ action: EmailAction, to emails: [Email]) async {
+        let staged: [StagedMove] = emails.compactMap { email in
+            guard let move = stage(action, msgId: email.msgId, accountId: email.accountId, folder: email.folder) else {
+                logger.error("Action '\(action)' skipped for msgId=\(email.msgId): no client for \(email.accountId)")
+                return nil
+            }
+            return move
+        }
+        var start = 0
+        while start < staged.count {
+            let batch = staged[start..<min(start + Self.actionConcurrency, staged.count)]
+            await withTaskGroup(of: Void.self) { group in
+                for move in batch {
+                    group.addTask { @MainActor in
+                        do {
+                            try await self.send(action, move)
+                        } catch {
+                            logger.error("Action '\(action)' failed for msgId=\(move.msgId): \(error.localizedDescription)")
+                        }
+                    }
+                }
+            }
+            start += Self.actionConcurrency
         }
     }
 
-    /// Optimistically moves an email between folders and runs the network mutation.
+    /// The optimistic half of a move, kept so the network half can revert or drop it.
+    private struct StagedMove {
+        let msgId: String
+        let accountId: String
+        let folder: Folder
+        let removal: (emails: [Email], unreadInboxCount: Int)
+        let movedEmail: Email?
+        let allFolders: Bool
+    }
+
+    private func move(_ action: EmailAction, msgId: String, accountId: String, folder: Folder) async throws {
+        guard let staged = stage(action, msgId: msgId, accountId: accountId, folder: folder) else {
+            throw GmailAPIError.unauthorized
+        }
+        try await send(action, staged)
+    }
+
+    /// Optimistically moves an email between folders in memory. Returns nil (and
+    /// changes nothing) when the account has no client.
     ///
     /// The trash/spam/archive flow used to skip the optimistic destination-folder copy when
     /// `emailsByAccount[accountId]` had no entry matching `msgId == X && folder == Y` — e.g.
@@ -727,16 +796,29 @@ final class GmailAPIManager: ObservableObject {
     /// loses the row, target folder never gains it, message looks "deleted" but absent from Trash.
     /// We now find the source under any folder for the same msgId, or synthesize a
     /// minimal placeholder so the move always lands somewhere visible.
-    private func performMove(
-        msgId: String, accountId: String, folder: Folder, targetFolder: Folder,
-        apiCall: (GmailAPIClient) async throws -> Void
-    ) async throws {
-        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
+    private func stage(_ action: EmailAction, msgId: String, accountId: String, folder: Folder) -> StagedMove? {
+        guard clients[accountId] != nil else { return nil }
+
+        if action == .moveToInbox {
+            let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
+            let allFolders = folder == .trash
+            let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: allFolders)
+            let movedEmail = emailCopy.map { moveEmailInMemory($0, targetFolder: .inbox, accountId: accountId) }
+            return StagedMove(msgId: msgId, accountId: accountId, folder: folder,
+                              removal: removal, movedEmail: movedEmail, allFolders: allFolders)
+        }
+
+        let targetFolder: Folder
+        switch action {
+        case .archive: targetFolder = .archive
+        case .delete: targetFolder = .trash
+        case .spam, .moveToInbox: targetFolder = .spam  // .moveToInbox returned above
+        }
 
         let sourceEmail = (emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder })
             ?? (emailsByAccount[accountId]?.first { $0.msgId == msgId })
         if sourceEmail == nil {
-            logger.warning("[\(accountId)] performMove: no source email for msgId=\(msgId) under folder=\(folder.rawValue) — synthesizing placeholder so target folder gets a row")
+            logger.warning("[\(accountId)] stage: no source email for msgId=\(msgId) under folder=\(folder.rawValue) — synthesizing placeholder so target folder gets a row")
         }
         let movedSeed = sourceEmail ?? Email(
             msgId: msgId, from: "(sync pending)", subject: "(sync pending)",
@@ -746,55 +828,54 @@ final class GmailAPIManager: ObservableObject {
 
         let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
         let movedEmail = moveEmailInMemory(movedSeed, targetFolder: targetFolder, accountId: accountId)
+        return StagedMove(msgId: msgId, accountId: accountId, folder: folder,
+                          removal: removal, movedEmail: movedEmail, allFolders: true)
+    }
+
+    /// Sends a staged move. A failure reverts it, except a 404 from archive/delete/spam:
+    /// the message no longer exists on the server — e.g. a phantom optimistic draft that
+    /// never synced. Reverting would make a stuck row reappear forever ("can't delete,
+    /// Resource not found"), so the row is dropped for good instead.
+    private func send(_ action: EmailAction, _ staged: StagedMove) async throws {
+        let msgId = staged.msgId
+        let accountId = staged.accountId
+        guard let client = clients[accountId] else {
+            revertOptimisticUpdate(removal: staged.removal, movedEmail: staged.movedEmail, accountId: accountId)
+            throw GmailAPIError.unauthorized
+        }
 
         do {
-            try await apiCall(client)
+            switch action {
+            case .archive:
+                _ = try await client.modifyMessage(id: msgId, removeLabels: [GmailLabelId.inbox])
+            case .delete:
+                _ = try await client.trashMessage(id: msgId)
+            case .spam:
+                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.spam], removeLabels: [GmailLabelId.inbox])
+            case .moveToInbox:
+                switch staged.folder {
+                case .trash:
+                    _ = try await client.untrashMessage(id: msgId)
+                    _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+                case .spam:
+                    _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox], removeLabels: [GmailLabelId.spam])
+                default:
+                    _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
+                }
+            }
         } catch {
-            // A 404 means the message no longer exists on the server — e.g. a phantom
-            // optimistic draft that never synced. Reverting would make a stuck row
-            // reappear forever ("can't delete, Resource not found"). Instead, accept
-            // the removal as correct and drop the row for good.
-            if let apiError = error as? GmailAPIError, case .notFound = apiError {
-                logger.warning("[\(accountId)] performMove: notFound for msgId=\(msgId) — dropping stale row instead of reverting")
+            if action != .moveToInbox, let apiError = error as? GmailAPIError, case .notFound = apiError {
+                logger.warning("[\(accountId)] \(action): notFound for msgId=\(msgId) — dropping stale row instead of reverting")
                 _ = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: true)
                 persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
                 return
             }
-            revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
+            revertOptimisticUpdate(removal: staged.removal, movedEmail: staged.movedEmail, accountId: accountId)
             throw error
         }
 
-        persistRemoval(accountId: accountId, msgId: msgId, allFolders: true)
-        persistMove(movedEmail)
-    }
-
-    func moveToInbox(msgId: String, accountId: String, folder: Folder) async throws {
-        guard let client = clients[accountId] else { throw GmailAPIError.unauthorized }
-        let emailCopy = emailsByAccount[accountId]?.first { $0.msgId == msgId && $0.folder == folder }
-
-        let allFolders = folder == .trash
-        let removal = removeEmailFromMemory(accountId: accountId, msgId: msgId, allFolders: allFolders)
-        let movedEmail = emailCopy.map { moveEmailInMemory($0, targetFolder: .inbox, accountId: accountId) }
-
-        do {
-            switch folder {
-            case .trash:
-                _ = try await client.untrashMessage(id: msgId)
-                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
-            case .spam:
-                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox], removeLabels: [GmailLabelId.spam])
-            case .archive:
-                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
-            default:
-                _ = try await client.modifyMessage(id: msgId, addLabels: [GmailLabelId.inbox])
-            }
-        } catch {
-            revertOptimisticUpdate(removal: removal, movedEmail: movedEmail, accountId: accountId)
-            throw error
-        }
-
-        persistRemoval(accountId: accountId, msgId: msgId, allFolders: allFolders)
-        if let movedEmail { persistMove(movedEmail) }
+        persistRemoval(accountId: accountId, msgId: msgId, allFolders: staged.allFolders)
+        if let movedEmail = staged.movedEmail { persistMove(movedEmail) }
     }
 
     // MARK: - Optimistic Update Helpers
@@ -827,7 +908,10 @@ final class GmailAPIManager: ObservableObject {
             isRead: email.isRead,
             accountId: accountId,
             folder: targetFolder,
-            messageId: email.messageId
+            messageId: email.messageId,
+            to: email.to,
+            cc: email.cc,
+            threadId: email.threadId
         )
         emailsByAccount[accountId, default: []].append(movedEmail)
         logger.debug("[\(accountId)] moved email \(email.msgId) to \(targetFolder.displayName)")
@@ -1078,10 +1162,12 @@ final class GmailAPIManager: ObservableObject {
         return threadMessages
     }
 
-    /// Returns true if the thread has multiple messages based on locally loaded emails.
-    func threadHasMultipleMessages(_ threadId: String) -> Bool {
-        let allEmails = emailsByAccount.values.flatMap { $0 }
-        return allEmails.filter { $0.threadId == threadId }.count > 1
+    /// True when more than one distinct message of the thread is loaded for the account.
+    /// A message held in two folders (Inbox and Sent) counts once.
+    func threadHasMultipleMessages(_ threadId: String, accountId: String) -> Bool {
+        guard !threadId.isEmpty else { return false }
+        let msgIds = Set((emailsByAccount[accountId] ?? []).filter { $0.threadId == threadId }.map(\.msgId))
+        return msgIds.count > 1
     }
 
     // MARK: - Conversion

@@ -379,7 +379,7 @@ struct MainView: View {
             ZStack {
                 if let selectedEmailId,
                    let email = findEmail(by: selectedEmailId) {
-                    if !email.threadId.isEmpty && selectedFolder != .drafts && email.subject.hasPrefix("Re:") && apiManager.threadHasMultipleMessages(email.threadId) {
+                    if !email.threadId.isEmpty && selectedFolder != .drafts && email.subject.hasPrefix("Re:") && apiManager.threadHasMultipleMessages(email.threadId, accountId: email.accountId) {
                         ThreadDetailView(
                             email: email,
                             apiManager: apiManager,
@@ -801,18 +801,6 @@ struct MainView: View {
         // The paused original stays in the Outbox while editing; it's removed only after
         // the corrected copy is queued (see ComposeView.sendMessage), so closing without
         // sending leaves it here — Retry still sends it as-is.
-    }
-
-    enum EmailAction: CustomStringConvertible {
-        case archive, delete, spam, moveToInbox
-        var description: String {
-            switch self {
-            case .archive: return "archive"
-            case .delete: return "delete"
-            case .spam: return "spam"
-            case .moveToInbox: return "move to inbox"
-            }
-        }
     }
 
     private func executeActionOnSelected(_ action: EmailAction) {
