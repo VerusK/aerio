@@ -124,11 +124,12 @@ New pure helpers, unit-tested, in `Conversation.swift` (extension on
 
 `EmailAction` moves from `MainView` to `GmailAPIManager.swift` (same cases).
 New `GmailAPIManager.apply(_ action: EmailAction, to emails: [Email]) async`
-calls the existing per-message method (`archiveEmail`, `deleteEmail`,
-`spamEmail`, `moveToInbox`) once per email, started together as MainActor
-child tasks (each optimistic move lands before any network reply, so the row
-leaves at once), continuing after a failure and logging each error as
-`MainView` does today. Each call keeps its
+first stages every member's optimistic in-memory move (the per-message
+methods are split into a synchronous stage and an async send), so the whole row
+leaves the list before any request goes out; then it sends the members' requests
+at most 4 at a time, continuing after a failure and logging each error as
+`MainView` does today. `archiveEmail`, `deleteEmail`, `spamEmail` and
+`moveToInbox` keep their behaviour as stage + send. Each call keeps its
 own optimistic update and failure handling:
 
 - a non-404 failure reverts that member alone; it reappears as a smaller row;
@@ -185,6 +186,10 @@ Replace the condition at `MainView.swift:382`:
   `.id("\(email.accountId)_\(email.threadId)")`, its reload `onChange` watches
   the same key, and `threadHTMLCache` keys include `accountId`, so two accounts
   with the same threadId never share a mounted view or cached HTML.
+- New `ThreadDetailView` parameter `memberVersion: String` (the row's member
+  msgIds joined): when a message joins or leaves the open conversation the
+  thread is refetched with `fetchThread(..., forceRefresh: true)`, bypassing its
+  30-second cache, so a new reply shows up in the open thread.
 - New `ThreadDetailView` parameter `focusMessageId: String?`: the selected
   email's `msgId` when it is not the newest member, else nil.
   `buildThreadHTML` gives every message section an `id="msg-<msgId>"` anchor;
