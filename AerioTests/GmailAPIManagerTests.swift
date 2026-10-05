@@ -2082,6 +2082,29 @@ final class GmailAPIManagerTests: XCTestCase {
             return (response, "{}".data(using: .utf8)!)
         }
     }
+
+    func testFetchThreadForceRefreshBypassesTheCache() async throws {
+        manager.addClient(for: Account(id: testAccountId, email: testAccountId, displayName: "Test"))
+        let threadId = "t-\(UUID().uuidString)"  // the thread cache is static; keep keys unique
+        let counter = RequestCounter()
+        MockURLProtocol.requestHandler = { request in
+            let call = counter.increment()
+            let ids = call == 1 ? ["m1"] : ["m1", "m2"]
+            let messages = ids.map { #"{"id": "\#($0)", "threadId": "t", "labelIds": ["INBOX"]}"# }
+            let json = #"{"id": "t", "messages": [\#(messages.joined(separator: ","))]}"#
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let first = try await manager.fetchThread(threadId: threadId, accountId: testAccountId)
+        let cached = try await manager.fetchThread(threadId: threadId, accountId: testAccountId)
+        let fresh = try await manager.fetchThread(threadId: threadId, accountId: testAccountId, forceRefresh: true)
+
+        XCTAssertEqual(first.count, 1)
+        XCTAssertEqual(cached.count, 1, "second call within 30 s is served from the cache")
+        XCTAssertEqual(fresh.count, 2, "forceRefresh goes to the server")
+        XCTAssertEqual(counter.value, 2)
+    }
 }
 
 /// Thread-safe record of requests seen by `MockURLProtocol`, one line each:

@@ -1083,9 +1083,10 @@ final class GmailAPIManager: ObservableObject {
     private static var threadCache: [String: ThreadCacheEntry] = [:]
     private static let threadCacheTTL: TimeInterval = 30
 
-    func fetchThread(threadId: String, accountId: String) async throws -> [ThreadMessage] {
+    func fetchThread(threadId: String, accountId: String, forceRefresh: Bool = false) async throws -> [ThreadMessage] {
         let cacheKey = "\(accountId)_\(threadId)"
-        if let cached = Self.threadCache[cacheKey],
+        if !forceRefresh,
+           let cached = Self.threadCache[cacheKey],
            Date().timeIntervalSince(cached.timestamp) < Self.threadCacheTTL {
             return cached.messages
         }

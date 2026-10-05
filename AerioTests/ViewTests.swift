@@ -537,6 +537,30 @@ final class ThreadHTMLTests: XCTestCase {
         )
     }
 
+    private func message(id: String, body: String) -> ThreadMessage {
+        ThreadMessage(
+            id: id, from: "sender@example.com", to: "me@example.com", cc: "",
+            date: Date(timeIntervalSince1970: 0), subject: "s", bodyHTML: body,
+            attachments: [], inlineImages: [], accountId: "acc", msgId: id,
+            messageId: nil, folder: .inbox, isRead: true
+        )
+    }
+
+    private func number(_ script: String, in webView: WKWebView) async -> Double {
+        let value = try? await webView.evaluateJavaScript(script)
+        return (value as? Double) ?? (value as? Int).map(Double.init) ?? -1
+    }
+
+    /// Polls `condition` every 20 ms for up to `timeout` seconds.
+    private func waitUntil(timeout: TimeInterval = 3, _ condition: () async -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await condition() { return true }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return false
+    }
+
     private func load(_ html: String, in webView: WKWebView) async {
         let waiter = LoadWaiter()
         webView.navigationDelegate = waiter
@@ -577,5 +601,71 @@ final class ThreadHTMLTests: XCTestCase {
 
         let chipCount = try await store.webView.evaluateJavaScript("document.querySelectorAll('#att-att1').length")
         XCTAssertEqual(chipCount as? Int, 1)
+    }
+
+    func testThreadPage_givesEveryMessageAnAnchor() async throws {
+        let store = BodyWebViewStore()
+        await load(ThreadDetailView.buildThreadHTML(messages: [message(id: "m2", body: "<p>b</p>"),
+                                                               message(id: "m1", body: "<p>a</p>")]),
+                   in: store.webView)
+
+        let anchors = try await store.webView.evaluateJavaScript(
+            "Array.from(document.querySelectorAll('[id^=\"msg-\"]')).map(e => e.id).join(',')")
+        XCTAssertEqual(anchors as? String, "msg-m2,msg-m1")
+    }
+
+    func testLoadSequence_onlyTheLatestLoadMayApplyItsResult() {
+        // A forced refresh (new member) can start while the first fetch is in flight;
+        // whichever finishes last, only the newest load may write the view.
+        let loads = LoadSequence()
+        let initial = loads.begin()
+        let refresh = loads.begin()
+
+        XCTAssertFalse(loads.isLatest(initial), "the older fetch finishing last must be ignored")
+        XCTAssertTrue(loads.isLatest(refresh))
+    }
+
+    func testFocusScript_withoutATargetScrollsToTheTop() {
+        XCTAssertEqual(ThreadNavigationDelegate.focusScript(for: nil), "window.scrollTo(0, 0)")
+        XCTAssertTrue(ThreadNavigationDelegate.focusScript(for: "ab'c").contains("getElementById('msg-abc')"),
+                      "quotes are stripped from the id")
+    }
+
+    func testFocus_followsTheLatestTargetAcrossALoadAndBackToTheTop() async {
+        let store = BodyWebViewStore()
+        // Host the web view in a window so WebKit lays out and can scroll.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = store.webView
+        defer { window.contentView = nil }
+
+        let delegate = ThreadNavigationDelegate()
+        delegate.webView = store.webView
+        store.webView.navigationDelegate = delegate
+
+        let tall = "<div style=\"height:2000px\">x</div>"
+        let html = ThreadDetailView.buildThreadHTML(messages: [message(id: "m3", body: tall),
+                                                               message(id: "m2", body: tall),
+                                                               message(id: "m1", body: tall)])
+
+        delegate.focusMessageId = "m1"
+        delegate.pageWillLoad()
+        store.webView.loadHTMLString(html, baseURL: nil)
+        // A second jump arrives while the page is still loading: only it may win.
+        delegate.focusMessageId = "m2"
+        delegate.applyFocus()
+
+        let loaded = await waitUntil { delegate.isPageLoaded }
+        XCTAssertTrue(loaded, "page never finished loading")
+        let m2Top = await number("document.getElementById('msg-m2').getBoundingClientRect().top + window.scrollY", in: store.webView)
+        let reachedM2 = await waitUntil {
+            abs(await self.number("window.scrollY", in: store.webView) - m2Top) < 2
+        }
+        XCTAssertTrue(reachedM2, "thread did not scroll to the latest focus target")
+
+        delegate.focusMessageId = nil
+        delegate.applyFocus()
+        let reachedTop = await waitUntil { await self.number("window.scrollY", in: store.webView) == 0 }
+        XCTAssertTrue(reachedTop, "nil focus did not return to the top")
     }
 }

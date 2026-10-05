@@ -12,6 +12,30 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
     var onReply: ((ThreadMessage) -> Void)?
     var onReplyAll: ((ThreadMessage) -> Void)?
     var onForward: ((ThreadMessage) -> Void)?
+    /// Message to bring into view once the page has loaded; nil scrolls to the top.
+    var focusMessageId: String?
+    private(set) var isPageLoaded = false
+
+    func pageWillLoad() { isPageLoaded = false }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isPageLoaded = true
+        applyFocus()
+    }
+
+    /// Scrolls to `focusMessageId` now, or right after the pending load finishes.
+    func applyFocus() {
+        guard isPageLoaded, let webView else { return }
+        webView.evaluateJavaScript(Self.focusScript(for: focusMessageId), completionHandler: nil)
+    }
+
+    static func focusScript(for msgId: String?) -> String {
+        // Gmail ids are hex; keep only alphanumerics so the id can't break out of the string.
+        guard let safe = msgId?.filter({ $0.isLetter || $0.isNumber }), !safe.isEmpty else {
+            return "window.scrollTo(0, 0)"
+        }
+        return "var el = document.getElementById('msg-\(safe)'); if (el) { el.scrollIntoView(); }"
+    }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else {
@@ -119,10 +143,27 @@ final class ThreadNavigationDelegate: NSObject, WKNavigationDelegate {
     }
 }
 
+/// Numbers thread loads so only the newest may write the view: a forced refresh can
+/// start while an earlier fetch is still in flight and finish before it.
+final class LoadSequence {
+    private var latest = 0
+
+    func begin() -> Int {
+        latest += 1
+        return latest
+    }
+
+    func isLatest(_ id: Int) -> Bool { id == latest }
+}
+
 struct ThreadDetailView: View {
     let email: Email
     let apiManager: GmailAPIManager
     let folder: Folder
+    /// The selected member when it isn't the newest (a search or notification jump).
+    var focusMessageId: String? = nil
+    /// Changes when a message joins or leaves the row, so an open thread refetches.
+    var memberVersion: String = ""
 
     var onReply: ((ThreadMessage) -> Void)?
     var onReplyAll: ((ThreadMessage) -> Void)?
@@ -137,7 +178,13 @@ struct ThreadDetailView: View {
     @State private var isLoading = true
     @State private var loadError: String?
     @StateObject private var webViewStore = BodyWebViewStore()
-    private let threadNavDelegate = ThreadNavigationDelegate()
+    // @State keeps one delegate for the view's lifetime; a plain `let` would be
+    // recreated on every re-render while the web view still points at the first one.
+    @State private var threadNavDelegate = ThreadNavigationDelegate()
+    @State private var loads = LoadSequence()
+
+    /// Threads are per account: the same threadId in two accounts is two threads.
+    private var threadKey: String { "\(email.accountId)_\(email.threadId)" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -169,13 +216,20 @@ struct ThreadDetailView: View {
             threadNavDelegate.onReply = { msg in onReply?(msg) }
             threadNavDelegate.onReplyAll = { msg in onReplyAll?(msg) }
             threadNavDelegate.onForward = { msg in onForward?(msg) }
+            threadNavDelegate.focusMessageId = focusMessageId
             webViewStore.webView.navigationDelegate = threadNavDelegate
             loadThread()
             onRegisterScroll? { direction in
                 webViewStore.scrollContent(direction: direction)
             }
         }
-        .onChange(of: email.threadId) { _, _ in loadThread() }
+        .onChange(of: threadKey) { _, _ in loadThread() }
+        // A reply joined (or a member left) the open conversation: the cached thread is stale.
+        .onChange(of: memberVersion) { _, _ in loadThread(forceRefresh: true) }
+        .onChange(of: focusMessageId) { _, newValue in
+            threadNavDelegate.focusMessageId = newValue
+            threadNavDelegate.applyFocus()
+        }
     }
 
     private var threadActionBar: some View {
@@ -234,7 +288,8 @@ struct ThreadDetailView: View {
 
     private static var threadHTMLCache: [String: String] = [:]
 
-    private func loadThread() {
+    private func loadThread(forceRefresh: Bool = false) {
+        let load = loads.begin()
         if threadMessages.isEmpty {
             isLoading = true
         }
@@ -243,14 +298,17 @@ struct ThreadDetailView: View {
             do {
                 let messages = try await apiManager.fetchThread(
                     threadId: email.threadId,
-                    accountId: email.accountId
+                    accountId: email.accountId,
+                    forceRefresh: forceRefresh
                 )
+                // A newer load (e.g. a reply joined meanwhile) owns the view now.
+                guard loads.isLatest(load) else { return }
                 threadMessages = messages
                 threadNavDelegate.threadMessages = messages
 
                 // Build HTML — cache keyed by message count + IDs to detect changes
                 let cacheKey = messages.map(\.id).joined(separator: ",")
-                let htmlCacheKey = "\(email.threadId)_\(cacheKey)"
+                let htmlCacheKey = "\(threadKey)_\(cacheKey)"
                 let html: String
                 if let cached = Self.threadHTMLCache[htmlCacheKey] {
                     html = cached
@@ -262,9 +320,11 @@ struct ThreadDetailView: View {
                         Self.threadHTMLCache.removeValue(forKey: Self.threadHTMLCache.keys.first!)
                     }
                 }
+                threadNavDelegate.pageWillLoad()
                 webViewStore.loadHTML(html)
                 isLoading = false
             } catch {
+                guard loads.isLatest(load) else { return }
                 loadError = error.localizedDescription
                 isLoading = false
             }
@@ -319,7 +379,7 @@ struct ThreadDetailView: View {
             }
 
             let section = """
-            <div style="border-bottom: 4px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
+            <div id="msg-\(escapeHTML(message.msgId))" style="border-bottom: 4px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
                 <div style="display:flex;align-items:center;justify-content:flex-end;padding:8px 0 0 0;gap:4px;">
                     \(msgActions)
                 </div>
