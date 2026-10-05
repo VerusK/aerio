@@ -20,6 +20,8 @@
 		AA0000000000000000000013 /* Email.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000013 /* Email.swift */; };
 		AA0000000000000000000014 /* Folder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000014 /* Folder.swift */; };
 		AA0000000000000000000015 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000015 /* ModelTests.swift */; };
+		AA0000000000000000000106 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000106 /* Conversation.swift */; };
+		AA0000000000000000000107 /* ConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000107 /* ConversationTests.swift */; };
 		AA0000000000000000000016 /* AccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000016 /* AccountManager.swift */; };
 		AA0000000000000000000018 /* AccountManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000018 /* AccountManagerTests.swift */; };
 		AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000041 /* UnifiedMailbox.swift */; };
@@ -94,6 +96,8 @@
 		BB0000000000000000000013 /* Email.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Email.swift; sourceTree = "<group>"; };
 		BB0000000000000000000014 /* Folder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Folder.swift; sourceTree = "<group>"; };
 		BB0000000000000000000015 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
+		BB0000000000000000000106 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		BB0000000000000000000107 /* ConversationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000016 /* AccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManager.swift; sourceTree = "<group>"; };
 		BB0000000000000000000018 /* AccountManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagerTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000020 /* Aerio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aerio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -194,6 +198,7 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000015 /* ModelTests.swift */,
+				BB0000000000000000000107 /* ConversationTests.swift */,
 				BB0000000000000000000018 /* AccountManagerTests.swift */,
 				BB0000000000000000000043 /* UnifiedMailboxTests.swift */,
 				BB0000000000000000000053 /* ViewTests.swift */,
@@ -234,6 +239,7 @@
 			children = (
 				BB0000000000000000000012 /* Account.swift */,
 				BB0000000000000000000013 /* Email.swift */,
+				BB0000000000000000000106 /* Conversation.swift */,
 				BB0000000000000000000014 /* Folder.swift */,
 				127E4AF5BF43102B2B0C38EC /* GmailAPIModels.swift */,
 				OB0000000000000000000002 /* OutboxItem.swift */,
@@ -401,6 +407,7 @@
 				AA0000000000000000000010 /* AerioApp.swift in Sources */,
 				AA0000000000000000000012 /* Account.swift in Sources */,
 				AA0000000000000000000013 /* Email.swift in Sources */,
+				AA0000000000000000000106 /* Conversation.swift in Sources */,
 				AA0000000000000000000014 /* Folder.swift in Sources */,
 				AA0000000000000000000016 /* AccountManager.swift in Sources */,
 				AA0000000000000000000041 /* UnifiedMailbox.swift in Sources */,
@@ -443,6 +450,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000015 /* ModelTests.swift in Sources */,
+				AA0000000000000000000107 /* ConversationTests.swift in Sources */,
 				AA0000000000000000000018 /* AccountManagerTests.swift in Sources */,
 				AA0000000000000000000043 /* UnifiedMailboxTests.swift in Sources */,
 				AA0000000000000000000053 /* ViewTests.swift in Sources */,
