@@ -13,6 +13,9 @@ struct MessageList: View {
     var onDelete: ((Email) -> Void)?
     var onSpam: ((Email) -> Void)?
     var onMoveToInbox: ((Email) -> Void)?
+    /// Tap on the row that is already selected (selection doesn't change, so
+    /// MainView's onChange can't see it) — used to mark late arrivals read.
+    var onReselect: ((Conversation) -> Void)?
     var onLoadMore: (() -> Void)?
     var hasMoreEmails: Bool = false
 
@@ -26,12 +29,12 @@ struct MessageList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredEmails) { email in
-                        let isSelected = selectedEmailId == email.id
+                    ForEach(conversations) { conversation in
+                        let isSelected = selectedEmailId.map { conversation.contains(emailId: $0) } ?? false
                         VStack(spacing: 0) {
                             MessageRow(
-                                email: email,
-                                account: accountManager.account(for: email.accountId),
+                                conversation: conversation,
+                                account: accountManager.account(for: conversation.newest.accountId),
                                 showAccountIndicator: selectedAccountId == nil
                             )
                             .padding(.horizontal, 10)
@@ -47,13 +50,16 @@ struct MessageList: View {
                             Divider()
                                 .padding(.leading, 16)
                         }
-                        .id(email.id)
+                        .id(conversation.id)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedEmailId = email.id
+                            if selectedEmailId == conversation.newest.id {
+                                onReselect?(conversation)
+                            }
+                            selectedEmailId = conversation.newest.id
                         }
                         .contextMenu {
-                            contextMenuItems(for: email)
+                            contextMenuItems(for: conversation.newest)
                         }
                     }
 
@@ -78,23 +84,23 @@ struct MessageList: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .frame(minWidth: 250)
             .onChange(of: selectedEmailId) { _, newValue in
-                if let newValue {
-                    // No withAnimation here: scrollTo can run concurrently with the
-                    // row-removal animation when SwiftUI re-renders the list after a
-                    // delete/archive, occasionally corrupting StackLayout's child
-                    // buffer (EXC_BAD_ACCESS). Immediate scroll, animations stay
-                    // confined to the row insertion/removal that SwiftUI handles.
-                    proxy.scrollTo(newValue, anchor: .center)
+                // No withAnimation here: scrollTo can run concurrently with the
+                // row-removal animation when SwiftUI re-renders the list after a
+                // delete/archive, occasionally corrupting StackLayout's child
+                // buffer (EXC_BAD_ACCESS). Immediate scroll, animations stay
+                // confined to the row insertion/removal that SwiftUI handles.
+                if let rowId = conversations.conversation(containing: newValue)?.id {
+                    proxy.scrollTo(rowId, anchor: .center)
                 }
             }
             .onChange(of: selectedFolder) { _, _ in
                 // Scroll to top when switching folders
-                if let first = filteredEmails.first {
+                if let first = conversations.first {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
             }
             .onChange(of: selectedAccountId) { _, _ in
-                if let first = filteredEmails.first {
+                if let first = conversations.first {
                     proxy.scrollTo(first.id, anchor: .top)
                 }
             }
@@ -159,9 +165,9 @@ struct MessageList: View {
         }
     }
 
-    var filteredEmails: [Email] {
-        // Use @Published emails directly so SwiftUI detects changes
-        unifiedMailbox.emails
+    var conversations: [Conversation] {
+        // Use @Published conversations directly so SwiftUI detects changes
+        unifiedMailbox.conversations
     }
 }
 
@@ -199,9 +205,12 @@ extension Date {
 }
 
 struct MessageRow: View {
-    let email: Email
+    let conversation: Conversation
     let account: Account?
     let showAccountIndicator: Bool
+
+    private var email: Email { conversation.newest }
+    private var isUnread: Bool { conversation.isUnread }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -215,9 +224,18 @@ struct MessageRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(email.from)
-                        .font(.system(size: 14, weight: email.isRead ? .regular : .semibold))
+                        .font(.system(size: 14, weight: isUnread ? .semibold : .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+                    if conversation.count > 1 {
+                        Text("\(conversation.count)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.15), in: Capsule())
+                            .accessibilityIdentifier("conversation-count")
+                    }
                     Spacer()
                     Text(email.date.shortRelative)
                         .font(.system(size: 12))
@@ -225,8 +243,8 @@ struct MessageRow: View {
                 }
 
                 Text(email.subject)
-                    .font(.system(size: 13, weight: email.isRead ? .regular : .medium))
-                    .foregroundStyle(email.isRead ? .secondary : .primary)
+                    .font(.system(size: 13, weight: isUnread ? .medium : .regular))
+                    .foregroundStyle(isUnread ? .primary : .secondary)
                     .lineLimit(1)
 
                 Text(email.snippet)

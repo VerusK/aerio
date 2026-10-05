@@ -241,4 +241,29 @@ final class MessageListTests: XCTestCase {
 
         XCTAssertEqual(callCount, 6, "All 6 context menu actions should be callable")
     }
+
+    // MARK: - Conversation rows
+
+    func testTwoMessagesOfOneThreadRenderAsOneRow() {
+        let (accountManager, apiManager, mailbox) = makeTestEnvironment()
+        let (acc1, _, _) = makeSampleEmails()
+        accountManager.addAccount(acc1)
+        let now = Date()
+        apiManager.emailsByAccount["acc1"] = [
+            Email(msgId: "fw", from: "kelli@x.com", subject: "Fw: Dispute", date: now.addingTimeInterval(-3600),
+                  snippet: "Good morning", isRead: false, accountId: "acc1", folder: .inbox, threadId: "t1"),
+            Email(msgId: "re", from: "kelli@x.com", subject: "Re: Dispute", date: now,
+                  snippet: "Hey Roman", isRead: true, accountId: "acc1", folder: .inbox, threadId: "t1"),
+        ]
+
+        let list = MessageList(
+            unifiedMailbox: mailbox, accountManager: accountManager,
+            selectedEmailId: .constant(nil), selectedFolder: .inbox, selectedAccountId: nil
+        )
+
+        XCTAssertEqual(list.conversations.count, 1)
+        XCTAssertEqual(list.conversations[0].count, 2)
+        XCTAssertEqual(list.conversations[0].newest.subject, "Re: Dispute")
+        XCTAssertTrue(list.conversations[0].isUnread, "bold while the older Fw: is unread")
+    }
 }

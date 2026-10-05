@@ -182,6 +182,15 @@ struct MainView: View {
         unifiedMailbox.emails(for: selectedFolder, accountId: selectedAccountId)
     }
 
+    private var currentConversations: [Conversation] {
+        unifiedMailbox.conversations(for: selectedFolder, accountId: selectedAccountId)
+    }
+
+    /// The row holding `selectedEmailId` (which may be an older member after a jump).
+    private var selectedConversation: Conversation? {
+        currentConversations.conversation(containing: selectedEmailId)
+    }
+
     var body: some View {
         HSplitView {
             UnifiedSidebar(
@@ -218,6 +227,7 @@ struct MainView: View {
                             onDelete: { email in executeActionOnEmail(email, action: .delete) },
                             onSpam: { email in executeActionOnEmail(email, action: .spam) },
                             onMoveToInbox: { email in executeActionOnEmail(email, action: .moveToInbox) },
+                            onReselect: { conversation in markConversationRead(conversation) },
                             onLoadMore: { loadMoreEmails() },
                             hasMoreEmails: unifiedMailbox.hasMoreEmails(folder: selectedFolder, accountId: selectedAccountId)
                         )
@@ -243,8 +253,10 @@ struct MainView: View {
             if newId != apiManager.pinnedEmailId {
                 apiManager.pinnedEmailId = nil
             }
-            if let newId, let email = findEmail(by: newId), !email.isRead {
-                apiManager.markAsRead(emailId: email.id, accountId: email.accountId)
+            if let conversation = currentConversations.conversation(containing: newId) {
+                markConversationRead(conversation)
+            } else if let newId, let email = findEmail(by: newId) {
+                apiManager.markAllAsRead([email])
             }
         }
         .onChange(of: sidebarSelection) { oldValue, newValue in
@@ -378,12 +390,19 @@ struct MainView: View {
             Color.accentColor.opacity(focusedPanel == .detail ? 1 : 0).frame(height: 2)
             ZStack {
                 if let selectedEmailId,
-                   let email = findEmail(by: selectedEmailId) {
-                    if !email.threadId.isEmpty && selectedFolder != .drafts && email.subject.hasPrefix("Re:") && apiManager.threadHasMultipleMessages(email.threadId, accountId: email.accountId) {
+                   let email = selectedConversation?.newest ?? findEmail(by: selectedEmailId) {
+                    let selectedEmail = findEmail(by: selectedEmailId)
+                    // Any multi-message thread opens as a thread, whatever its subject prefix
+                    // (Fw:, RE:, AW: …). "Multi" means loaded in memory; no extra fetch.
+                    if !email.threadId.isEmpty && selectedFolder != .drafts &&
+                        ((selectedConversation?.count ?? 1) > 1 ||
+                         apiManager.threadHasMultipleMessages(email.threadId, accountId: email.accountId)) {
                         ThreadDetailView(
                             email: email,
                             apiManager: apiManager,
                             folder: selectedFolder,
+                            focusMessageId: selectedEmail?.id == email.id ? nil : selectedEmail?.msgId,
+                            memberVersion: selectedConversation?.messages.map(\.msgId).joined(separator: ",") ?? email.msgId,
                             onReply: { msg in triggerComposeFromThread(.reply, message: msg, threadId: email.threadId) },
                             onReplyAll: { msg in triggerComposeFromThread(.replyAll, message: msg, threadId: email.threadId) },
                             onForward: { msg in triggerComposeFromThread(.forward, message: msg, threadId: email.threadId) },
@@ -393,7 +412,7 @@ struct MainView: View {
                             onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
                             onRegisterScroll: { handler in detailScrollHandler = handler }
                         )
-                        .id(email.threadId)
+                        .id("\(email.accountId)_\(email.threadId)")
                     } else {
                         // No `.id(email.id)`: it would respawn the WKWebView's Web Content process per click.
                         NativeMessageDetail(
@@ -450,6 +469,11 @@ struct MainView: View {
 
     private func findEmail(byMsgId msgId: String) -> Email? {
         currentEmails.first { $0.msgId == msgId }
+    }
+
+    /// Opening a row shows every message in it, so all of them count as read.
+    private func markConversationRead(_ conversation: Conversation) {
+        apiManager.markAllAsRead(conversation.messages)
     }
 
 
@@ -736,9 +760,10 @@ struct MainView: View {
         focusedPanel = .messageList
     }
 
+    /// Keyboard reply/forward target: the newest message of the selected row.
     private var selectedEmailMsgId: String? {
-        guard let selectedEmailId,
-              let email = findEmail(by: selectedEmailId) else { return nil }
+        if let conversation = selectedConversation { return conversation.newest.msgId }
+        guard let selectedEmailId, let email = findEmail(by: selectedEmailId) else { return nil }
         return email.msgId
     }
 
@@ -810,21 +835,11 @@ struct MainView: View {
     }
 
     private func executeActionOnEmail(_ email: Email, action: EmailAction) {
-        let accountId = email.accountId
-        let msgId = email.msgId
-        let folder = email.folder
-
-        // Calculate next email to select before the action removes this one
-        let emails = currentEmails
-        let nextEmailId: String? = {
-            guard let idx = emails.firstIndex(where: { $0.id == email.id }) else { return nil }
-            if idx + 1 < emails.count {
-                return emails[idx + 1].id
-            } else if idx > 0 {
-                return emails[idx - 1].id
-            }
-            return nil
-        }()
+        // The action covers the whole row: every message of the thread in this folder.
+        let conversations = currentConversations
+        let targets = conversations.actionTargets(for: email)
+        let nextEmailId = conversations.conversation(containing: email.id)
+            .flatMap { conversations.selectionAfterRemoving(conversationId: $0.id) }
 
         // No withAnimation here. Wrapping the selection move in an animation
         // overlapped with the row-removal animation triggered by the emailsByAccount
@@ -833,20 +848,7 @@ struct MainView: View {
         // SwiftUI animates the row removal naturally; the selection just shifts.
         selectedEmailId = nextEmailId
         Task {
-            do {
-                switch action {
-                case .archive:
-                    try await apiManager.archiveEmail(msgId: msgId, accountId: accountId, folder: folder)
-                case .delete:
-                    try await apiManager.deleteEmail(msgId: msgId, accountId: accountId, folder: folder)
-                case .spam:
-                    try await apiManager.spamEmail(msgId: msgId, accountId: accountId, folder: folder)
-                case .moveToInbox:
-                    try await apiManager.moveToInbox(msgId: msgId, accountId: accountId, folder: folder)
-                }
-            } catch {
-                logger.error("Action '\(action)' failed: \(error.localizedDescription)")
-            }
+            await apiManager.apply(action, to: targets)
         }
     }
 
@@ -880,15 +882,8 @@ struct MainView: View {
     }
 
     private func selectAdjacentEmail(offset: Int) {
-        let emails = currentEmails
-        guard !emails.isEmpty else { return }
-
-        if let currentId = selectedEmailId,
-           let currentIndex = emails.firstIndex(where: { $0.id == currentId }) {
-            let newIndex = min(max(currentIndex + offset, 0), emails.count - 1)
-            selectedEmailId = emails[newIndex].id
-        } else {
-            selectedEmailId = emails.first?.id
+        if let next = currentConversations.adjacentSelection(from: selectedEmailId, offset: offset) {
+            selectedEmailId = next
         }
     }
 }
