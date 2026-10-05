@@ -4,6 +4,8 @@ import Combine
 @MainActor
 final class UnifiedMailbox: ObservableObject {
     @Published private(set) var emails: [Email] = []
+    /// `emails` grouped into rows; always assigned together with `emails`.
+    @Published private(set) var conversations: [Conversation] = []
     @Published private(set) var unreadCounts: [Folder: Int] = [:]
     @Published var selectedFolder: Folder = .inbox
     @Published var selectedAccountId: String?
@@ -66,34 +68,42 @@ final class UnifiedMailbox: ObservableObject {
             if !needsUpdate { return }
         }
 
+        // Build the final array in one place so `emails` and `conversations` are
+        // assigned together on both paths.
+        var updated: [Email]
+
         // Large change (e.g. folder switch): full sort is O(n log n) vs O(n²) for incremental insert
         let changedCount = removedIds.count + addedIds.count
         let totalCount = max(oldIds.count, newIds.count, 1)
         if changedCount > totalCount / 2 {
-            emails = Email.sortedByDate(sourceEmails)
-            return
-        }
+            updated = Email.sortedByDate(sourceEmails)
+        } else {
+            // Small change (e.g. new emails arrived): incremental merge
+            updated = emails
 
-        // Small change (e.g. new emails arrived): incremental merge
-        // Remove deleted
-        if !removedIds.isEmpty {
-            emails.removeAll { removedIds.contains($0.id) }
-        }
+            // Remove deleted
+            if !removedIds.isEmpty {
+                updated.removeAll { removedIds.contains($0.id) }
+            }
 
-        // Update existing emails in-place (e.g. isRead change)
-        let sourceById = Dictionary(uniqueKeysWithValues: sourceEmails.map { ($0.id, $0) })
-        for i in emails.indices {
-            if let updated = sourceById[emails[i].id], updated != emails[i] {
-                emails[i] = updated
+            // Update existing emails in-place (e.g. isRead change)
+            let sourceById = Dictionary(uniqueKeysWithValues: sourceEmails.map { ($0.id, $0) })
+            for i in updated.indices {
+                if let changed = sourceById[updated[i].id], changed != updated[i] {
+                    updated[i] = changed
+                }
+            }
+
+            // Insert new emails at correct sorted position (date descending)
+            let added = sourceEmails.filter { addedIds.contains($0.id) }
+            for email in added {
+                let insertIndex = updated.firstIndex { $0.date < email.date } ?? updated.endIndex
+                updated.insert(email, at: insertIndex)
             }
         }
 
-        // Insert new emails at correct sorted position (date descending)
-        let added = sourceEmails.filter { addedIds.contains($0.id) }
-        for email in added {
-            let insertIndex = emails.firstIndex { $0.date < email.date } ?? emails.endIndex
-            emails.insert(email, at: insertIndex)
-        }
+        emails = updated
+        conversations = Conversation.group(updated)
     }
 
     private func rebuildUnreadCounts(from emailsByAccount: [String: [Email]]) {
@@ -154,5 +164,13 @@ final class UnifiedMailbox: ObservableObject {
             source = apiManager.emailsByAccount.values.flatMap { $0 }
         }
         return Email.sortedByDate(source.filter { $0.folder == folder })
+    }
+
+    func conversations(for folder: Folder, accountId: String? = nil) -> [Conversation] {
+        // Fast path: the current view is already grouped
+        if folder == selectedFolder && accountId == selectedAccountId {
+            return conversations
+        }
+        return Conversation.group(emails(for: folder, accountId: accountId))
     }
 }

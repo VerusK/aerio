@@ -264,4 +264,78 @@ final class UnifiedMailboxTests: XCTestCase {
         }
         wait(for: [expectation], timeout: 2)
     }
+
+    // MARK: - Conversations
+
+    private func makeThreadEmail(_ msgId: String, thread: String, minutes: Double, isRead: Bool = false, folder: Folder = .inbox) -> Email {
+        Email(
+            msgId: msgId, from: "s@test.com", subject: "S",
+            date: Date(timeIntervalSince1970: 1_000_000 + minutes * 60),
+            snippet: "", isRead: isRead, accountId: "acc1", folder: folder, threadId: thread
+        )
+    }
+
+    func testConversationsGroupTheCurrentFolderView() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+
+        api.emailsByAccount["acc1"] = [
+            makeThreadEmail("m1", thread: "t1", minutes: 0),
+            makeThreadEmail("m2", thread: "t1", minutes: 10),
+            makeThreadEmail("m3", thread: "t2", minutes: 5),
+        ]
+
+        XCTAssertEqual(mailbox.conversations.count, 2)
+        XCTAssertEqual(mailbox.conversations[0].messages.map(\.msgId), ["m2", "m1"])
+        XCTAssertEqual(mailbox.conversations(for: .inbox).count, 2)
+    }
+
+    func testNewMessageJoiningAThreadUpdatesConversationsOnTheIncrementalPath() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+        let base = [
+            makeThreadEmail("m1", thread: "t1", minutes: 0),
+            makeThreadEmail("m2", thread: "t2", minutes: 1),
+            makeThreadEmail("m3", thread: "t3", minutes: 2),
+            makeThreadEmail("m4", thread: "t4", minutes: 3),
+        ]
+        api.emailsByAccount["acc1"] = base
+        XCTAssertEqual(mailbox.conversations.count, 4)
+
+        // One added out of five: below the full-sort threshold, so the incremental merge runs.
+        api.emailsByAccount["acc1"] = base + [makeThreadEmail("m5", thread: "t1", minutes: 10)]
+
+        XCTAssertEqual(mailbox.conversations.count, 4)
+        XCTAssertEqual(mailbox.conversations[0].messages.map(\.msgId), ["m5", "m1"])
+    }
+
+    func testReadStateChangeUpdatesConversations() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+        let unread = makeThreadEmail("m1", thread: "t1", minutes: 0, isRead: false)
+        api.emailsByAccount["acc1"] = [unread]
+        XCTAssertTrue(mailbox.conversations[0].isUnread)
+
+        var read = unread
+        read.isRead = true
+        api.emailsByAccount["acc1"] = [read]
+
+        XCTAssertFalse(mailbox.conversations[0].isUnread)
+    }
+
+    func testFolderSwitchReplacesConversationsOnTheFullSortPath() {
+        let (_, api) = makeManager()
+        let mailbox = UnifiedMailbox(apiManager: api)
+        api.emailsByAccount["acc1"] = [
+            makeThreadEmail("i1", thread: "t1", minutes: 0, folder: .inbox),
+            makeThreadEmail("i2", thread: "t1", minutes: 1, folder: .inbox),
+            makeThreadEmail("s1", thread: "t9", minutes: 2, folder: .sent),
+        ]
+        XCTAssertEqual(mailbox.conversations.map(\.newest.msgId), ["i2"])
+
+        mailbox.selectedFolder = .sent
+
+        XCTAssertEqual(mailbox.conversations.map(\.newest.msgId), ["s1"], "no rows from Inbox may remain")
+        XCTAssertEqual(mailbox.emails.map(\.msgId), ["s1"])
+    }
 }
