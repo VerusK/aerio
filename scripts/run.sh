@@ -23,6 +23,24 @@ esac
 
 ./scripts/gen-buildinfo.sh
 
+# Sign with the same Developer ID as releases. Keychain items trust an app by its
+# signature: an Apple Development build that refreshes the OAuth tokens re-creates
+# them trusting only itself, so the next release (or this build, after a release)
+# asks for the login password once per token item.
+TEAM_ID=YP8Y455729
+SIGN_ARGS=()
+if security find-identity -v -p codesigning | grep -q "Developer ID Application: .*($TEAM_ID)"; then
+    SIGN_ARGS=(
+        CODE_SIGN_STYLE=Manual
+        DEVELOPMENT_TEAM="$TEAM_ID"
+        CODE_SIGN_IDENTITY="Developer ID Application"
+    )
+else
+    echo "warning: no 'Developer ID Application ($TEAM_ID)' identity in the keychain — signing with" >&2
+    echo "         Apple Development. Switching between this build and a release will ask for" >&2
+    echo "         the keychain password again." >&2
+fi
+
 APP=build/Build/Products/Release/Aerio.app
 # Clear the previous product so a failed build can't leave a stale one to deploy.
 rm -rf "$APP"
@@ -32,6 +50,7 @@ rm -rf "$APP"
 if ! xcodebuild -project Aerio.xcodeproj -scheme Aerio -configuration Release \
     -derivedDataPath build \
     OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
+    ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} \
     build 2>&1 | tail -3; then
     echo "error: build failed — the installed Aerio was left untouched." >&2
     exit 1
