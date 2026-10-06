@@ -614,6 +614,108 @@ final class ThreadHTMLTests: XCTestCase {
         XCTAssertEqual(anchors as? String, "msg-m2,msg-m1")
     }
 
+    // MARK: - Quoted text is collapsed, not removed
+
+    private let outlookReply = """
+    <div>Her reply</div><div dir="auto" id="mail-editor-reference-message-container"><br>\
+    <hr style="display: inline-block; width: 98%;"><div id="divRplyFwdMsg"><b>From:</b> me<br></div>\
+    <p>My original</p></div><hr>NOTICE footer
+    """
+
+    /// Offset of `needle` in `haystack`, or nil when absent.
+    private func offset(of needle: String, in haystack: String, after start: Int = 0) -> Int? {
+        let from = haystack.index(haystack.startIndex, offsetBy: start)
+        guard let range = haystack.range(of: needle, range: from..<haystack.endIndex) else { return nil }
+        return haystack.distance(from: haystack.startIndex, to: range.lowerBound)
+    }
+
+    /// Asserts `needle` sits between the first `<details` and the `</details>` after it.
+    private func assertInsideDetails(_ needle: String, in html: String,
+                                     file: StaticString = #filePath, line: UInt = #line) {
+        guard let open = offset(of: "<details", in: html),
+              let at = offset(of: needle, in: html, after: open),
+              let close = offset(of: "</details>", in: html, after: at) else {
+            return XCTFail("\(needle) is not inside a details block: \(html)", file: file, line: line)
+        }
+        XCTAssertLessThan(open, at, file: file, line: line)
+        XCTAssertLessThan(at, close, file: file, line: line)
+    }
+
+    func testCollapse_outlookContainerIsWrappedAndFooterStaysVisible() {
+        let html = ThreadDetailView.collapseQuotedContent(outlookReply)
+
+        XCTAssertTrue(html.hasPrefix("<div>Her reply</div>"), html)
+        let details = offset(of: "<details class=\"aerio-quote\">", in: html)
+        let container = offset(of: "mail-editor-reference-message-container", in: html)
+        XCTAssertNotNil(details, html)
+        XCTAssertNotNil(container, html)
+        if let details, let container { XCTAssertLessThan(details, container) }
+        assertInsideDetails("My original", in: html)
+        let close = offset(of: "</details>", in: html)
+        let footer = offset(of: "NOTICE footer", in: html)
+        XCTAssertNotNil(close, html)
+        if let close, let footer { XCTAssertGreaterThan(footer, close, "the footer must stay visible") }
+    }
+
+    func testCollapse_appendOnSendTailIsWrappedToEndOfBody() {
+        let input = """
+        <html><body><p>Reply</p><div id="appendonsend"></div><hr><div id="divRplyFwdMsg">From: me</div>\
+        <div>Quoted</div></body></html>
+        """
+        let html = ThreadDetailView.collapseQuotedContent(input)
+
+        XCTAssertTrue(html.hasPrefix("<html><body><p>Reply</p><details"), html)
+        assertInsideDetails("<hr>", in: html)
+        assertInsideDetails("Quoted", in: html)
+        XCTAssertTrue(html.hasSuffix("</details></body></html>"), html)
+    }
+
+    func testCollapse_gmailQuoteIsCollapsedNotRemoved() {
+        let input = """
+        <div dir="ltr">Hi</div><div class="gmail_quote gmail_quote_container"><div>On Mon, X wrote:</div>\
+        <blockquote>old</blockquote></div><div>sig</div>
+        """
+        let html = ThreadDetailView.collapseQuotedContent(input)
+
+        assertInsideDetails("old", in: html)
+        XCTAssertEqual(html.components(separatedBy: "<details").count - 1, 1,
+                       "the blockquote inside the Gmail quote must not be wrapped twice: \(html)")
+        let close = offset(of: "</details>", in: html)
+        let sig = offset(of: "sig", in: html)
+        XCTAssertNotNil(close, html)
+        if let close, let sig { XCTAssertGreaterThan(sig, close) }
+    }
+
+    func testCollapse_blockquoteIsCollapsed() {
+        let html = ThreadDetailView.collapseQuotedContent("<p>Reply</p><blockquote>old</blockquote>")
+
+        XCTAssertTrue(html.hasPrefix("<p>Reply</p><details"), html)
+        assertInsideDetails("old", in: html)
+    }
+
+    func testCollapse_plainTextSeparatorKeepsThePreBalanced() {
+        let input = "<pre style=\"white-space: pre-wrap;\">Reply\n---\nOld</pre>"
+        let html = ThreadDetailView.collapseQuotedContent(input)
+
+        XCTAssertEqual(html, "<pre style=\"white-space: pre-wrap;\">Reply</pre>"
+                       + "<details class=\"aerio-quote\"><summary>•••</summary>"
+                       + "<pre style=\"white-space: pre-wrap;\">\n---\nOld</pre></details>")
+    }
+
+    func testCollapse_messageWithoutQuotesIsUnchanged() {
+        XCTAssertEqual(ThreadDetailView.collapseQuotedContent("<p>Just text</p>"), "<p>Just text</p>")
+    }
+
+    func testThreadPage_quoteIsCollapsedByDefault() async throws {
+        let store = BodyWebViewStore()
+        await load(ThreadDetailView.buildThreadHTML(messages: [message(body: outlookReply)]), in: store.webView)
+
+        let count = try await store.webView.evaluateJavaScript("document.querySelectorAll('details.aerio-quote').length")
+        XCTAssertEqual(count as? Int, 1)
+        let open = try await store.webView.evaluateJavaScript("document.querySelector('details.aerio-quote').open")
+        XCTAssertEqual(open as? Bool, false)
+    }
+
     func testLoadSequence_onlyTheLatestLoadMayApplyItsResult() {
         // A forced refresh (new member) can start while the first fetch is in flight;
         // whichever finishes last, only the newest load may write the view.

@@ -336,7 +336,7 @@ struct ThreadDetailView: View {
         var sections: [String] = []
 
         for message in messages {
-            let bodyHTML = stripQuotedContent(message.bodyHTML)
+            let bodyHTML = collapseQuotedContent(message.bodyHTML)
 
             let initial = String(message.from.prefix(1)).uppercased()
             let color = avatarColor(for: message.from)
@@ -428,6 +428,13 @@ struct ThreadDetailView: View {
                 padding-left: 12px;
                 color: #888;
             }
+            details.aerio-quote { margin: 6px 0; }
+            details.aerio-quote > summary {
+                list-style: none; display: inline-block; cursor: pointer;
+                padding: 0 8px; border-radius: 8px; background: #e8e8e8; color: #555;
+                font-size: 12px; line-height: 16px; letter-spacing: 1px;
+            }
+            details.aerio-quote > summary::-webkit-details-marker { display: none; }
             a { color: #6cb4ff; }
             /* Hover in CSS: content JavaScript is disabled, so inline onmouseover never ran. */
             a.msg-action:hover { background: #333; }
@@ -446,41 +453,167 @@ struct ThreadDetailView: View {
         """
     }
 
-    private static func stripQuotedContent(_ html: String) -> String {
-        var result = html
+    /// Folds every quoted part of a message into a closed `<details class="aerio-quote">`
+    /// (a "•••" pill), keeping the reply itself visible. Nothing is removed, so forwarded
+    /// content is never lost. Rules, each applied at most once per message:
+    ///  1. Element quotes — Gmail's `gmail_quote` div and new Outlook's
+    ///     `mail-editor-reference-message-container` div: exactly that element is wrapped,
+    ///     so a footer the mail gateway adds after it stays visible.
+    ///  2. Each top-level `<blockquote>` outside rule 1's block.
+    ///  3. Tail quotes, only when rule 1 did not fire — classic Outlook's
+    ///     `appendonsend` / `divRplyFwdMsg` siblings, `<p>---</p>`, plain-text `\n---\n`
+    ///     and "On … wrote:" + `&gt;` lines: wrapped from the marker to the end of the body.
+    static func collapseQuotedContent(_ html: String) -> String {
+        let text = html as NSString
+        let length = text.length
+        var wraps: [QuoteWrap] = []
 
-        // 1. Gmail HTML quote blocks
-        if let range = result.range(of: "<div class=\"gmail_quote\"", options: .caseInsensitive) {
-            result = String(result[result.startIndex..<range.lowerBound])
+        func firstMatch(_ pattern: String, from location: Int = 0) -> NSRange? {
+            guard location <= length,
+                  let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+            let match = regex.firstMatch(in: html, range: NSRange(location: location, length: length - location))
+            return match?.range
         }
 
-        // 2. HTML blockquotes
-        if let regex = try? NSRegularExpression(pattern: #"<blockquote[\s\S]*?</blockquote>"#, options: .caseInsensitive) {
-            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+        /// Where a quote that runs to the end goes: before `</body>` when there is one after it.
+        func tailEnd(from location: Int) -> Int {
+            let body = text.range(of: "</body", options: [.caseInsensitive, .backwards])
+            return body.location != NSNotFound && body.location >= location ? body.location : length
         }
 
-        // 3. "---" separator in <p> tags: <p...>---</p> — truncate from there, keep </body></html>
-        if let regex = try? NSRegularExpression(pattern: #"<p[^>]*>\s*---\s*</p>[\s\S]*?(</body>)"#, options: .caseInsensitive),
-           let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) {
-            let matchRange = Range(match.range, in: result)!
-            result = String(result[result.startIndex..<matchRange.lowerBound]) + "</body></html>"
+        func isCollapsed(_ location: Int) -> Bool {
+            wraps.contains { $0.start <= location && location < $0.end }
         }
 
-        // 4. "---" separator as plain text (in <pre> blocks)
-        if let range = result.range(of: "\n---\n") {
-            let before = String(result[result.startIndex..<range.lowerBound])
-            let closing = result.contains("</pre>") ? "</pre>" : ""
-            result = before + closing
+        // 1. Element quotes: wrap exactly the element (to its balanced </div>).
+        let elementMarkers = [
+            #"<div\b[^>]*\bid\s*=\s*["']mail-editor-reference-message-container["']"#,
+            #"<div\b[^>]*\bclass\s*=\s*["'](?:[^"']*\s)?gmail_quote(?=[\s"'])"#,
+        ]
+        if let start = elementMarkers.compactMap({ firstMatch($0)?.location }).min() {
+            let end = balancedEnd(of: "div", in: html, from: start) ?? tailEnd(from: start)
+            wraps.append(QuoteWrap(start: start, end: end))
+        }
+        let elementQuoteFound = !wraps.isEmpty
+
+        // 2. Top-level blockquotes outside the element quote.
+        if let regex = try? NSRegularExpression(pattern: #"<(/)?blockquote\b[^>]*>"#, options: .caseInsensitive) {
+            var depth = 0
+            var openedAt = 0
+            var blockquotes: [QuoteWrap] = []
+            for match in regex.matches(in: html, range: NSRange(location: 0, length: length)) {
+                if match.range(at: 1).location == NSNotFound {
+                    if depth == 0 { openedAt = match.range.location }
+                    depth += 1
+                } else if depth > 0 {
+                    depth -= 1
+                    if depth == 0 { blockquotes.append(QuoteWrap(start: openedAt, end: NSMaxRange(match.range))) }
+                }
+            }
+            if depth > 0 { blockquotes.append(QuoteWrap(start: openedAt, end: tailEnd(from: openedAt))) }
+            wraps += blockquotes.filter { !isCollapsed($0.start) }
         }
 
-        // 5. "On ... wrote:" only when followed by &gt; quoted lines (avoids false matches)
-        if let regex = try? NSRegularExpression(pattern: #"<p[^>]*>\s*On .+?wrote:\s*</p>\s*<p[^>]*>\s*&gt;"#, options: .caseInsensitive),
-           let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) {
-            let matchRange = Range(match.range, in: result)!
-            result = String(result[result.startIndex..<matchRange.lowerBound]) + "</body></html>"
+        // 3. Tail quotes: from the earliest marker to the end of the body.
+        if !elementQuoteFound {
+            let tailMarkers = [
+                #"<div\b[^>]*\bid\s*=\s*["']appendonsend["']"#,
+                // Classic Outlook's "From:/Sent:" header, with the rule drawn just above it.
+                #"(?:<hr\b[^>]*>\s*)?<div\b[^>]*\bid\s*=\s*["']divRplyFwdMsg["']"#,
+                #"<p[^>]*>\s*---\s*</p>"#,
+                // "On … wrote:" only when followed by &gt; quoted lines (avoids false matches).
+                #"<p[^>]*>\s*On .+?wrote:\s*</p>\s*<p[^>]*>\s*&gt;"#,
+            ]
+            var candidates: [QuoteWrap] = []
+            for pattern in tailMarkers {
+                // The first marker outside an already collapsed blockquote.
+                var location = 0
+                while let range = firstMatch(pattern, from: location) {
+                    if !isCollapsed(range.location) {
+                        candidates.append(QuoteWrap(start: range.location, end: tailEnd(from: range.location)))
+                        break
+                    }
+                    location = range.location + 1
+                }
+            }
+            // Plain-text "---" separator (text/plain bodies are shown in a <pre>).
+            var searchFrom = 0
+            while searchFrom < length {
+                let range = text.range(of: "\n---\n", range: NSRange(location: searchFrom, length: length - searchFrom))
+                guard range.location != NSNotFound else { break }
+                if !isCollapsed(range.location) {
+                    var wrap = QuoteWrap(start: range.location, end: tailEnd(from: range.location))
+                    if let pre = openPreTag(in: text, before: range.location) {
+                        // Close the <pre> before the pill and reopen it inside, so the
+                        // original </pre> still has its opening tag.
+                        wrap.open = "</pre>" + QuoteWrap.openTag + pre
+                    }
+                    candidates.append(wrap)
+                    break
+                }
+                searchFrom = range.location + 1
+            }
+            if let earliest = candidates.min(by: { $0.start < $1.start }) {
+                wraps.append(earliest)
+            }
         }
 
+        guard !wraps.isEmpty else { return html }
+
+        // Insert the tags. At one offset, closings go first (innermost first), then
+        // openings (outermost first), so the details blocks nest properly.
+        var inserts: [(offset: Int, rank: Int, text: String)] = []
+        for wrap in wraps {
+            inserts.append((wrap.start, 1_000_000_000 - wrap.end, wrap.open))
+            inserts.append((wrap.end, -1_000_000_000 - wrap.start, QuoteWrap.closeTag))
+        }
+        inserts.sort { $0.offset != $1.offset ? $0.offset < $1.offset : $0.rank < $1.rank }
+
+        var result = ""
+        var cursor = 0
+        for insert in inserts {
+            result += text.substring(with: NSRange(location: cursor, length: insert.offset - cursor))
+            result += insert.text
+            cursor = insert.offset
+        }
+        result += text.substring(from: cursor)
         return result
+    }
+
+    /// A quoted part to fold: `[start, end)` in UTF-16 offsets of the message HTML.
+    private struct QuoteWrap {
+        static let openTag = "<details class=\"aerio-quote\"><summary>•••</summary>"
+        static let closeTag = "</details>"
+        var start: Int
+        var end: Int
+        var open = openTag
+    }
+
+    /// The offset just past the tag that closes the `<tag>` starting at `start`, counting
+    /// nested tags of the same name; nil when it is never closed.
+    private static func balancedEnd(of tag: String, in html: String, from start: Int) -> Int? {
+        let length = (html as NSString).length
+        guard let regex = try? NSRegularExpression(pattern: "<(/)?\(tag)\\b[^>]*>", options: .caseInsensitive) else {
+            return nil
+        }
+        var depth = 0
+        for match in regex.matches(in: html, range: NSRange(location: start, length: length - start)) {
+            depth += match.range(at: 1).location == NSNotFound ? 1 : -1
+            if depth == 0 { return NSMaxRange(match.range) }
+        }
+        return nil
+    }
+
+    /// The start tag of a `<pre>` still open at `location`, or nil when not inside one.
+    private static func openPreTag(in text: NSString, before location: Int) -> String? {
+        let head = NSRange(location: 0, length: location)
+        let open = text.range(of: "<pre", options: [.caseInsensitive, .backwards], range: head)
+        guard open.location != NSNotFound else { return nil }
+        let close = text.range(of: "</pre", options: [.caseInsensitive, .backwards], range: head)
+        guard close.location == NSNotFound || close.location < open.location else { return nil }
+        let tagEnd = text.range(of: ">", range: NSRange(location: open.location, length: location - open.location))
+        guard tagEnd.location != NSNotFound else { return nil }
+        return text.substring(with: NSRange(location: open.location, length: NSMaxRange(tagEnd) - open.location))
     }
 
     private static func avatarColor(for email: String) -> String {
