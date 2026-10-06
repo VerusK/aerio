@@ -8,4 +8,5 @@ protocol OutboxSender: AnyObject {
     func findInSent(messageId: String) async throws -> Bool
     func deleteDraft(draftId: String) async throws
     func modifyMessage(id: String, addLabels: [String]?, removeLabels: [String]?) async throws -> GmailMessage
+    func modifyThread(id: String, addLabels: [String]?, removeLabels: [String]?) async throws
 }

@@ -20,6 +20,8 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
     let draftIdToConsume: String?
     let archiveOnSuccessForMsgId: String?
     let archiveOnSuccessForAccountId: String?
+    /// Gmail thread the message was sent into (replies only); lives in `accountId`'s mailbox.
+    let threadId: String?
     /// Composed content, surfaced so a failed/queued send can be recovered.
     let toRecipients: String
     let ccRecipients: String
@@ -51,6 +53,7 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         self.draftIdToConsume = item.draftIdToConsume
         self.archiveOnSuccessForMsgId = item.archiveOnSuccessForMsgId
         self.archiveOnSuccessForAccountId = item.archiveOnSuccessForAccountId
+        self.threadId = item.threadId
         self.toRecipients = item.toRecipients
         self.ccRecipients = item.ccRecipients
         self.bodyText = item.bodyText
@@ -62,6 +65,7 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         lastError: String?, nextAttemptAt: Date,
         draftIdToConsume: String?,
         archiveOnSuccessForMsgId: String?, archiveOnSuccessForAccountId: String?,
+        threadId: String? = nil,
         toRecipients: String = "", ccRecipients: String = "", bodyText: String = "",
         carriesFiles: Bool = false
     ) {
@@ -77,6 +81,7 @@ struct OutboxItemSnapshot: Sendable, Equatable, Identifiable {
         self.draftIdToConsume = draftIdToConsume
         self.archiveOnSuccessForMsgId = archiveOnSuccessForMsgId
         self.archiveOnSuccessForAccountId = archiveOnSuccessForAccountId
+        self.threadId = threadId
         self.toRecipients = toRecipients
         self.ccRecipients = ccRecipients
         self.bodyText = bodyText
@@ -241,11 +246,23 @@ extension OutboxService {
             catch { logger.error("deleteDraft failed (ignored): \(error.localizedDescription)") }
         }
 
-        // 2. Archive replied-to inbox message (best-effort).
+        // 2. Archive on reply (best-effort): the whole conversation leaves Inbox, as
+        // Gmail does. Archiving only the replied-to message would leave its siblings
+        // (an earlier "Fw:", say) holding the conversation row in Inbox. A thread id
+        // only means something in its own mailbox, so when the replied-to message
+        // belongs to another account — or the thread is unknown — fall back to
+        // archiving that one message.
         if let archiveId = snapshot.archiveOnSuccessForMsgId,
            let archiveAccount = snapshot.archiveOnSuccessForAccountId,
            let archiveSender = sendersByAccount[archiveAccount] {
-            do { _ = try await archiveSender.modifyMessage(id: archiveId, addLabels: nil, removeLabels: ["INBOX"]) }
+            do {
+                if let threadId = snapshot.threadId, !threadId.isEmpty,
+                   archiveAccount == snapshot.accountId {
+                    try await archiveSender.modifyThread(id: threadId, addLabels: nil, removeLabels: ["INBOX"])
+                } else {
+                    _ = try await archiveSender.modifyMessage(id: archiveId, addLabels: nil, removeLabels: ["INBOX"])
+                }
+            }
             catch { logger.error("archive inbox failed (ignored): \(error.localizedDescription)") }
         }
 

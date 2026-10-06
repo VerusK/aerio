@@ -137,6 +137,14 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
         return try await execute(request: request)
     }
 
+    func modifyThread(id: String, addLabels: [String]? = nil, removeLabels: [String]? = nil) async throws -> GmailThread {
+        let body = GmailModifyRequest(addLabelIds: addLabels, removeLabelIds: removeLabels)
+        var request = try buildRequest(path: "/threads/\(id)/modify", method: "POST")
+        request.httpBody = try JSONEncoder().encode(body)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await execute(request: request)
+    }
+
     func trashMessage(id: String) async throws -> GmailMessage {
         let request = try buildRequest(path: "/messages/\(id)/trash", method: "POST")
         return try await execute(request: request)
@@ -357,5 +365,9 @@ final class GmailAPIClient: ObservableObject, @unchecked Sendable {
 extension GmailAPIClient: OutboxSender {
     func sendMessage(rawBase64URL: String, threadId: String?) async throws -> GmailMessage {
         try await sendMessage(raw: rawBase64URL, threadId: threadId)
+    }
+
+    func modifyThread(id: String, addLabels: [String]?, removeLabels: [String]?) async throws {
+        let _: GmailThread = try await modifyThread(id: id, addLabels: addLabels, removeLabels: removeLabels)
     }
 }

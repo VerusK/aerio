@@ -360,6 +360,86 @@ final class OutboxServiceProcessTests: XCTestCase {
         XCTAssertEqual(calls.first?.remove ?? [], ["INBOX"])
     }
 
+    func testSideEffects_archivesWholeThreadOnReplyWhenThreadKnown() async throws {
+        // A reply takes the whole conversation out of Inbox, as Gmail does —
+        // archiving only the replied-to message leaves its siblings holding the
+        // conversation row in Inbox.
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+        let item = makeItem(account: "a", threadId: "t-77",
+                            archiveOnSuccessForMsgId: "orig-42",
+                            archiveOnSuccessForAccountId: "a")
+        try await store.insert(item)
+
+        await service.processOnce()
+
+        let threadCalls = await sender.modifyThreadCalls
+        XCTAssertEqual(threadCalls.count, 1)
+        XCTAssertEqual(threadCalls.first?.id, "t-77")
+        XCTAssertNil(threadCalls.first?.add ?? nil)
+        XCTAssertEqual(threadCalls.first?.remove ?? [], ["INBOX"])
+        let messageCalls = await sender.modifyMessageCalls
+        XCTAssertFalse(messageCalls.contains { $0.id == "orig-42" },
+                       "the thread call replaces the single-message archive")
+    }
+
+    func testSideEffects_archiveFallsBackToMessageWhenThreadBelongsToAnotherAccount() async throws {
+        // The thread id lives in the sending account's mailbox; it means nothing
+        // in another account, so archive the replied-to message there instead.
+        let store = OutboxStore(inMemory: true)
+        let senderA = MockOutboxSender()
+        let senderB = MockOutboxSender()
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": senderA, "b": senderB],
+            notifier: NoopNotifier(), postSendRefresh: { }
+        )
+        let item = makeItem(account: "a", threadId: "t-77",
+                            archiveOnSuccessForMsgId: "orig-42",
+                            archiveOnSuccessForAccountId: "b")
+        try await store.insert(item)
+
+        await service.processOnce()
+
+        let threadCallsA = await senderA.modifyThreadCalls
+        let threadCallsB = await senderB.modifyThreadCalls
+        XCTAssertTrue(threadCallsA.isEmpty)
+        XCTAssertTrue(threadCallsB.isEmpty)
+        let messageCallsB = await senderB.modifyMessageCalls
+        XCTAssertEqual(messageCallsB.count, 1)
+        XCTAssertEqual(messageCallsB.first?.id, "orig-42")
+        XCTAssertEqual(messageCallsB.first?.remove ?? [], ["INBOX"])
+        let messageCallsA = await senderA.modifyMessageCalls
+        XCTAssertFalse(messageCallsA.contains { $0.id == "orig-42" })
+    }
+
+    func testSideEffects_threadArchiveFailureIsIgnored() async throws {
+        let store = OutboxStore(inMemory: true)
+        let sender = MockOutboxSender()
+        await sender.setModifyThreadThrows(GmailAPIError.networkError("dropped"))
+        let notifier = RecordingNotifier()
+        let service = OutboxService(
+            store: store, sendersByAccount: ["a": sender],
+            notifier: notifier, postSendRefresh: { }
+        )
+        let item = makeItem(account: "a", threadId: "t-77",
+                            archiveOnSuccessForMsgId: "orig-42",
+                            archiveOnSuccessForAccountId: "a")
+        try await store.insert(item)
+
+        await service.processOnce()
+
+        let threadCalls = await sender.modifyThreadCalls
+        XCTAssertEqual(threadCalls.count, 1, "the thread archive was attempted")
+        let successCount = await notifier.successCalls.count
+        XCTAssertEqual(successCount, 1)
+        let stored = try await store.allItems()
+        XCTAssertTrue(stored.isEmpty)
+    }
+
     func testSideEffects_stripsInboxFromSelfSentMessage() async throws {
         let store = OutboxStore(inMemory: true)
         let sender = MockOutboxSender()

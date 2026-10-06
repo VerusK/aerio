@@ -152,6 +152,27 @@ final class GmailAPIClientTests: XCTestCase {
         XCTAssertFalse(result.labelIds?.contains("UNREAD") ?? false)
     }
 
+    func testModifyThreadSendsCorrectBody() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertTrue(request.url!.absoluteString.hasSuffix("/threads/t1/modify"))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+
+            let body = try! JSONDecoder().decode(GmailModifyRequest.self, from: request.httpBody!)
+            XCTAssertEqual(body.removeLabelIds, ["INBOX"])
+            XCTAssertNil(body.addLabelIds)
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let json = """
+            {"id": "t1", "messages": [{"id": "m1", "threadId": "t1", "labelIds": ["SENT"]}]}
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let thread = try await client.modifyThread(id: "t1", removeLabels: ["INBOX"])
+        XCTAssertEqual(thread.id, "t1")
+    }
+
     func testSendMessageConstruction() async throws {
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.httpMethod, "POST")
