@@ -551,8 +551,10 @@ final class ThreadHTMLTests: XCTestCase {
         return (value as? Double) ?? (value as? Int).map(Double.init) ?? -1
     }
 
-    /// Polls `condition` every 20 ms for up to `timeout` seconds.
-    private func waitUntil(timeout: TimeInterval = 3, _ condition: () async -> Bool) async -> Bool {
+    /// Polls `condition` every 20 ms for up to `timeout` seconds. The ceiling is generous
+    /// because a CI runner's first WebKit load spawns the web content process cold, which
+    /// took over 3 s on macos-14 and failed the v1.8.0 release run.
+    private func waitUntil(timeout: TimeInterval = 20, _ condition: () async -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if await condition() { return true }
