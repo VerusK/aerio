@@ -13,7 +13,7 @@ enum MailtoURL {
 
         // `percentEncodedPath`, then decode: `path` would also be decoded, but this keeps
         // "+" literal (RFC 6068) exactly like the query values below.
-        var to = splitAddresses(components.percentEncodedPath.removingPercentEncoding ?? "")
+        var to = ContactsCache.splitAddressList(components.percentEncodedPath.removingPercentEncoding ?? "")
         var cc: [String] = []
         var subject = ""
         var body = ""
@@ -21,9 +21,11 @@ enum MailtoURL {
         for item in components.queryItems ?? [] {
             let value = item.value ?? ""
             switch item.name.lowercased() {
-            case "to": to += splitAddresses(value)
-            case "cc": cc += splitAddresses(value)
-            case "subject": subject = value
+            case "to": to += ContactsCache.splitAddressList(value)
+            case "cc": cc += ContactsCache.splitAddressList(value)
+            // Single-line field: collapse CR/LF runs so they can't reach the headers.
+            case "subject": subject = value.replacingOccurrences(
+                of: "[\\r\\n]+", with: " ", options: .regularExpression)
             case "body": body = value.replacingOccurrences(of: "\r\n", with: "\n")
             case "bcc": logger.info("Ignoring bcc in mailto link: compose has no Bcc field")
             default: break
@@ -37,11 +39,5 @@ enum MailtoURL {
             body: body,
             marksDirty: false
         )
-    }
-
-    private static func splitAddresses(_ list: String) -> [String] {
-        list.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
     }
 }

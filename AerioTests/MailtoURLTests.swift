@@ -89,4 +89,18 @@ final class MailtoURLTests: XCTestCase {
         XCTAssertEqual(seed("mailto:a@b.com?subject=Hi")?.marksDirty, false)
         XCTAssertTrue(ComposeSeed().marksDirty)
     }
+    /// Subject is a single-line field: CR/LF from the link collapses into one space
+    /// instead of reaching the outgoing headers.
+    func testSubjectCRLFCollapsedToSpace() {
+        let s = seed("mailto:victim@example.com?subject=Hello%0D%0ABcc:%20attacker@example.com")
+        XCTAssertEqual(s?.subject, "Hello Bcc: attacker@example.com")
+        XCTAssertEqual(seed("mailto:a@b.com?subject=One%0ATwo%0D%0A%0D%0AThree")?.subject,
+                       "One Two Three")
+    }
+
+    /// A quoted local part may contain an (encoded) comma; it must stay one address.
+    func testQuotedLocalPartWithCommaIsNotSplit() {
+        let s = seed("mailto:%22a%2Cb%22@example.com")
+        XCTAssertEqual(s?.to, "\"a,b\"@example.com")
+    }
 }
