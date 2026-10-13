@@ -278,6 +278,19 @@ struct MainView: View {
             notificationManager?.onNotificationClick = { [self] emailId, accountId in
                 navigateToEmail(msgId: emailId, accountId: accountId)
             }
+            MailtoRouter.shared.handler = { [self] seed in
+                NSApp.activate()
+                ComposeWindowManager.shared.open(
+                    accountManager: accountManager,
+                    apiManager: apiManager,
+                    outboxService: outboxService,
+                    contactsCache: contactsCache,
+                    composeType: .new,
+                    replyToEmail: nil,
+                    preselectedAccountId: selectedAccount?.id,
+                    seed: seed
+                )
+            }
         }
         .onDisappear {
             keyMonitor.uninstall()

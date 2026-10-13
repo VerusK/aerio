@@ -12,6 +12,16 @@
 				<string>$(OAUTH_CALLBACK_SCHEME)</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Email Address URL</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mailto</string>
+			</array>
+		</dict>
 	</array>
 	<key>OAuthClientID</key>
 	<string>$(OAUTH_CLIENT_ID)</string>
