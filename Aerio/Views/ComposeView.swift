@@ -13,12 +13,16 @@ enum ComposeType: Sendable {
 }
 
 /// Pre-filled content for opening a compose window already populated — used when
-/// re-opening a stuck/failed Outbox message for editing and resend.
+/// re-opening a stuck/failed Outbox message for editing and resend, and for `mailto:` links.
 struct ComposeSeed {
     var to: String = ""
     var cc: String = ""
     var subject: String = ""
     var body: String = ""
+    /// Whether the pre-filled content alone counts as an edit, i.e. is saved as a draft
+    /// when the window closes. False for `mailto:`: clicking a link and closing the
+    /// window untouched must not leave a draft behind.
+    var marksDirty = true
 }
 
 struct ComposeView: View {
@@ -602,15 +606,16 @@ struct ComposeView: View {
             selectedAccountId = accountManager.accounts.first?.id ?? ""
         }
 
-        // Outbox edit: pre-fill from the recovered message. Marked dirty so closing
-        // without resending preserves it as a draft (the original Outbox item was
-        // removed when this editor opened).
+        // Outbox edit or mailto: pre-fill from the seed.
         if let seed {
             toField = seed.to
             ccField = seed.cc
             subjectField = seed.subject
             bodyText = seed.body
-            isDirty = true
+            isDirty = seed.marksDirty
+            // mailto: pick From for the link's recipient right away. An Outbox edit keeps
+            // the account the message was originally queued from.
+            if editingOutboxItemId == nil { resolveFrom() }
             return
         }
 

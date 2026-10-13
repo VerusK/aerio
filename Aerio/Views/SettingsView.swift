@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var cacheDetails: [(name: String, path: String, size: Int64)] = []
     @State private var contentCacheCount: Int = 0
     @State private var cacheTotal: String = "Calculating…"
+    /// App that currently opens `mailto:` links; nil when none is set.
+    @State private var mailHandlerURL: URL?
 
     private var shortcuts: [ShortcutAction] {
         ShortcutAction.allCases.filter {
@@ -39,6 +41,18 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("General") {
+                HStack {
+                    Text("Default email app:")
+                    Spacer()
+                    Text(mailHandlerName)
+                        .foregroundStyle(.secondary)
+                    if !isDefaultMailApp {
+                        Button("Make Aerio Default") {
+                            makeDefaultMailApp()
+                        }
+                    }
+                }
+
                 Toggle("Show unread count on dock icon", isOn: $showDockBadge)
                 Toggle("Archive messages after replying from Inbox", isOn: $archiveOnReply)
 
@@ -152,6 +166,41 @@ struct SettingsView: View {
         .onAppear {
             calculateCacheSize()
             contentCacheCount = emailCache.contentCacheCount
+            refreshMailHandler()
+        }
+        // The default can also be changed elsewhere (e.g. Mail → Settings).
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshMailHandler()
+        }
+    }
+
+    private static let mailtoProbeURL = URL(string: "mailto:")!
+
+    /// Compared by bundle id, not path: a Debug build or a copy elsewhere is the same app.
+    private var isDefaultMailApp: Bool {
+        guard let mailHandlerURL else { return false }
+        return Bundle(url: mailHandlerURL)?.bundleIdentifier == Bundle.main.bundleIdentifier
+    }
+
+    private var mailHandlerName: String {
+        guard let mailHandlerURL else { return "None" }
+        return FileManager.default.displayName(atPath: mailHandlerURL.path)
+            .replacingOccurrences(of: ".app", with: "")
+    }
+
+    private func refreshMailHandler() {
+        mailHandlerURL = NSWorkspace.shared.urlForApplication(toOpen: Self.mailtoProbeURL)
+    }
+
+    /// macOS asks the user to confirm the change; refresh afterwards either way.
+    private func makeDefaultMailApp() {
+        Task {
+            do {
+                try await NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpenURLsWithScheme: "mailto")
+            } catch {
+                NSLog("Aerio: failed to become default mail app: \(error.localizedDescription)")
+            }
+            refreshMailHandler()
         }
     }
 

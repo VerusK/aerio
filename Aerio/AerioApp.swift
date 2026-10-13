@@ -52,6 +52,13 @@ struct AerioApp: App {
             .environmentObject(appState.outboxService)
             .background(WindowAccessor())
             .navigationTitle("")
+            // mailto: links. Going through SwiftUI (not our own kAEGetURL handler) matters
+            // on a cold launch: an app launched by a URL event gets its main window only
+            // when SwiftUI routes that event to this WindowGroup.
+            .onOpenURL { MailtoRouter.shared.open($0) }
+            // Deliver URLs to the existing main window; without this every link opens
+            // another main window (a second MainView polling and owning the keyboard).
+            .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .handlesExternalEvents(matching: ["*"])
         .commands {

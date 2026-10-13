@@ -389,4 +389,30 @@ final class RFC2822BuilderTests: XCTestCase {
         XCTAssertTrue(message.contains("Content-Type: text/plain; charset=UTF-8"))
         XCTAssertTrue(message.contains("Content-Type: text/html; charset=UTF-8"))
     }
+    /// A subject carrying CR/LF (e.g. from a `mailto:` link) must not inject header
+    /// lines such as `Bcc:`; every builder keeps the subject on one header line.
+    func testSubjectWithCRLFCannotInjectHeaders() {
+        let subject = "Hello\r\nBcc: x@y.com"
+        let raws = [
+            RFC2822Builder.buildRawMessage(
+                from: "sender@test.com", to: "recipient@test.com",
+                subject: subject, body: "Body"),
+            RFC2822Builder.buildRawHTMLMessage(
+                from: "sender@test.com", to: "recipient@test.com",
+                subject: subject, htmlBody: "<p>Body</p>", plainBody: "Body"),
+            RFC2822Builder.buildRawHTMLMessageWithAttachments(
+                from: "sender@test.com", to: "recipient@test.com",
+                subject: subject, htmlBody: "<p>Body</p>", plainBody: "Body",
+                attachments: [RFC2822Builder.Attachment(
+                    filename: "a.txt", mimeType: "text/plain", data: Data("x".utf8))]),
+        ]
+        for raw in raws {
+            let message = decodeRaw(raw)
+            let headerBlock = message.components(separatedBy: "\r\n\r\n").first ?? ""
+            let headerLines = headerBlock.components(separatedBy: CharacterSet.newlines)
+            XCTAssertFalse(headerLines.contains { $0.hasPrefix("Bcc:") }, message)
+            let subjectLines = headerLines.filter { $0.hasPrefix("Subject:") }
+            XCTAssertEqual(subjectLines, ["Subject: HelloBcc: x@y.com"], message)
+        }
+    }
 }

@@ -36,7 +36,7 @@ final class ComposeWindowManager {
             backing: .buffered,
             defer: false
         )
-        panel.title = seed != nil ? "Edit Message" : Self.windowTitle(for: composeType)
+        panel.title = editingOutboxItemId != nil ? "Edit Message" : Self.windowTitle(for: composeType)
         panel.minSize = Self.minSize
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = false

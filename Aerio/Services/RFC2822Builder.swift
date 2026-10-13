@@ -17,7 +17,7 @@ struct RFC2822Builder {
         if let cc = cc, !cc.isEmpty {
             lines.append("Cc: \(encodeAddressList(cc))")
         }
-        lines.append("Subject: \(qEncode(subject))")
+        lines.append("Subject: \(qEncode(stripCRLF(subject)))")
         if let messageId, !messageId.isEmpty {
             lines.append("Message-ID: \(messageId)")
         }
@@ -56,7 +56,7 @@ struct RFC2822Builder {
         if let cc = cc, !cc.isEmpty {
             lines.append("Cc: \(encodeAddressList(cc))")
         }
-        lines.append("Subject: \(qEncode(subject))")
+        lines.append("Subject: \(qEncode(stripCRLF(subject)))")
         if let messageId, !messageId.isEmpty {
             lines.append("Message-ID: \(messageId)")
         }
@@ -129,7 +129,7 @@ struct RFC2822Builder {
         if let cc = cc, !cc.isEmpty {
             lines.append("Cc: \(encodeAddressList(cc))")
         }
-        lines.append("Subject: \(qEncode(subject))")
+        lines.append("Subject: \(qEncode(stripCRLF(subject)))")
         if let messageId, !messageId.isEmpty {
             lines.append("Message-ID: \(messageId)")
         }
