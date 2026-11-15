@@ -13,6 +13,8 @@
 		218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */; };
 		FA0000000000000000000103 /* SentAccountMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000104 /* SentAccountMapTests.swift */; };
 		MT00000000000000000000B4 /* MailtoRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MT00000000000000000000F4 /* MailtoRouterTests.swift */; };
+		MW00000000000000000000B1 /* MainWindowTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = MW00000000000000000000F1 /* MainWindowTracker.swift */; };
+		MW00000000000000000000B2 /* MainWindowTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MW00000000000000000000F2 /* MainWindowTrackerTests.swift */; };
 		MT00000000000000000000B3 /* MailtoURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MT00000000000000000000F3 /* MailtoURLTests.swift */; };
 		42D3493B9B3AFC047D437EA0 /* GmailAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7874443BA0712DD19389712 /* GmailAPIClientTests.swift */; };
 		5E594F81A3A04AC3B3F165FD /* RFC2822Builder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF0470BAEAA8427F80EAA30 /* RFC2822Builder.swift */; };
@@ -95,6 +97,8 @@
 		8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPIManagerTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000104 /* SentAccountMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentAccountMapTests.swift; sourceTree = "<group>"; };
 		MT00000000000000000000F4 /* MailtoRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailtoRouterTests.swift; sourceTree = "<group>"; };
+		MW00000000000000000000F1 /* MainWindowTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowTracker.swift; sourceTree = "<group>"; };
+		MW00000000000000000000F2 /* MainWindowTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowTrackerTests.swift; sourceTree = "<group>"; };
 		MT00000000000000000000F3 /* MailtoURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailtoURLTests.swift; sourceTree = "<group>"; };
 		A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RFC2822BuilderTests.swift; path = AerioTests/RFC2822BuilderTests.swift; sourceTree = SOURCE_ROOT; };
 		BB0000000000000000000010 /* AerioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AerioApp.swift; sourceTree = "<group>"; };
@@ -220,6 +224,7 @@
 				8F80BFF2C0703631683B7013 /* GmailAPIManagerTests.swift */,
 				FA0000000000000000000104 /* SentAccountMapTests.swift */,
 				MT00000000000000000000F4 /* MailtoRouterTests.swift */,
+				MW00000000000000000000F2 /* MainWindowTrackerTests.swift */,
 				MT00000000000000000000F3 /* MailtoURLTests.swift */,
 				A29440ACA71C2387AF7BDDAB /* RFC2822BuilderTests.swift */,
 				22BBCC0000000000000000DD /* GmailAPIModelsTests.swift */,
@@ -304,6 +309,7 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000080 /* KeyboardShortcuts.swift */,
+				MW00000000000000000000F1 /* MainWindowTracker.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -444,6 +450,7 @@
 				FA0000000000000000000001 /* ContactsCache.swift in Sources */,
 				FA0000000000000000000101 /* SentAccountMap.swift in Sources */,
 				MT00000000000000000000B2 /* MailtoRouter.swift in Sources */,
+				MW00000000000000000000B1 /* MainWindowTracker.swift in Sources */,
 				MT00000000000000000000B1 /* MailtoURL.swift in Sources */,
 				FB0000000000000000000001 /* NotificationManager.swift in Sources */,
 				FC0000000000000000000001 /* ThreadMessageView.swift in Sources */,
@@ -478,6 +485,7 @@
 				218DEA0A946B047DB0C0835A /* GmailAPIManagerTests.swift in Sources */,
 				FA0000000000000000000103 /* SentAccountMapTests.swift in Sources */,
 				MT00000000000000000000B4 /* MailtoRouterTests.swift in Sources */,
+				MW00000000000000000000B2 /* MainWindowTrackerTests.swift in Sources */,
 				MT00000000000000000000B3 /* MailtoURLTests.swift in Sources */,
 				1EEB4BD08DFA461F588C8CDC /* RFC2822BuilderTests.swift in Sources */,
 				11AABB0000000000000000CC /* GmailAPIModelsTests.swift in Sources */,
