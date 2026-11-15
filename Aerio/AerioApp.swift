@@ -5,14 +5,12 @@ import UserNotifications
 import os.log
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Prevent WindowGroup from creating a new window when the app is reactivated
-    /// (e.g. clicking a notification or Dock icon when already running)
+    /// Dock click / reactivation: bring the existing main window back instead of opening a
+    /// second one; when there is no main window (closed, or never restored at login), let
+    /// the WindowGroup create it — otherwise the app stays windowless until killed.
+    @MainActor
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            // Bring existing window back if it was closed/minimized
-            sender.windows.first { $0.className != "NSStatusBarWindow" }?.makeKeyAndOrderFront(nil)
-        }
-        return false
+        MainWindowTracker.shared.handleReopen()
     }
 }
 
@@ -91,6 +89,7 @@ struct WindowAccessor: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            MainWindowTracker.shared.register(window)
             restoreFrame(window)
             context.coordinator.moveObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.didMoveNotification, object: window, queue: .main
