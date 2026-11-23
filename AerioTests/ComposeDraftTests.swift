@@ -110,3 +110,23 @@ final class ComposeDraftTests: XCTestCase {
         XCTAssertNil(draft.message)
     }
 }
+
+final class ReplyQuoteTests: XCTestCase {
+
+    // The bug: Cmd+R quoted only the newest message's own text, cutting the
+    // thread history under "On … wrote:"; replies must quote the message whole.
+    func testReplyQuoteKeepsThreadHistory() {
+        let text = "Thanks!\n\nOn Mon, Nov 23, 2026, Bob wrote:\n> First message"
+        let quoted = ComposeView.quoteForReply(text)
+        XCTAssertEqual(quoted, "> Thanks!\n>\n> On Mon, Nov 23, 2026, Bob wrote:\n>> First message")
+    }
+
+    func testReplyQuoteKeepsHistoryAfterSeparator() {
+        let quoted = ComposeView.quoteForReply("Reply\n---\nOn X, Y wrote:\n> old")
+        XCTAssertTrue(quoted.contains(">> old"), quoted)
+    }
+
+    func testReplyQuoteTrimsSurroundingBlankLines() {
+        XCTAssertEqual(ComposeView.quoteForReply("\n\nHi\n\n"), "> Hi")
+    }
+}

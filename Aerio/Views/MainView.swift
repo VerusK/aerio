@@ -155,6 +155,8 @@ struct MainView: View {
     @State private var keyMonitor = KeyEventMonitor()
     @State private var focusedPanel: FocusedPanel = .messageList
     @State private var detailScrollHandler: ((Int) -> Void)?
+    /// The open thread's reply target (key `accountId_threadId`), set by ThreadDetailView.
+    @State private var threadReplyTarget: (key: String, newest: () -> ThreadMessage?)?
     @State private var expandedFolders: Set<Folder> = []
 
     init(accountManager: AccountManager, unifiedMailbox: UnifiedMailbox, apiManager: GmailAPIManager, oauthManager: OAuthManager, contactsCache: ContactsCache? = nil, notificationManager: NotificationManager? = nil) {
@@ -423,7 +425,14 @@ struct MainView: View {
                             onDelete: { executeActionOnEmail(email, action: .delete) },
                             onSpam: { executeActionOnEmail(email, action: .spam) },
                             onMoveToInbox: { executeActionOnEmail(email, action: .moveToInbox) },
-                            onRegisterScroll: { handler in detailScrollHandler = handler }
+                            onRegisterScroll: { handler in detailScrollHandler = handler },
+                            onRegisterReplyTarget: { key, newest in
+                                if let newest {
+                                    threadReplyTarget = (key, newest)
+                                } else if threadReplyTarget?.key == key {
+                                    threadReplyTarget = nil
+                                }
+                            }
                         )
                         .id("\(email.accountId)_\(email.threadId)")
                     } else {
@@ -612,17 +621,11 @@ struct MainView: View {
             triggerCompose(.new, msgId: "")
             composeTargetMsgId = nil
         case .reply:
-            if let msgId = selectedEmailMsgId {
-                triggerCompose(.reply, msgId: msgId)
-            }
+            triggerComposeForSelection(.reply)
         case .replyAll:
-            if let msgId = selectedEmailMsgId {
-                triggerCompose(.replyAll, msgId: msgId)
-            }
+            triggerComposeForSelection(.replyAll)
         case .forward:
-            if let msgId = selectedEmailMsgId {
-                triggerCompose(.forward, msgId: msgId)
-            }
+            triggerComposeForSelection(.forward)
         // Message actions
         case .archiveMessage:
             if selectedFolder == .inbox { executeActionOnSelected(.archive) }
@@ -778,6 +781,23 @@ struct MainView: View {
         if let conversation = selectedConversation { return conversation.newest.msgId }
         guard let selectedEmailId, let email = findEmail(by: selectedEmailId) else { return nil }
         return email.msgId
+    }
+
+    /// Hotkey reply/forward. An open thread answers the message its buttons answer —
+    /// the newest of the whole Gmail thread (a reply of ours in Sent included), not the
+    /// newest the current folder holds; otherwise the selected row's message.
+    private func triggerComposeForSelection(_ type: ComposeType) {
+        if let email = selectedConversation?.newest ?? selectedEmailId.flatMap({ findEmail(by: $0) }),
+           !email.threadId.isEmpty,
+           let target = threadReplyTarget,
+           target.key == "\(email.accountId)_\(email.threadId)",
+           let newest = target.newest() {
+            triggerComposeFromThread(type, message: newest, threadId: email.threadId)
+            return
+        }
+        if let msgId = selectedEmailMsgId {
+            triggerCompose(type, msgId: msgId)
+        }
     }
 
     private func triggerCompose(_ type: ComposeType, msgId: String) {

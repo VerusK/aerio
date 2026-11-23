@@ -759,21 +759,10 @@ struct ComposeView: View {
                     }
                 }
 
-                // Extract body for reply/forward quote — only the message's own text, not nested quotes
+                // Quote the whole message, thread history included (as Gmail and Mail do)
                 if let payload = message.payload {
-                    var fullText = extractPlainTextFromPayload(payload)
-                    // Strip quoted chain: everything after "---" separator or "On ... wrote:" line
-                    if let separatorRange = fullText.range(of: "\n---\n") {
-                        fullText = String(fullText[fullText.startIndex..<separatorRange.lowerBound])
-                    } else if let wroteRange = fullText.range(of: "\nOn ") {
-                        let after = fullText[wroteRange.upperBound...]
-                        if after.contains("wrote:") {
-                            fullText = String(fullText[fullText.startIndex..<wroteRange.lowerBound])
-                        }
-                    }
-                    fullText = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !fullText.isEmpty {
-                        let quoted = fullText.components(separatedBy: "\n").map { "> \($0)" }.joined(separator: "\n")
+                    let quoted = Self.quoteForReply(extractPlainTextFromPayload(payload))
+                    if !quoted.isEmpty {
                         if composeType == .forward {
                             bodyText = "\n\n---\nForwarded message from \(email.from):\n\(quoted)"
                         } else {
@@ -815,6 +804,17 @@ struct ComposeView: View {
             isLoadingRecipients = false
             isPopulatingHeaders = false
         }
+    }
+
+    /// Quote a message's plain text for a reply or forward, nested quotes included.
+    /// Lines already quoted get a bare `>` (`>> old`), the rest `> `.
+    static func quoteForReply(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return trimmed.components(separatedBy: "\n").map { line in
+            if line.isEmpty { return ">" }
+            return line.hasPrefix(">") ? ">\(line)" : "> \(line)"
+        }.joined(separator: "\n")
     }
 
     private func extractEmail(from address: String) -> String {
