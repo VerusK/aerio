@@ -173,6 +173,9 @@ struct ThreadDetailView: View {
     var onSpam: (() -> Void)?
     var onMoveToInbox: (() -> Void)?
     var onRegisterScroll: ((@escaping (Int) -> Void) -> Void)?
+    /// Hands MainView the message the Reply/Reply All/Forward buttons answer, so the
+    /// hotkeys answer the same one; `nil` on disappear. Keyed by `threadKey`.
+    var onRegisterReplyTarget: ((String, (() -> ThreadMessage?)?) -> Void)?
 
     @State private var threadMessages: [ThreadMessage] = []
     @State private var isLoading = true
@@ -222,14 +225,27 @@ struct ThreadDetailView: View {
             onRegisterScroll? { direction in
                 webViewStore.scrollContent(direction: direction)
             }
+            registerReplyTarget()
         }
-        .onChange(of: threadKey) { _, _ in loadThread() }
+        .onDisappear { onRegisterReplyTarget?(threadKey, nil) }
+        .onChange(of: threadKey) { oldKey, _ in
+            onRegisterReplyTarget?(oldKey, nil)
+            registerReplyTarget()
+            loadThread()
+        }
         // A reply joined (or a member left) the open conversation: the cached thread is stale.
         .onChange(of: memberVersion) { _, _ in loadThread(forceRefresh: true) }
         .onChange(of: focusMessageId) { _, newValue in
             threadNavDelegate.focusMessageId = newValue
             threadNavDelegate.applyFocus()
         }
+    }
+
+    private func registerReplyTarget() {
+        // The delegate is a stable reference holding the loaded thread, newest first —
+        // the same list the action bar's buttons read.
+        let delegate = threadNavDelegate
+        onRegisterReplyTarget?(threadKey) { delegate.threadMessages.first }
     }
 
     private var threadActionBar: some View {
